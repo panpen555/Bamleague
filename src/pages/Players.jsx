@@ -1,0 +1,8364 @@
+import React, { useEffect, useState } from "react";
+import { db } from "../firebase";
+import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
+
+function Players() {
+  const validTiers = ["SSS+", "S+", "S-", "A+", "A-", "B+", "B-", "C"];
+  const validPositions = ["PG", "SG", "SF", "PF", "C"];
+  const defaultTeamCount = 4;
+  const createDefaultTeamNames = (count) =>
+    Array.from(
+      { length: count },
+      (_, index) => `Team ${String.fromCharCode(65 + index)}`
+    );
+
+  const [teamCount, setTeamCount] = useState(() => {
+    const saved = localStorage.getItem("teamCount");
+    const parsed = saved ? Number(saved) : defaultTeamCount;
+    return Number.isFinite(parsed) && parsed >= 3 ? parsed : defaultTeamCount;
+  });
+
+  const [competitionType, setCompetitionType] = useState(() => {
+    const saved = localStorage.getItem("competitionType");
+    return saved === "3X3" ? "3X3" : "5X5";
+  });
+
+  const defaultTeamNames = createDefaultTeamNames(teamCount);
+
+  const [teamNames, setTeamNames] = useState(() => {
+    const saved = localStorage.getItem("teamNames");
+    return saved ? JSON.parse(saved) : createDefaultTeamNames(defaultTeamCount);
+  });
+
+  const [players, setPlayers] = useState(() => {
+    const saved = localStorage.getItem("players");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [teams, setTeams] = useState(() => {
+    const saved = localStorage.getItem("teams");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [schedule, setSchedule] = useState(() => {
+    const saved = localStorage.getItem("schedule");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [drafts, setDrafts] = useState(() => {
+    const saved = localStorage.getItem("drafts");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [editingId, setEditingId] = useState(null);
+
+  const [form, setForm] = useState({
+    name: "",
+    tier: "",
+    pos1: "PG",
+    pos2: "",
+    dribbling: 3,
+    insideScoring: 3,
+    shooting: 3,
+    defense: 3,
+    passing: 3,
+    available: true,
+    lockedTeam: "",
+    photoUrl: "",
+  });
+
+  const [rosterExistingPlayerId, setRosterExistingPlayerId] = useState("");
+  const [rosterTargetTeam, setRosterTargetTeam] = useState("");
+
+  const [newRosterForm, setNewRosterForm] = useState({
+    name: "",
+    tier: "",
+    pos1: "PG",
+    pos2: "",
+    dribbling: 3,
+    insideScoring: 3,
+    shooting: 3,
+    defense: 3,
+    passing: 3,
+    targetTeam: "",
+    photoUrl: "",
+  });
+
+  const [matchRosters, setMatchRosters] = useState(() => {
+    const saved = localStorage.getItem("matchRosters");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [selectedRosterMatchId, setSelectedRosterMatchId] = useState("");
+
+  const [loanForm, setLoanForm] = useState({
+    side: "teamA",
+    playerId: "",
+  });
+
+  const [playerStats, setPlayerStats] = useState(() => {
+    const saved = localStorage.getItem("playerStats");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [matchStatInputs, setMatchStatInputs] = useState(() => {
+    const saved = localStorage.getItem("matchStatInputs");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [selectedStatsMatchId, setSelectedStatsMatchId] = useState("");
+  const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState("");
+
+  const [teamLogos, setTeamLogos] = useState(() => {
+    const saved = localStorage.getItem("teamLogos");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [lockGroups, setLockGroups] = useState(() => {
+    const saved = localStorage.getItem("lockGroups");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [lockGroupName, setLockGroupName] = useState("");
+  const [selectedLockPlayerIds, setSelectedLockPlayerIds] = useState([]);
+
+  const [seasonByType, setSeasonByType] = useState(() => {
+    const saved = localStorage.getItem("seasonByType");
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          "3X3": Number(parsed?.["3X3"] || 1),
+          "5X5": Number(parsed?.["5X5"] || 1),
+        };
+      } catch (error) {
+        return { "3X3": 1, "5X5": 1 };
+      }
+    }
+
+    const legacySeason = Number(localStorage.getItem("currentSeason") || 1);
+
+    return {
+      "3X3": 1,
+      "5X5":
+        Number.isFinite(legacySeason) && legacySeason >= 1 ? legacySeason : 1,
+    };
+  });
+
+  const currentSeason = seasonByType[competitionType] || 1;
+
+  const [seasonProjectName, setSeasonProjectName] = useState(() => {
+    return localStorage.getItem("seasonProjectName") || "";
+  });
+
+  const getDefaultSeasonProjectName = (
+    type = competitionType,
+    season = currentSeason
+  ) => `${type} Season ${season}`;
+
+  const getCurrentSeasonTitle = () =>
+    seasonProjectName.trim() || getDefaultSeasonProjectName();
+
+  const [seasonHistory, setSeasonHistory] = useState(() => {
+    const saved = localStorage.getItem("seasonHistory");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [hallOfFameFilter, setHallOfFameFilter] = useState("ALL");
+  const [publicSeasonId, setPublicSeasonId] = useState("CURRENT");
+  const [viewMode, setViewMode] = useState("ADMIN");
+  const [selectedPublicTeam, setSelectedPublicTeam] = useState("");
+  const [publicDashboardTab, setPublicDashboardTab] = useState("overview");
+  const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
+  const [selectedPublicMatch, setSelectedPublicMatch] = useState(null);
+  const [cloudStatus, setCloudStatus] = useState("Saved");
+  const [activeAdminMenu, setActiveAdminMenu] = useState("players");
+  const [expandedTeamDashboard, setExpandedTeamDashboard] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("players", JSON.stringify(players));
+  }, [players]);
+
+  useEffect(() => {
+    localStorage.setItem("drafts", JSON.stringify(drafts));
+  }, [drafts]);
+
+  useEffect(() => {
+    localStorage.setItem("schedule", JSON.stringify(schedule));
+  }, [schedule]);
+
+  useEffect(() => {
+    localStorage.setItem("teamNames", JSON.stringify(teamNames));
+  }, [teamNames]);
+
+  useEffect(() => {
+    localStorage.setItem("teamCount", String(teamCount));
+  }, [teamCount]);
+
+  useEffect(() => {
+    localStorage.setItem("competitionType", competitionType);
+  }, [competitionType]);
+
+  useEffect(() => {
+    localStorage.setItem("teamLogos", JSON.stringify(teamLogos));
+  }, [teamLogos]);
+
+  useEffect(() => {
+    localStorage.setItem("lockGroups", JSON.stringify(lockGroups));
+  }, [lockGroups]);
+
+  useEffect(() => {
+    localStorage.setItem("seasonByType", JSON.stringify(seasonByType));
+  }, [seasonByType]);
+
+  useEffect(() => {
+    localStorage.setItem("seasonProjectName", seasonProjectName);
+  }, [seasonProjectName]);
+
+  useEffect(() => {
+    localStorage.setItem("seasonHistory", JSON.stringify(seasonHistory));
+  }, [seasonHistory]);
+
+  useEffect(() => {
+    localStorage.setItem("matchRosters", JSON.stringify(matchRosters));
+  }, [matchRosters]);
+
+  useEffect(() => {
+    localStorage.setItem("teams", JSON.stringify(teams));
+  }, [teams]);
+
+  useEffect(() => {
+    localStorage.setItem("playerStats", JSON.stringify(playerStats));
+  }, [playerStats]);
+
+  useEffect(() => {
+    localStorage.setItem("matchStatInputs", JSON.stringify(matchStatInputs));
+  }, [matchStatInputs]);
+
+  useEffect(() => {
+    const hasLegacyLocks =
+      players.some((player) => player.lockedTeam) ||
+      teams.some((team) =>
+        (team.players || []).some((player) => player.lockedTeam)
+      );
+
+    if (!hasLegacyLocks) return;
+
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) => ({ ...player, lockedTeam: "" }))
+    );
+
+    setTeams((prevTeams) =>
+      prevTeams.map((team) => ({
+        ...team,
+        players: (team.players || []).map((player) => ({
+          ...player,
+          lockedTeam: "",
+        })),
+      }))
+    );
+  }, []);
+
+  const handleTeamCountChange = (value) => {
+    const nextCount = Number(value);
+
+    if (!Number.isFinite(nextCount) || nextCount < 3) return;
+
+    const hasLeagueData =
+      teams.length > 0 ||
+      schedule.length > 0 ||
+      drafts.length > 0 ||
+      Object.keys(matchRosters).length > 0 ||
+      Object.keys(playerStats).length > 0 ||
+      Object.keys(matchStatInputs).length > 0;
+
+    if (hasLeagueData) {
+      const confirmChange = window.confirm(
+        "การเปลี่ยนจำนวนทีมจะล้างทีม ตารางแข่ง Draft Match Roster และสถิติเดิม แต่จะไม่ลบรายชื่อผู้เล่น ต้องการดำเนินการต่อไหม?"
+      );
+
+      if (!confirmChange) return;
+    }
+
+    const nextTeamNames = createDefaultTeamNames(nextCount);
+
+    setTeamCount(nextCount);
+    setTeamNames(nextTeamNames);
+    setTeams([]);
+    setSchedule([]);
+    setDrafts([]);
+    setLockGroups([]);
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+    setMatchRosters({});
+    setPlayerStats({});
+    setMatchStatInputs({});
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedProfilePlayerId("");
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) => ({ ...player, teamName: "" }))
+    );
+  };
+
+  const handleCompetitionTypeChange = (value) => {
+    const nextType = value === "3X3" ? "3X3" : "5X5";
+
+    if (nextType === competitionType) return;
+
+    const hasLeagueData =
+      teams.length > 0 ||
+      schedule.length > 0 ||
+      drafts.length > 0 ||
+      Object.keys(matchRosters).length > 0 ||
+      Object.keys(playerStats).length > 0 ||
+      Object.keys(matchStatInputs).length > 0;
+
+    if (hasLeagueData) {
+      const confirmChange = window.confirm(
+        "การเปลี่ยนประเภทการแข่งขันจะล้างทีม ตารางแข่ง Draft Match Roster และสถิติเดิม แต่จะไม่ลบรายชื่อผู้เล่น ต้องการดำเนินการต่อไหม?"
+      );
+
+      if (!confirmChange) return;
+    }
+
+    setCompetitionType(nextType);
+    setTeams([]);
+    setSchedule([]);
+    setDrafts([]);
+    setLockGroups([]);
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+    setMatchRosters({});
+    setPlayerStats({});
+    setMatchStatInputs({});
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedProfilePlayerId("");
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) => ({ ...player, teamName: "" }))
+    );
+  };
+
+  const getMinPlayersPerGame = () => {
+    return competitionType === "3X3" ? 3 : 5;
+  };
+
+  const updateTeamName = (index, newName) => {
+    const oldName =
+      teams[index]?.name || teamNames[index] || defaultTeamNames[index];
+
+    setTeamNames((prevNames) => {
+      const updated = [...prevNames];
+      updated[index] = newName;
+      return updated;
+    });
+
+    setTeams((prevTeams) =>
+      prevTeams.map((team, i) =>
+        i === index
+          ? {
+              ...team,
+              name: newName,
+              players: team.players.map((player) => ({
+                ...player,
+                teamName: newName,
+              })),
+            }
+          : team
+      )
+    );
+
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        player.teamName === oldName
+          ? {
+              ...player,
+              teamName: newName,
+            }
+          : player
+      )
+    );
+
+    setSchedule((prevSchedule) =>
+      prevSchedule.map((match) => ({
+        ...match,
+        teamA: match.teamA === oldName ? newName : match.teamA,
+        teamB: match.teamB === oldName ? newName : match.teamB,
+      }))
+    );
+
+    setTeamLogos((prevLogos) => {
+      if (!prevLogos[oldName] || oldName === newName) return prevLogos;
+      const updated = { ...prevLogos, [newName]: prevLogos[oldName] };
+      delete updated[oldName];
+      return updated;
+    });
+  };
+
+  const clampSkill = (value) => Math.min(5, Math.max(1, Number(value || 3)));
+
+  const calculateRatingFromSkills = (player) => {
+    const skills = [
+      Number(player.dribbling || 3),
+      Number(player.insideScoring || 3),
+      Number(player.shooting || 3),
+      Number(player.defense || 3),
+      Number(player.passing || 3),
+    ];
+
+    return Math.round((skills.reduce((a, b) => a + b, 0) / 5) * 20);
+  };
+
+  const calculateTierFromRating = (rating) => {
+    const score = Number(rating || 0);
+    if (score >= 90) return "SSS+";
+    if (score >= 80) return "S+";
+    if (score >= 70) return "S-";
+    if (score >= 60) return "A+";
+    if (score >= 50) return "A-";
+    if (score >= 45) return "B+";
+    if (score >= 40) return "B-";
+    return "C";
+  };
+
+  const getFinalTier = (tier, rating) => {
+    const cleanTier = String(tier || "")
+      .trim()
+      .toUpperCase();
+    return validTiers.includes(cleanTier)
+      ? cleanTier
+      : calculateTierFromRating(rating);
+  };
+
+  const getPlayerScore = (player) =>
+    Number(player.rating || calculateRatingFromSkills(player));
+
+  const readImageAsDataUrl = (file, callback) => {
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("กรุณาเลือกไฟล์รูปภาพเท่านั้น");
+      return;
+    }
+
+    const maxSizeMB = 2;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      alert(`ไฟล์รูปใหญ่เกิน ${maxSizeMB}MB กรุณาเลือกรูปที่เล็กลง`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => callback(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handlePlayerPhotoUpload = (event) => {
+    const file = event.target.files?.[0];
+    readImageAsDataUrl(file, (imageUrl) => {
+      setForm((prevForm) => ({
+        ...prevForm,
+        photoUrl: imageUrl,
+      }));
+    });
+    event.target.value = "";
+  };
+
+  const handleNewRosterPhotoUpload = (event) => {
+    const file = event.target.files?.[0];
+    readImageAsDataUrl(file, (imageUrl) => {
+      setNewRosterForm((prevForm) => ({
+        ...prevForm,
+        photoUrl: imageUrl,
+      }));
+    });
+    event.target.value = "";
+  };
+
+  const uploadTeamLogo = (teamName, event) => {
+    const file = event.target.files?.[0];
+    readImageAsDataUrl(file, (imageUrl) => {
+      setTeamLogos((prevLogos) => ({
+        ...prevLogos,
+        [teamName]: imageUrl,
+      }));
+    });
+    event.target.value = "";
+  };
+
+  const removeTeamLogo = (teamName) => {
+    setTeamLogos((prevLogos) => {
+      const updated = { ...prevLogos };
+      delete updated[teamName];
+      return updated;
+    });
+  };
+
+  const uploadExistingPlayerPhoto = (playerId, event) => {
+    const file = event.target.files?.[0];
+
+    readImageAsDataUrl(file, (imageUrl) => {
+      setPlayers((prevPlayers) =>
+        prevPlayers.map((player) =>
+          player.id === playerId
+            ? {
+                ...player,
+                photoUrl: imageUrl,
+              }
+            : player
+        )
+      );
+
+      setTeams((prevTeams) =>
+        buildFinalTeams(
+          prevTeams.map((team) => ({
+            ...team,
+            players: (team.players || []).map((player) =>
+              player.id === playerId
+                ? {
+                    ...player,
+                    photoUrl: imageUrl,
+                  }
+                : player
+            ),
+          }))
+        )
+      );
+    });
+
+    event.target.value = "";
+  };
+
+  const removeExistingPlayerPhoto = (playerId) => {
+    if (!window.confirm("ต้องการลบรูปผู้เล่นนี้ใช่ไหม?")) return;
+
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        player.id === playerId
+          ? {
+              ...player,
+              photoUrl: "",
+            }
+          : player
+      )
+    );
+
+    setTeams((prevTeams) =>
+      buildFinalTeams(
+        prevTeams.map((team) => ({
+          ...team,
+          players: (team.players || []).map((player) =>
+            player.id === playerId
+              ? {
+                  ...player,
+                  photoUrl: "",
+                }
+              : player
+          ),
+        }))
+      )
+    );
+  };
+
+  const getPlayerPhotoUrl = (playerId) => {
+    const player = players.find((item) => String(item.id) === String(playerId));
+    return player?.photoUrl || "";
+  };
+
+  const getPlayerPhotoByName = (playerName) => {
+    const player = players.find((item) => item.name === playerName);
+    return player?.photoUrl || "";
+  };
+
+  const renderPlayerAvatar = (photoUrl, size = 42) =>
+    photoUrl ? (
+      <img
+        src={photoUrl}
+        alt="player"
+        width={size}
+        height={size}
+        style={{
+          borderRadius: "50%",
+          objectFit: "cover",
+          border: "1px solid #ddd",
+          verticalAlign: "middle",
+        }}
+      />
+    ) : (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          background: "#eee",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: Math.max(12, Math.round(size * 0.35)),
+          border: "1px solid #ddd",
+          verticalAlign: "middle",
+        }}
+      >
+        🏀
+      </div>
+    );
+
+  const renderTeamLogo = (teamName, size = 42) =>
+    teamLogos[teamName] ? (
+      <img
+        src={teamLogos[teamName]}
+        alt={teamName}
+        width={size}
+        height={size}
+        style={{
+          objectFit: "contain",
+          borderRadius: "8px",
+          border: "1px solid #ddd",
+          background: "white",
+          verticalAlign: "middle",
+        }}
+      />
+    ) : (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "8px",
+          background: "#eee",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: Math.max(12, Math.round(size * 0.35)),
+          border: "1px solid #ddd",
+          verticalAlign: "middle",
+        }}
+      >
+        🛡️
+      </div>
+    );
+
+  const renderTeamWithLogo = (teamName, size = 32) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+      {renderTeamLogo(teamName, size)}
+      <span>{teamName}</span>
+    </span>
+  );
+
+  const resetForm = () => {
+    setForm({
+      name: "",
+      tier: "",
+      pos1: "PG",
+      pos2: "",
+      dribbling: 3,
+      insideScoring: 3,
+      shooting: 3,
+      defense: 3,
+      passing: 3,
+      available: true,
+      lockedTeam: "",
+      photoUrl: "",
+    });
+    setEditingId(null);
+  };
+
+  const addOrUpdatePlayer = () => {
+    if (!form.name.trim()) {
+      alert("กรุณากรอกชื่อผู้เล่น");
+      return;
+    }
+
+    const rating = calculateRatingFromSkills(form);
+
+    const playerData = {
+      name: form.name.trim(),
+      tier: getFinalTier(form.tier, rating),
+      rating,
+      pos1: form.pos1,
+      pos2: form.pos2,
+      dribbling: clampSkill(form.dribbling),
+      insideScoring: clampSkill(form.insideScoring),
+      shooting: clampSkill(form.shooting),
+      defense: clampSkill(form.defense),
+      passing: clampSkill(form.passing),
+      available: form.available,
+      lockedTeam: "",
+      photoUrl: form.photoUrl || "",
+    };
+
+    if (editingId) {
+      setPlayers(
+        players.map((p) => (p.id === editingId ? { ...p, ...playerData } : p))
+      );
+
+      setTeams((prevTeams) =>
+        buildFinalTeams(
+          prevTeams.map((team) => ({
+            ...team,
+            players: (team.players || []).map((player) =>
+              player.id === editingId ? { ...player, ...playerData } : player
+            ),
+          }))
+        )
+      );
+    } else {
+      setPlayers([...players, { id: Date.now(), ...playerData }]);
+    }
+
+    resetForm();
+  };
+
+  const startEditPlayer = (player) => {
+    setEditingId(player.id);
+    setForm({
+      name: player.name || "",
+      tier: "",
+      pos1: player.pos1 || "PG",
+      pos2: player.pos2 || "",
+      dribbling: player.dribbling || 3,
+      insideScoring: player.insideScoring || 3,
+      shooting: player.shooting || 3,
+      defense: player.defense || 3,
+      passing: player.passing || 3,
+      available: player.available ?? true,
+      lockedTeam: "",
+      photoUrl: player.photoUrl || "",
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const deletePlayer = (id) => {
+    setPlayers(players.filter((p) => p.id !== id));
+  };
+
+  const toggleAvailable = (id) => {
+    setPlayers(
+      players.map((p) => (p.id === id ? { ...p, available: !p.available } : p))
+    );
+  };
+
+  const updateLockedTeam = (id) => {
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((p) => (p.id === id ? { ...p, lockedTeam: "" } : p))
+    );
+
+    setTeams((prevTeams) =>
+      prevTeams.map((team) => ({
+        ...team,
+        players: team.players.map((p) =>
+          p.id === id ? { ...p, lockedTeam: "" } : p
+        ),
+      }))
+    );
+  };
+
+  const clearAllPlayers = () => {
+    if (!window.confirm("ต้องการลบผู้เล่นทั้งหมดใช่ไหม?")) return;
+    setTeamCount(defaultTeamCount);
+    setCompetitionType("5X5");
+    setPlayers([]);
+    setTeams([]);
+    setSchedule([]);
+    setTeamLogos({});
+    setLockGroups([]);
+    setSeasonProjectName("");
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+    setSelectedProfilePlayerId("");
+    resetForm();
+    localStorage.removeItem("teamCount");
+    localStorage.removeItem("teamCount");
+    localStorage.removeItem("competitionType");
+    localStorage.removeItem("players");
+    localStorage.removeItem("teams");
+    localStorage.removeItem("schedule");
+    localStorage.removeItem("drafts");
+    localStorage.removeItem("teamNames");
+    localStorage.removeItem("matchRosters");
+    localStorage.removeItem("playerStats");
+    localStorage.removeItem("matchStatInputs");
+    localStorage.removeItem("teamLogos");
+    localStorage.removeItem("lockGroups");
+    localStorage.removeItem("seasonProjectName");
+  };
+
+  const downloadCSV = (filename, rows) => {
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+  };
+
+  const downloadTemplate = () => {
+    downloadCSV("bam_players_template.csv", [
+      [
+        "Name",
+        "Tier",
+        "Pos1",
+        "Pos2",
+        "Dribbling",
+        "InsideScoring",
+        "Shooting",
+        "Defense",
+        "Passing",
+      ],
+      ["ปัญจสุทธิ์", "SSS+", "SF", "PF", "3", "4", "3", "5", "3"],
+      ["ริรักทร", "", "PG", "SG", "5", "4", "3", "3", "5", ""],
+      ["ธนากร", "", "C", "PF", "5", "5", "4", "5", "5", ""],
+    ]);
+  };
+
+  const exportCSV = () => {
+    if (players.length === 0) {
+      alert("ยังไม่มีข้อมูลผู้เล่น");
+      return;
+    }
+
+    downloadCSV("bam_players.csv", [
+      [
+        "Name",
+        "Tier",
+        "Rating",
+        "Pos1",
+        "Pos2",
+        "Dribbling",
+        "InsideScoring",
+        "Shooting",
+        "Defense",
+        "Passing",
+        "Available",
+      ],
+      ...players.map((p) => [
+        p.name,
+        p.tier,
+        p.rating,
+        p.pos1,
+        p.pos2 || "",
+        p.dribbling,
+        p.insideScoring,
+        p.shooting,
+        p.defense,
+        p.passing,
+        p.available ? "Yes" : "No",
+      ]),
+    ]);
+  };
+
+  const parseCSVLine = (line) => line.split(",").map((x) => x.trim());
+
+  const decodeCSVFile = async (file) => {
+    const buffer = await file.arrayBuffer();
+    let text = new TextDecoder("utf-8").decode(buffer);
+    if (text.includes("�"))
+      text = new TextDecoder("windows-874").decode(buffer);
+    return text;
+  };
+
+  const importCSV = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const text = await decodeCSVFile(file);
+    const lines = text.split(/\r?\n/).filter(Boolean);
+
+    const imported = lines
+      .slice(1)
+      .map((line, index) => {
+        const [
+          name,
+          tierRaw,
+          pos1Raw,
+          pos2Raw,
+          dribblingRaw,
+          insideRaw,
+          shootingRaw,
+          defenseRaw,
+          passingRaw,
+        ] = parseCSVLine(line);
+
+        const pos1 = String(pos1Raw || "PG")
+          .trim()
+          .toUpperCase();
+        const pos2 = String(pos2Raw || "")
+          .trim()
+          .toUpperCase();
+        const base = {
+          id: Date.now() + index,
+          name: String(name || "").trim(),
+          pos1: validPositions.includes(pos1) ? pos1 : "PG",
+          pos2: validPositions.includes(pos2) ? pos2 : "",
+          dribbling: clampSkill(dribblingRaw),
+          insideScoring: clampSkill(insideRaw),
+          shooting: clampSkill(shootingRaw),
+          defense: clampSkill(defenseRaw),
+          passing: clampSkill(passingRaw),
+          available: true,
+          lockedTeam: "",
+        };
+
+        const rating = calculateRatingFromSkills(base);
+
+        return {
+          ...base,
+          rating,
+          tier: getFinalTier(tierRaw, rating),
+        };
+      })
+      .filter((p) => p.name);
+
+    setPlayers([...players, ...imported]);
+    alert(`Import สำเร็จ ${imported.length} คน`);
+    event.target.value = "";
+  };
+
+  const hasEliteConflict = (teamPlayers, newPlayer) => {
+    const hasSSS = teamPlayers.some((p) => p.tier === "SSS+");
+    const hasS = teamPlayers.some((p) => p.tier === "S+" || p.tier === "S-");
+
+    if (newPlayer.tier === "SSS+" && hasS) return true;
+    if ((newPlayer.tier === "S+" || newPlayer.tier === "S-") && hasSSS) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const has3x3TierConflict = (teamPlayers, newPlayer) => {
+    const teamHasSSS = teamPlayers.some((p) => p.tier === "SSS+");
+
+    if (!teamHasSSS) return false;
+
+    const blockedTiers = ["SSS+", "S+", "S-", "A+"];
+    return blockedTiers.includes(newPlayer.tier);
+  };
+
+  const getEliteWarning = (teamPlayers) => {
+    const hasSSS = teamPlayers.some((p) => p.tier === "SSS+");
+
+    if (competitionType === "3X3") {
+      const hasBlockedTier = teamPlayers.some((p) =>
+        ["SSS+", "S+", "S-", "A+"].includes(p.tier)
+      );
+      return hasSSS && hasBlockedTier && teamPlayers.length > 1;
+    }
+
+    const hasS = teamPlayers.some((p) => p.tier === "S+" || p.tier === "S-");
+    return hasSSS && hasS;
+  };
+
+  const shuffleArray = (array) => {
+    const cloned = [...array];
+    for (let i = cloned.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cloned[i], cloned[j]] = [cloned[j], cloned[i]];
+    }
+    return cloned;
+  };
+
+  const getRatingGroup = (player) => {
+    const score = getPlayerScore(player);
+    if (score >= 90) return 1;
+    if (score >= 80) return 2;
+    if (score >= 70) return 3;
+    if (score >= 60) return 4;
+    if (score >= 50) return 5;
+    if (score >= 45) return 6;
+    if (score >= 40) return 7;
+    return 8;
+  };
+
+  const preparePlayersForDraft = (availablePlayers) => {
+    const groups = {};
+
+    availablePlayers.forEach((player) => {
+      const group = getRatingGroup(player);
+      if (!groups[group]) groups[group] = [];
+      groups[group].push(player);
+    });
+
+    return Object.keys(groups)
+      .sort((a, b) => Number(a) - Number(b))
+      .flatMap((group) =>
+        shuffleArray(groups[group]).sort((a, b) => {
+          const diff = getPlayerScore(b) - getPlayerScore(a);
+          if (Math.abs(diff) <= 5) return Math.random() - 0.5;
+          return diff;
+        })
+      );
+  };
+
+  const getPlayerNameById = (playerId) => {
+    const player = players.find((item) => String(item.id) === String(playerId));
+    return player?.name || "Unknown Player";
+  };
+
+  const createLockGroup = () => {
+    if (selectedLockPlayerIds.length < 2) {
+      alert("กรุณาเลือกผู้เล่นอย่างน้อย 2 คนสำหรับ Lock Group");
+      return;
+    }
+
+    const alreadyLockedIds = lockGroups.flatMap(
+      (group) => group.playerIds || []
+    );
+    const duplicatePlayers = selectedLockPlayerIds.filter((playerId) =>
+      alreadyLockedIds.map(String).includes(String(playerId))
+    );
+
+    if (duplicatePlayers.length > 0) {
+      alert(
+        `ผู้เล่นต่อไปนี้อยู่ใน Lock Group แล้ว: ${duplicatePlayers
+          .map(getPlayerNameById)
+          .join(", ")}`
+      );
+      return;
+    }
+
+    const nextGroup = {
+      id: Date.now(),
+      name: lockGroupName.trim() || `Lock Group ${lockGroups.length + 1}`,
+      playerIds: selectedLockPlayerIds.map((id) => Number(id)),
+    };
+
+    setLockGroups((prevGroups) => [...prevGroups, nextGroup]);
+    setLockGroupName("");
+    setSelectedLockPlayerIds([]);
+  };
+
+  const deleteLockGroup = (groupId) => {
+    if (!window.confirm("ต้องการลบ Lock Group นี้ใช่ไหม?")) return;
+    setLockGroups((prevGroups) =>
+      prevGroups.filter((group) => group.id !== groupId)
+    );
+  };
+
+  const clearLockGroups = () => {
+    if (!window.confirm("ต้องการลบ Lock Group ทั้งหมดใช่ไหม?")) return;
+    setLockGroups([]);
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+  };
+
+  const calculateTeamScore = (teamPlayers) =>
+    teamPlayers.reduce((sum, p) => sum + getPlayerScore(p), 0);
+
+  const getPositionSummary = (teamPlayers) => {
+    const summary = { PG: 0, SG: 0, SF: 0, PF: 0, C: 0 };
+
+    teamPlayers.forEach((p) => {
+      if (summary[p.pos1] !== undefined) summary[p.pos1] += 1;
+      if (p.pos2 && summary[p.pos2] !== undefined) summary[p.pos2] += 0.5;
+    });
+
+    return summary;
+  };
+
+  const getMissingPositions = (summary) =>
+    validPositions.filter((pos) => summary[pos] === 0);
+
+  const getTeamSkillTotals = (teamPlayers) => ({
+    dribbling: teamPlayers.reduce((s, p) => s + Number(p.dribbling || 0), 0),
+    insideScoring: teamPlayers.reduce(
+      (s, p) => s + Number(p.insideScoring || 0),
+      0
+    ),
+    shooting: teamPlayers.reduce((s, p) => s + Number(p.shooting || 0), 0),
+    defense: teamPlayers.reduce((s, p) => s + Number(p.defense || 0), 0),
+    passing: teamPlayers.reduce((s, p) => s + Number(p.passing || 0), 0),
+  });
+
+  const buildFinalTeams = (baseTeams) => {
+    return baseTeams.map((team) => {
+      const positionSummary = getPositionSummary(team.players);
+
+      return {
+        ...team,
+        totalScore: calculateTeamScore(team.players),
+        skillTotals: getTeamSkillTotals(team.players),
+        positionSummary,
+        missingPositions: getMissingPositions(positionSummary),
+        eliteWarning: getEliteWarning(team.players),
+      };
+    });
+  };
+
+  const getDraftConflictPenalty = (teamPlayers, player) => {
+    if (competitionType === "3X3") {
+      return has3x3TierConflict(teamPlayers, player) ? 10000 : 0;
+    }
+
+    return hasEliteConflict(teamPlayers, player) ? 10000 : 0;
+  };
+
+  const getBestDraftTeam = (candidateTeams, player) => {
+    return [...candidateTeams].sort((a, b) => {
+      const aScore = calculateTeamScore(a.players);
+      const bScore = calculateTeamScore(b.players);
+
+      const aCount = a.players.length;
+      const bCount = b.players.length;
+
+      const aPos = getPositionSummary(a.players);
+      const bPos = getPositionSummary(b.players);
+
+      const aNeeds =
+        (aPos[player.pos1] === 0 ? 40 : 0) +
+        (player.pos2 && aPos[player.pos2] === 0 ? 20 : 0);
+
+      const bNeeds =
+        (bPos[player.pos1] === 0 ? 40 : 0) +
+        (player.pos2 && bPos[player.pos2] === 0 ? 20 : 0);
+
+      const aElitePenalty = getDraftConflictPenalty(a.players, player);
+      const bElitePenalty = getDraftConflictPenalty(b.players, player);
+
+      const aValue = aScore + aCount * 25 - aNeeds + aElitePenalty;
+      const bValue = bScore + bCount * 25 - bNeeds + bElitePenalty;
+
+      return aValue - bValue;
+    })[0];
+  };
+
+  const getBalancedTargets = (remainingPlayersCount, teamCountForDraft) => {
+    if (!teamCountForDraft || teamCountForDraft <= 0) return [];
+
+    const base = Math.floor(remainingPlayersCount / teamCountForDraft);
+    const remainder = remainingPlayersCount % teamCountForDraft;
+
+    return Array.from({ length: teamCountForDraft }, (_, index) =>
+      index < remainder ? base + 1 : base
+    );
+  };
+
+  const generateTeams = () => {
+    const availablePlayers = players.filter((p) => p.available);
+
+    if (availablePlayers.length < teamCount) {
+      alert(`ต้องมีผู้เล่นอย่างน้อย ${teamCount} คน`);
+      return;
+    }
+
+    const minPlayers = getMinPlayersPerGame();
+    if (availablePlayers.length < teamCount * minPlayers) {
+      const confirmGenerate = window.confirm(
+        `จำนวนผู้เล่นอาจไม่พอขั้นต่ำ ${minPlayers} คนต่อทีมสำหรับ ${competitionType}\n` +
+          `ผู้เล่น Available: ${availablePlayers.length} คน / ${teamCount} ทีม\n` +
+          "ต้องการสุ่มทีมต่อหรือไม่?"
+      );
+
+      if (!confirmGenerate) return;
+    }
+
+    // เริ่ม Draft ด้วยชื่อกลางก่อนเสมอ แล้วค่อยแก้ชื่อทีมหลังดราฟ
+    setTeamNames(defaultTeamNames);
+
+    const newTeams = defaultTeamNames.map((name) => ({
+      name,
+      players: [],
+      lockedGroupName: "",
+    }));
+
+    const availablePlayerMap = new Map(
+      availablePlayers.map((player) => [
+        String(player.id),
+        { ...player, lockedTeam: "" },
+      ])
+    );
+
+    const usedPlayerIds = new Set();
+
+    const validLockGroups = lockGroups
+      .map((group) => ({
+        ...group,
+        players: (group.playerIds || [])
+          .map((playerId) => availablePlayerMap.get(String(playerId)))
+          .filter(Boolean),
+      }))
+      .filter((group) => group.players.length > 0);
+
+    validLockGroups.forEach((group) => {
+      const unlockedTeams = newTeams.filter((team) => !team.lockedGroupName);
+      const candidateTeams =
+        unlockedTeams.length > 0 ? unlockedTeams : newTeams;
+
+      const targetTeam = [...candidateTeams].sort((a, b) => {
+        if (a.players.length !== b.players.length) {
+          return a.players.length - b.players.length;
+        }
+        return calculateTeamScore(a.players) - calculateTeamScore(b.players);
+      })[0];
+
+      group.players.forEach((player) => {
+        if (usedPlayerIds.has(String(player.id))) return;
+        targetTeam.players.push({
+          ...player,
+          lockedGroupName: group.name,
+        });
+        usedPlayerIds.add(String(player.id));
+      });
+
+      targetTeam.lockedGroupName = group.name;
+    });
+
+    const remainingPlayers = availablePlayers
+      .filter((player) => !usedPlayerIds.has(String(player.id)))
+      .map((player) => ({
+        ...player,
+        lockedTeam: "",
+      }));
+
+    const sortedPlayers = preparePlayersForDraft(remainingPlayers);
+
+    const unlockedDraftTeams = newTeams.filter((team) => !team.lockedGroupName);
+    const draftCandidateTeams =
+      unlockedDraftTeams.length > 0 ? unlockedDraftTeams : newTeams;
+
+    const balancedTargets = getBalancedTargets(
+      sortedPlayers.length,
+      draftCandidateTeams.length
+    );
+
+    const baseTeamCounts = new Map(
+      draftCandidateTeams.map((team) => [team.name, team.players.length])
+    );
+
+    sortedPlayers.forEach((player) => {
+      const availableTeams = draftCandidateTeams.filter((team, index) => {
+        const baseCount = baseTeamCounts.get(team.name) || 0;
+        const addedCount = team.players.length - baseCount;
+        return addedCount < balancedTargets[index];
+      });
+
+      const candidateTeams =
+        availableTeams.length > 0 ? availableTeams : draftCandidateTeams;
+
+      const targetTeam = getBestDraftTeam(candidateTeams, player);
+
+      if (!targetTeam) return;
+      targetTeam.players.push(player);
+    });
+
+    const finalTeams = buildFinalTeams(newTeams);
+
+    const teamMap = {};
+    finalTeams.forEach((team) => {
+      team.players.forEach((player) => {
+        teamMap[player.id] = team.name;
+      });
+    });
+
+    setTeams(finalTeams);
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        teamMap[player.id]
+          ? {
+              ...player,
+              teamName: teamMap[player.id],
+            }
+          : player
+      )
+    );
+  };
+
+  const addExistingPlayerToTeam = () => {
+    if (teams.length === 0) {
+      alert("กรุณา Generate Teams ก่อน");
+      return;
+    }
+
+    if (!rosterExistingPlayerId || !rosterTargetTeam) {
+      alert("กรุณาเลือกผู้เล่นและทีม");
+      return;
+    }
+
+    const selectedPlayer = players.find(
+      (player) => String(player.id) === String(rosterExistingPlayerId)
+    );
+
+    if (!selectedPlayer) {
+      alert("ไม่พบผู้เล่น");
+      return;
+    }
+
+    const updatedPlayer = {
+      ...selectedPlayer,
+      teamName: rosterTargetTeam,
+    };
+
+    setTeams((prevTeams) => {
+      const nextTeams = prevTeams.map((team) => ({
+        ...team,
+        players: team.players.filter(
+          (player) => player.id !== selectedPlayer.id
+        ),
+      }));
+
+      return buildFinalTeams(
+        nextTeams.map((team) =>
+          team.name === rosterTargetTeam
+            ? {
+                ...team,
+                players: [...team.players, updatedPlayer],
+              }
+            : team
+        )
+      );
+    });
+
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        player.id === selectedPlayer.id
+          ? {
+              ...player,
+              teamName: rosterTargetTeam,
+            }
+          : player
+      )
+    );
+
+    setRosterExistingPlayerId("");
+    setRosterTargetTeam("");
+  };
+
+  const movePlayerToTeam = (playerId, targetTeam) => {
+    if (!targetTeam) return;
+
+    let movedPlayer = null;
+
+    setTeams((prevTeams) => {
+      const nextTeams = prevTeams.map((team) => {
+        const foundPlayer = team.players.find(
+          (player) => player.id === playerId
+        );
+        if (foundPlayer) {
+          movedPlayer = {
+            ...foundPlayer,
+            teamName: targetTeam,
+          };
+        }
+
+        return {
+          ...team,
+          players: team.players.filter((player) => player.id !== playerId),
+        };
+      });
+
+      if (!movedPlayer) {
+        const playerFromList = players.find((player) => player.id === playerId);
+        if (playerFromList) {
+          movedPlayer = {
+            ...playerFromList,
+            teamName: targetTeam,
+          };
+        }
+      }
+
+      if (!movedPlayer) return prevTeams;
+
+      return buildFinalTeams(
+        nextTeams.map((team) =>
+          team.name === targetTeam
+            ? {
+                ...team,
+                players: [...team.players, movedPlayer],
+              }
+            : team
+        )
+      );
+    });
+
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        player.id === playerId
+          ? {
+              ...player,
+              teamName: targetTeam,
+            }
+          : player
+      )
+    );
+  };
+
+  const removePlayerFromTeam = (playerId) => {
+    if (!window.confirm("ต้องการนำผู้เล่นออกจากทีมใช่ไหม?")) return;
+
+    setTeams((prevTeams) =>
+      buildFinalTeams(
+        prevTeams.map((team) => ({
+          ...team,
+          players: team.players.filter((player) => player.id !== playerId),
+        }))
+      )
+    );
+
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        player.id === playerId
+          ? {
+              ...player,
+              teamName: "",
+            }
+          : player
+      )
+    );
+  };
+
+  const createNewPlayerToTeam = () => {
+    if (teams.length === 0) {
+      alert("กรุณา Generate Teams ก่อน");
+      return;
+    }
+
+    if (!newRosterForm.name.trim() || !newRosterForm.targetTeam) {
+      alert("กรุณากรอกชื่อผู้เล่นและเลือกทีม");
+      return;
+    }
+
+    const rating = calculateRatingFromSkills(newRosterForm);
+
+    const newPlayer = {
+      id: Date.now(),
+      name: newRosterForm.name.trim(),
+      tier: getFinalTier(newRosterForm.tier, rating),
+      rating,
+      pos1: newRosterForm.pos1,
+      pos2: newRosterForm.pos2,
+      dribbling: clampSkill(newRosterForm.dribbling),
+      insideScoring: clampSkill(newRosterForm.insideScoring),
+      shooting: clampSkill(newRosterForm.shooting),
+      defense: clampSkill(newRosterForm.defense),
+      passing: clampSkill(newRosterForm.passing),
+      available: true,
+      lockedTeam: "",
+      photoUrl: newRosterForm.photoUrl || "",
+      teamName: newRosterForm.targetTeam,
+    };
+
+    setPlayers((prevPlayers) => [...prevPlayers, newPlayer]);
+
+    setTeams((prevTeams) =>
+      buildFinalTeams(
+        prevTeams.map((team) =>
+          team.name === newRosterForm.targetTeam
+            ? {
+                ...team,
+                players: [...team.players, newPlayer],
+              }
+            : team
+        )
+      )
+    );
+
+    setNewRosterForm({
+      name: "",
+      tier: "",
+      pos1: "PG",
+      pos2: "",
+      dribbling: 3,
+      insideScoring: 3,
+      shooting: 3,
+      defense: 3,
+      passing: 3,
+      targetTeam: "",
+      photoUrl: "",
+    });
+  };
+
+  const getBalancePercent = () => {
+    if (teams.length === 0) return 0;
+    const scores = teams.map((t) => t.totalScore);
+    return ((Math.min(...scores) / Math.max(...scores)) * 100).toFixed(1);
+  };
+
+  const saveDraft = () => {
+    if (teams.length === 0) {
+      alert("กรุณา Generate Teams ก่อน");
+      return;
+    }
+
+    const newDraft = {
+      id: Date.now(),
+      name: `Draft ${drafts.length + 1}`,
+      createdAt: new Date().toLocaleString(),
+      balanceScore: getBalancePercent(),
+      teams: JSON.parse(JSON.stringify(teams)),
+    };
+
+    setDrafts([newDraft, ...drafts]);
+    alert("บันทึก Draft สำเร็จ");
+  };
+
+  const loadDraft = (draft) => {
+    const loadedTeams = draft.teams || [];
+    const teamMap = {};
+
+    loadedTeams.forEach((team) => {
+      (team.players || []).forEach((player) => {
+        teamMap[player.id] = team.name;
+      });
+    });
+
+    setTeams(loadedTeams);
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) =>
+        teamMap[player.id]
+          ? {
+              ...player,
+              teamName: teamMap[player.id],
+            }
+          : player
+      )
+    );
+  };
+
+  const deleteDraft = (id) => {
+    if (!window.confirm("ต้องการลบ Draft นี้ใช่ไหม?")) return;
+    setDrafts(drafts.filter((draft) => draft.id !== id));
+  };
+
+  const renameDraft = (id) => {
+    const newName = window.prompt("ตั้งชื่อ Draft ใหม่");
+    if (!newName) return;
+
+    setDrafts(
+      drafts.map((draft) =>
+        draft.id === id ? { ...draft, name: newName } : draft
+      )
+    );
+  };
+
+  const clearAllDrafts = () => {
+    if (!window.confirm("ต้องการลบ Draft ทั้งหมดใช่ไหม?")) return;
+    setDrafts([]);
+    localStorage.removeItem("drafts");
+  };
+
+  const exportTeamsCSV = () => {
+    if (teams.length === 0) {
+      alert("ยังไม่มีทีม กรุณากด Generate ก่อน");
+      return;
+    }
+
+    const rows = [
+      [
+        "Team",
+        "Name",
+        "Tier",
+        "Rating",
+        "Pos1",
+        "Pos2",
+        "Dribbling",
+        "InsideScoring",
+        "Shooting",
+        "Defense",
+        "Passing",
+      ],
+    ];
+
+    teams.forEach((team) => {
+      team.players.forEach((p) => {
+        rows.push([
+          team.name,
+          p.name,
+          p.tier,
+          p.rating,
+          p.pos1,
+          p.pos2 || "",
+          p.dribbling,
+          p.insideScoring,
+          p.shooting,
+          p.defense,
+          p.passing,
+        ]);
+      });
+    });
+
+    downloadCSV("bam_generated_teams.csv", rows);
+  };
+
+  const createSchedule = () => {
+    if (teams.length < 3) {
+      alert("กรุณา Generate Teams อย่างน้อย 3 ทีมก่อน");
+      return;
+    }
+
+    const names = teams.map((team) => team.name);
+    const roundRobinNames =
+      names.length % 2 === 0 ? [...names] : [...names, "BYE"];
+    const totalRounds = roundRobinNames.length - 1;
+    const matchesPerRound = roundRobinNames.length / 2;
+    const rotated = [...roundRobinNames];
+    const newSchedule = [];
+    let matchId = 1;
+
+    for (let round = 1; round <= totalRounds; round += 1) {
+      for (let matchIndex = 0; matchIndex < matchesPerRound; matchIndex += 1) {
+        const teamA = rotated[matchIndex];
+        const teamB = rotated[rotated.length - 1 - matchIndex];
+
+        if (teamA !== "BYE" && teamB !== "BYE") {
+          newSchedule.push({
+            id: matchId,
+            week: round,
+            label: "League",
+            teamA,
+            teamB,
+            scoreA: "",
+            scoreB: "",
+            status: "Pending",
+          });
+          matchId += 1;
+        }
+      }
+
+      const fixedTeam = rotated[0];
+      const restTeams = rotated.slice(1);
+      restTeams.unshift(restTeams.pop());
+      rotated.splice(0, rotated.length, fixedTeam, ...restTeams);
+    }
+
+    const playoffStartWeek = totalRounds + 1;
+
+    if (names.length === 3) {
+      newSchedule.push({
+        id: matchId,
+        week: playoffStartWeek,
+        label: "Final",
+        playoffType: "final_1v2",
+        teamA: "Rank 1",
+        teamB: "Rank 2",
+        scoreA: "",
+        scoreB: "",
+        status: "Pending",
+      });
+    }
+
+    if (names.length >= 4) {
+      newSchedule.push(
+        {
+          id: matchId,
+          week: playoffStartWeek,
+          label: "Semi Final",
+          playoffType: "sf1",
+          teamA: "Rank 1",
+          teamB: "Rank 4",
+          scoreA: "",
+          scoreB: "",
+          status: "Pending",
+        },
+        {
+          id: matchId + 1,
+          week: playoffStartWeek,
+          label: "Semi Final",
+          playoffType: "sf2",
+          teamA: "Rank 2",
+          teamB: "Rank 3",
+          scoreA: "",
+          scoreB: "",
+          status: "Pending",
+        },
+        {
+          id: matchId + 2,
+          week: playoffStartWeek + 1,
+          label: "3rd Place",
+          playoffType: "third_place",
+          teamA: "Loser SF1",
+          teamB: "Loser SF2",
+          scoreA: "",
+          scoreB: "",
+          status: "Pending",
+        },
+        {
+          id: matchId + 3,
+          week: playoffStartWeek + 1,
+          label: "Final",
+          playoffType: "final",
+          teamA: "Winner SF1",
+          teamB: "Winner SF2",
+          scoreA: "",
+          scoreB: "",
+          status: "Pending",
+        }
+      );
+    }
+
+    setSchedule(newSchedule);
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+  };
+
+  const updateMatchScore = (id, field, value) => {
+    setSchedule(
+      schedule.map((match) =>
+        match.id === id
+          ? {
+              ...match,
+              [field]: value,
+              status:
+                field === "scoreA" || field === "scoreB"
+                  ? "Pending"
+                  : match.status,
+            }
+          : match
+      )
+    );
+  };
+
+  const finishMatch = (id) => {
+    setSchedule(
+      schedule.map((match) => {
+        if (match.id !== id) return match;
+
+        if (match.scoreA === "" || match.scoreB === "") {
+          alert("กรุณากรอกคะแนนให้ครบ");
+          return match;
+        }
+
+        return {
+          ...match,
+          status: "Finished",
+        };
+      })
+    );
+  };
+
+  const calculateStandings = () => {
+    if (teams.length === 0) return [];
+
+    const table = {};
+
+    teams.forEach((team) => {
+      table[team.name] = {
+        team: team.name,
+        played: 0,
+        win: 0,
+        loss: 0,
+        pf: 0,
+        pa: 0,
+        diff: 0,
+      };
+    });
+
+    schedule
+      .filter((m) => m.label === "League" && m.status === "Finished")
+      .forEach((match) => {
+        const scoreA = Number(match.scoreA);
+        const scoreB = Number(match.scoreB);
+
+        if (!table[match.teamA] || !table[match.teamB]) return;
+
+        table[match.teamA].played += 1;
+        table[match.teamB].played += 1;
+
+        table[match.teamA].pf += scoreA;
+        table[match.teamA].pa += scoreB;
+
+        table[match.teamB].pf += scoreB;
+        table[match.teamB].pa += scoreA;
+
+        if (scoreA > scoreB) {
+          table[match.teamA].win += 1;
+          table[match.teamB].loss += 1;
+        } else if (scoreB > scoreA) {
+          table[match.teamB].win += 1;
+
+          table[match.teamA].loss += 1;
+        }
+      });
+
+    return Object.values(table)
+      .map((row) => ({
+        ...row,
+        diff: row.pf - row.pa,
+      }))
+      .sort((a, b) => {
+        if (b.win !== a.win) return b.win - a.win;
+        if (b.diff !== a.diff) return b.diff - a.diff;
+        return b.pf - a.pf;
+      });
+  };
+
+  const getTeamPlayers = (teamName) => {
+    const team = teams.find((item) => item.name === teamName);
+    if (team) return team.players || [];
+
+    return players.filter((player) => player.teamName === teamName);
+  };
+
+  const getMatchRosterTemplate = (match) => {
+    const teamAPlayers = getTeamPlayers(match.teamA).map((player) => player.id);
+    const teamBPlayers = getTeamPlayers(match.teamB).map((player) => player.id);
+
+    return {
+      teamA: {
+        activePlayers: teamAPlayers,
+        loanPlayers: [],
+      },
+      teamB: {
+        activePlayers: teamBPlayers,
+        loanPlayers: [],
+      },
+    };
+  };
+
+  const getMatchRoster = (match) => {
+    if (!match) {
+      return {
+        teamA: { activePlayers: [], loanPlayers: [] },
+        teamB: { activePlayers: [], loanPlayers: [] },
+      };
+    }
+
+    return matchRosters[match.id] || getMatchRosterTemplate(match);
+  };
+
+  const getSideTeamName = (match, side) => {
+    return side === "teamA" ? match.teamA : match.teamB;
+  };
+
+  const toggleActivePlayer = (match, side, playerId) => {
+    const currentRoster = getMatchRoster(match);
+    const currentActive = currentRoster[side].activePlayers || [];
+    const alreadyActive = currentActive.includes(playerId);
+
+    const nextActive = alreadyActive
+      ? currentActive.filter((id) => id !== playerId)
+      : [...currentActive, playerId];
+
+    setMatchRosters((prev) => ({
+      ...prev,
+      [match.id]: {
+        ...currentRoster,
+        [side]: {
+          ...currentRoster[side],
+          activePlayers: nextActive,
+        },
+      },
+    }));
+  };
+
+  const addLoanPlayerToMatch = (match, side) => {
+    if (!loanForm.playerId) {
+      alert("กรุณาเลือกผู้เล่นยืมตัว");
+      return;
+    }
+
+    const player = players.find(
+      (item) => String(item.id) === String(loanForm.playerId)
+    );
+
+    if (!player) {
+      alert("ไม่พบผู้เล่น");
+      return;
+    }
+
+    const matchTeam = getSideTeamName(match, side);
+    const ownerTeam = player.teamName || "No Team";
+
+    if (ownerTeam === matchTeam) {
+      alert("ผู้เล่นคนนี้อยู่ทีมนี้อยู่แล้ว ไม่ต้องยืมตัว");
+      return;
+    }
+
+    const currentRoster = getMatchRoster(match);
+    const currentLoans = currentRoster[side].loanPlayers || [];
+    const alreadyLoaned = currentLoans.some(
+      (loan) => Number(loan.playerId) === Number(player.id)
+    );
+
+    if (alreadyLoaned) {
+      alert("ผู้เล่นคนนี้ถูกยืมเข้าทีมนี้แล้ว");
+      return;
+    }
+
+    const activeInSameTeam = (currentRoster[side].activePlayers || []).includes(
+      player.id
+    );
+
+    if (activeInSameTeam) {
+      alert("ผู้เล่นคนนี้อยู่ใน Active Roster แล้ว");
+      return;
+    }
+
+    const newLoan = {
+      playerId: player.id,
+      playerName: player.name,
+      ownerTeam,
+      matchTeam,
+      role: "loan",
+      countPersonalStats: false,
+    };
+
+    setMatchRosters((prev) => ({
+      ...prev,
+      [match.id]: {
+        ...currentRoster,
+        [side]: {
+          ...currentRoster[side],
+          loanPlayers: [...currentLoans, newLoan],
+        },
+      },
+    }));
+
+    setLoanForm({ side, playerId: "" });
+  };
+
+  const removeLoanPlayerFromMatch = (match, side, playerId) => {
+    const currentRoster = getMatchRoster(match);
+    const currentLoans = currentRoster[side].loanPlayers || [];
+
+    setMatchRosters((prev) => ({
+      ...prev,
+      [match.id]: {
+        ...currentRoster,
+        [side]: {
+          ...currentRoster[side],
+          loanPlayers: currentLoans.filter(
+            (loan) => Number(loan.playerId) !== Number(playerId)
+          ),
+        },
+      },
+    }));
+  };
+
+  const saveMatchRoster = (match) => {
+    const currentRoster = getMatchRoster(match);
+
+    const teamACount =
+      (currentRoster.teamA.activePlayers || []).length +
+      (currentRoster.teamA.loanPlayers || []).length;
+
+    const teamBCount =
+      (currentRoster.teamB.activePlayers || []).length +
+      (currentRoster.teamB.loanPlayers || []).length;
+
+    const minPlayers = getMinPlayersPerGame();
+
+    if (teamACount < minPlayers || teamBCount < minPlayers) {
+      const confirmSave = window.confirm(
+        `ผู้เล่นยังไม่ครบ ${minPlayers} คน\n${match.teamA}: ${teamACount} คน\n${match.teamB}: ${teamBCount} คน\nต้องการบันทึกต่อหรือไม่?`
+      );
+
+      if (!confirmSave) return;
+    }
+
+    setMatchRosters((prev) => ({
+      ...prev,
+      [match.id]: currentRoster,
+    }));
+
+    alert("บันทึก Match Roster สำเร็จ");
+  };
+
+  const clearMatchRoster = (matchId) => {
+    if (!window.confirm("ต้องการลบ Match Roster ของแมตช์นี้ใช่ไหม?")) return;
+
+    setMatchRosters((prev) => {
+      const updated = { ...prev };
+      delete updated[matchId];
+      return updated;
+    });
+  };
+
+  const getLoanCandidates = (match, side) => {
+    const matchTeam = getSideTeamName(match, side);
+    const currentRoster = getMatchRoster(match);
+    const currentLoanIds = (currentRoster[side].loanPlayers || []).map((loan) =>
+      Number(loan.playerId)
+    );
+    const activeIds = currentRoster[side].activePlayers || [];
+
+    return players.filter((player) => {
+      if (!player.teamName) return false;
+      if (player.teamName === matchTeam) return false;
+      if (currentLoanIds.includes(Number(player.id))) return false;
+      if (activeIds.includes(player.id)) return false;
+      return true;
+    });
+  };
+
+  const getRegularActivePlayersForMatch = (match, side) => {
+    const roster = getMatchRoster(match);
+    const activeIds = roster[side]?.activePlayers || [];
+    return activeIds
+      .map((playerId) =>
+        players.find((player) => Number(player.id) === Number(playerId))
+      )
+      .filter(Boolean)
+      .map((player) => ({
+        ...player,
+        role: "regular",
+        countPersonalStats: true,
+        matchTeam: getSideTeamName(match, side),
+        ownerTeam: getSideTeamName(match, side),
+      }));
+  };
+
+  const getLoanPlayersForMatch = (match, side) => {
+    const roster = getMatchRoster(match);
+    return (roster[side]?.loanPlayers || []).map((loan) => ({
+      id: loan.playerId,
+      name: loan.playerName,
+      playerId: loan.playerId,
+      role: "loan",
+      countPersonalStats: false,
+      matchTeam: loan.matchTeam,
+      ownerTeam: loan.ownerTeam,
+    }));
+  };
+
+  const getAllStatRowsForMatch = (match) => {
+    if (!match) return [];
+    return [
+      ...getRegularActivePlayersForMatch(match, "teamA"),
+      ...getLoanPlayersForMatch(match, "teamA"),
+      ...getRegularActivePlayersForMatch(match, "teamB"),
+      ...getLoanPlayersForMatch(match, "teamB"),
+    ];
+  };
+
+  const getMatchStatKey = (matchId, playerId, role, matchTeam) => {
+    return `${matchId}_${playerId}_${role}_${matchTeam}`;
+  };
+
+  const statFields = [
+    { key: "pts", label: "PTS" },
+    { key: "reb", label: "REB" },
+    { key: "ast", label: "AST" },
+    { key: "stl", label: "STL" },
+    { key: "blk", label: "BLK" },
+  ];
+
+  const getStatInputValue = (match, player, field = "pts") => {
+    const key = getMatchStatKey(
+      match.id,
+      player.playerId || player.id,
+      player.role,
+      player.matchTeam
+    );
+    return matchStatInputs[key]?.[field] ?? "";
+  };
+
+  const updateMatchStatInput = (match, player, field, value) => {
+    const key = getMatchStatKey(
+      match.id,
+      player.playerId || player.id,
+      player.role,
+      player.matchTeam
+    );
+
+    setMatchStatInputs((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || {}),
+        matchId: match.id,
+        playerId: player.playerId || player.id,
+        playerName: player.name,
+        ownerTeam: player.ownerTeam,
+        matchTeam: player.matchTeam,
+        role: player.role,
+        countPersonalStats: player.countPersonalStats,
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveMatchStats = (match) => {
+    const rows = getAllStatRowsForMatch(match);
+
+    if (rows.length === 0) {
+      alert("ยังไม่มี Match Roster กรุณา Manage Roster ก่อน");
+      return;
+    }
+
+    const nextStats = { ...playerStats };
+
+    const teamAPlayers = getTeamPlayers(match.teamA);
+    const teamBPlayers = getTeamPlayers(match.teamB);
+    const allTeamPlayers = [
+      ...teamAPlayers.map((p) => ({
+        ...p,
+        matchTeam: match.teamA,
+        opponent: match.teamB,
+      })),
+      ...teamBPlayers.map((p) => ({
+        ...p,
+        matchTeam: match.teamB,
+        opponent: match.teamA,
+      })),
+    ];
+
+    allTeamPlayers.forEach((player) => {
+      const playerId = player.id;
+
+      if (!nextStats[playerId]) {
+        nextStats[playerId] = {
+          playerId,
+          playerName: player.name,
+          teamName: player.teamName || player.matchTeam || "",
+          gamesByMatch: {},
+          games: 0,
+          appearances: 0,
+          pts: 0,
+          reb: 0,
+          ast: 0,
+          stl: 0,
+          blk: 0,
+        };
+      }
+
+      const previous = nextStats[playerId].gamesByMatch?.[match.id] || {};
+      const wasGameCounted = Boolean(previous.gameCounted);
+
+      nextStats[playerId] = {
+        ...nextStats[playerId],
+        playerName: player.name,
+        teamName:
+          player.teamName ||
+          player.matchTeam ||
+          nextStats[playerId].teamName ||
+          "",
+        gamesByMatch: {
+          ...(nextStats[playerId].gamesByMatch || {}),
+          [match.id]: {
+            ...previous,
+            matchId: match.id,
+            week: match.week,
+            opponent: player.opponent,
+            matchTeam: player.matchTeam,
+            gameCounted: true,
+          },
+        },
+        games:
+          Number(nextStats[playerId].games || 0) + (!wasGameCounted ? 1 : 0),
+        appearances: Number(nextStats[playerId].appearances || 0),
+        pts: Number(nextStats[playerId].pts || 0),
+        reb: Number(nextStats[playerId].reb || 0),
+        ast: Number(nextStats[playerId].ast || 0),
+        stl: Number(nextStats[playerId].stl || 0),
+        blk: Number(nextStats[playerId].blk || 0),
+      };
+    });
+
+    rows.forEach((player) => {
+      const playerId = player.playerId || player.id;
+      const key = getMatchStatKey(
+        match.id,
+        playerId,
+        player.role,
+        player.matchTeam
+      );
+      const input = matchStatInputs[key] || {};
+      const pts = Number(input.pts || 0);
+      const reb = Number(input.reb || 0);
+      const ast = Number(input.ast || 0);
+      const stl = Number(input.stl || 0);
+      const blk = Number(input.blk || 0);
+
+      if (!player.countPersonalStats) return;
+
+      if (!nextStats[playerId]) {
+        nextStats[playerId] = {
+          playerId,
+          playerName: player.name,
+          teamName: player.ownerTeam || player.teamName || "",
+          gamesByMatch: {},
+          games: 0,
+          appearances: 0,
+          pts: 0,
+          reb: 0,
+          ast: 0,
+          stl: 0,
+          blk: 0,
+        };
+      }
+
+      const previous = nextStats[playerId].gamesByMatch?.[match.id] || {};
+      const previousPts = Number(previous.pts || 0);
+      const previousReb = Number(previous.reb || 0);
+      const previousAst = Number(previous.ast || 0);
+      const previousStl = Number(previous.stl || 0);
+      const previousBlk = Number(previous.blk || 0);
+      const wasAppearance = Boolean(previous.appearanceCounted);
+
+      nextStats[playerId] = {
+        ...nextStats[playerId],
+        playerName: player.name,
+        teamName:
+          player.ownerTeam ||
+          player.teamName ||
+          nextStats[playerId].teamName ||
+          "",
+        gamesByMatch: {
+          ...(nextStats[playerId].gamesByMatch || {}),
+          [match.id]: {
+            ...previous,
+            matchId: match.id,
+            week: match.week,
+            opponent:
+              player.matchTeam === match.teamA ? match.teamB : match.teamA,
+            matchTeam: player.matchTeam,
+            pts,
+            reb,
+            ast,
+            stl,
+            blk,
+            counted: true,
+            appearanceCounted: true,
+          },
+        },
+        pts: Number(nextStats[playerId].pts || 0) - previousPts + pts,
+        reb: Number(nextStats[playerId].reb || 0) - previousReb + reb,
+        ast: Number(nextStats[playerId].ast || 0) - previousAst + ast,
+        stl: Number(nextStats[playerId].stl || 0) - previousStl + stl,
+        blk: Number(nextStats[playerId].blk || 0) - previousBlk + blk,
+        appearances:
+          Number(nextStats[playerId].appearances || 0) +
+          (!wasAppearance ? 1 : 0),
+      };
+    });
+
+    setPlayerStats(nextStats);
+    alert("บันทึก Player Stats สำเร็จ");
+  };
+
+  const getPlayerStatRows = () => {
+    return Object.values(playerStats)
+      .filter((stat) => Number(stat.games || 0) > 0)
+      .map((stat) => {
+        const appearances = Number(stat.appearances || 0);
+        const pts = Number(stat.pts || 0);
+        const reb = Number(stat.reb || 0);
+        const ast = Number(stat.ast || 0);
+        const stl = Number(stat.stl || 0);
+        const blk = Number(stat.blk || 0);
+        const ppg = appearances > 0 ? (pts / appearances).toFixed(1) : "0.0";
+        const avgStats =
+          appearances > 0 ? (pts + reb + ast + stl + blk) / appearances : 0;
+        const appearanceBonus = appearances * 0.75;
+        const mvpScore =
+          pts + reb * 1.2 + ast * 1.5 + stl * 2 + blk * 2 + appearanceBonus;
+
+        return {
+          ...stat,
+          appearances,
+          pts,
+          reb,
+          ast,
+          stl,
+          blk,
+          ppg,
+          avgStats: avgStats.toFixed(1),
+          appearanceBonus,
+          mvpScore,
+        };
+      });
+  };
+
+  const getStatLeaders = (field) => {
+    return getPlayerStatRows()
+      .filter((stat) => Number(stat[field] || 0) > 0)
+      .sort((a, b) => {
+        if (Number(b[field] || 0) !== Number(a[field] || 0)) {
+          return Number(b[field] || 0) - Number(a[field] || 0);
+        }
+        return Number(b.ppg || 0) - Number(a.ppg || 0);
+      });
+  };
+
+  const getTopScorers = () => getStatLeaders("pts");
+
+  const getMVPRanking = () => {
+    return getPlayerStatRows()
+      .filter((stat) => Number(stat.mvpScore || 0) > 0)
+      .sort((a, b) => {
+        if (Number(b.mvpScore || 0) !== Number(a.mvpScore || 0)) {
+          return Number(b.mvpScore || 0) - Number(a.mvpScore || 0);
+        }
+        if (Number(b.pts || 0) !== Number(a.pts || 0)) {
+          return Number(b.pts || 0) - Number(a.pts || 0);
+        }
+        return Number(b.appearances || 0) - Number(a.appearances || 0);
+      });
+  };
+
+  const getSelectedPlayerProfile = () => {
+    if (!selectedProfilePlayerId) return null;
+    return getPlayerStatRows().find(
+      (stat) => String(stat.playerId) === String(selectedProfilePlayerId)
+    );
+  };
+
+  const getPlayerMatchLog = (stat) => {
+    if (!stat || !stat.gamesByMatch) return [];
+
+    return Object.values(stat.gamesByMatch)
+      .map((game) => {
+        const match = schedule.find(
+          (item) => String(item.id) === String(game.matchId)
+        );
+
+        const isAppearance = Boolean(game.appearanceCounted);
+        const opponent =
+          game.opponent ||
+          (match
+            ? game.matchTeam === match.teamA
+              ? match.teamB
+              : match.teamA
+            : "-");
+
+        return {
+          ...game,
+          week: game.week || match?.week || "-",
+          label: match?.label || "League",
+          opponent,
+          status: match?.status || "Pending",
+          score:
+            match && match.scoreA !== "" && match.scoreB !== ""
+              ? `${match.scoreA}-${match.scoreB}`
+              : "-",
+          appearance: isAppearance,
+          pts: Number(game.pts || 0),
+          reb: Number(game.reb || 0),
+          ast: Number(game.ast || 0),
+          stl: Number(game.stl || 0),
+          blk: Number(game.blk || 0),
+        };
+      })
+      .sort((a, b) => Number(a.week || 0) - Number(b.week || 0));
+  };
+
+  const clearPlayerStats = () => {
+    if (!window.confirm("ต้องการลบ Player Stats ทั้งหมดใช่ไหม?")) return;
+    setPlayerStats({});
+    setMatchStatInputs({});
+    localStorage.removeItem("playerStats");
+    localStorage.removeItem("matchStatInputs");
+  };
+
+  const updatePlayoffTeams = () => {
+    const playoffStandings = calculateStandings();
+
+    if (playoffStandings.length < 2) {
+      alert("ยังไม่มีอันดับเพียงพอสำหรับ Playoff");
+      return;
+    }
+
+    setSchedule((prevSchedule) =>
+      prevSchedule.map((match) => {
+        // 3 Teams: Final 1 vs 2
+        if (teams.length === 3 && match.playoffType === "final_1v2") {
+          return {
+            ...match,
+            teamA: playoffStandings[0]?.team || "Rank 1",
+            teamB: playoffStandings[1]?.team || "Rank 2",
+          };
+        }
+
+        // 4+ Teams: Semi Final
+        if (teams.length >= 4 && match.playoffType === "sf1") {
+          return {
+            ...match,
+            teamA: playoffStandings[0]?.team || "Rank 1",
+            teamB: playoffStandings[3]?.team || "Rank 4",
+          };
+        }
+
+        if (teams.length >= 4 && match.playoffType === "sf2") {
+          return {
+            ...match,
+            teamA: playoffStandings[1]?.team || "Rank 2",
+            teamB: playoffStandings[2]?.team || "Rank 3",
+          };
+        }
+
+        const sf1 = prevSchedule.find((m) => m.playoffType === "sf1");
+        const sf2 = prevSchedule.find((m) => m.playoffType === "sf2");
+
+        const sf1Finished =
+          sf1 &&
+          sf1.status === "Finished" &&
+          sf1.scoreA !== "" &&
+          sf1.scoreB !== "";
+
+        const sf2Finished =
+          sf2 &&
+          sf2.status === "Finished" &&
+          sf2.scoreA !== "" &&
+          sf2.scoreB !== "";
+
+        if (!sf1Finished || !sf2Finished) return match;
+
+        const sf1AWin = Number(sf1.scoreA) > Number(sf1.scoreB);
+        const sf2AWin = Number(sf2.scoreA) > Number(sf2.scoreB);
+
+        const sf1Winner = sf1AWin ? sf1.teamA : sf1.teamB;
+        const sf1Loser = sf1AWin ? sf1.teamB : sf1.teamA;
+
+        const sf2Winner = sf2AWin ? sf2.teamA : sf2.teamB;
+        const sf2Loser = sf2AWin ? sf2.teamB : sf2.teamA;
+
+        if (match.playoffType === "third_place") {
+          return {
+            ...match,
+            teamA: sf1Loser,
+            teamB: sf2Loser,
+          };
+        }
+
+        if (match.playoffType === "final") {
+          return {
+            ...match,
+            teamA: sf1Winner,
+            teamB: sf2Winner,
+          };
+        }
+
+        return match;
+      })
+    );
+  };
+
+  const clearSchedule = () => {
+    if (!window.confirm("ต้องการลบ Schedule ใช่ไหม?")) return;
+    setSchedule([]);
+    setSelectedRosterMatchId("");
+    localStorage.removeItem("schedule");
+  };
+
+  const closeSeason = () => {
+    const standingsRows = calculateStandings();
+    const awards = getSeasonAwards();
+
+    if (standingsRows.length === 0 && getPlayerStatRows().length === 0) {
+      alert("ยังไม่มีข้อมูลการแข่งขันหรือสถิติสำหรับปิด Season");
+      return;
+    }
+
+    const champion =
+      awards.champion && awards.champion !== "-"
+        ? awards.champion
+        : standingsRows[0]?.team || "-";
+
+    const runnerUp =
+      awards.runnerUp && awards.runnerUp !== "-"
+        ? awards.runnerUp
+        : standingsRows[1]?.team || "-";
+
+    const projectName = getCurrentSeasonTitle();
+
+    const seasonRecord = {
+      id: Date.now(),
+      season: currentSeason,
+      competitionType,
+      projectName,
+      teamCount,
+      closedAt: new Date().toISOString(),
+      closedAtText: new Date().toLocaleString(),
+      champion,
+      runnerUp,
+      thirdPlace: awards.thirdPlace || "-",
+      finalScore: awards.finalScore || "-",
+      thirdPlaceScore: awards.thirdPlaceScore || "-",
+      mvp: awards.mvp?.playerName || "-",
+      mvpTeam: awards.mvp?.teamName || "-",
+      mvpScore: Number(awards.mvp?.mvpScore || 0),
+      topScorer: awards.topScorer?.playerName || "-",
+      topScorerTeam: awards.topScorer?.teamName || "-",
+      topScorerPts: Number(awards.topScorer?.pts || 0),
+      reboundLeader: awards.reboundLeader?.playerName || "-",
+      reboundLeaderReb: Number(awards.reboundLeader?.reb || 0),
+      assistLeader: awards.assistLeader?.playerName || "-",
+      assistLeaderAst: Number(awards.assistLeader?.ast || 0),
+      standings: standingsRows,
+      archivedData: {
+        competitionType,
+        season: currentSeason,
+        projectName,
+        teamCount,
+        players,
+        teams,
+        schedule,
+        drafts,
+        matchRosters,
+        playerStats,
+        matchStatInputs,
+        teamNames,
+        teamLogos,
+        lockGroups,
+        standings: standingsRows,
+      },
+    };
+
+    const confirmClose = window.confirm(
+      `ต้องการปิด ${projectName} ใช่ไหม?\n\n` +
+        `Type/Season: ${competitionType} Season ${currentSeason}\n` +
+        `Champion: ${seasonRecord.champion}\n` +
+        `MVP: ${seasonRecord.mvp}\n` +
+        `Top Scorer: ${seasonRecord.topScorer}\n\n` +
+        "ระบบจะบันทึก Season History และล้างทีม/ตาราง/สถิติเพื่อเริ่ม Season ใหม่ โดยไม่ลบรายชื่อผู้เล่น รูปผู้เล่น และโลโก้ทีม"
+    );
+
+    if (!confirmClose) return;
+
+    setSeasonHistory((prevHistory) => [seasonRecord, ...prevHistory]);
+    setSeasonByType((prevSeasons) => ({
+      ...prevSeasons,
+      [competitionType]: (prevSeasons[competitionType] || 1) + 1,
+    }));
+
+    setTeams([]);
+    setSchedule([]);
+    setDrafts([]);
+    setMatchRosters({});
+    setPlayerStats({});
+    setMatchStatInputs({});
+    setLockGroups([]);
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+    setSeasonProjectName("");
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedProfilePlayerId("");
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) => ({ ...player, teamName: "" }))
+    );
+
+    alert(
+      `บันทึก ${projectName} แล้ว เริ่ม ${competitionType} Season ${
+        currentSeason + 1
+      }`
+    );
+  };
+
+  const deleteSeasonHistoryItem = (seasonId) => {
+    if (!window.confirm("ต้องการลบประวัติ Season นี้ใช่ไหม?")) return;
+    setSeasonHistory((prevHistory) =>
+      prevHistory.filter((season) => season.id !== seasonId)
+    );
+  };
+
+  const renameSeasonHistoryItem = (seasonId) => {
+    const currentRecord = seasonHistory.find(
+      (season) => season.id === seasonId
+    );
+    const currentName =
+      currentRecord?.projectName ||
+      `${currentRecord?.competitionType || "5X5"} Season ${
+        currentRecord?.season || 1
+      }`;
+
+    const newName = window.prompt(
+      "ตั้งชื่อโครงการ / รายการแข่งขันใหม่",
+      currentName
+    );
+    if (!newName || !newName.trim()) return;
+
+    setSeasonHistory((prevHistory) =>
+      prevHistory.map((season) =>
+        season.id === seasonId
+          ? { ...season, projectName: newName.trim() }
+          : season
+      )
+    );
+  };
+
+  const exportSeasonHistoryItem = (seasonRecord) => {
+    const safeName = String(
+      seasonRecord.projectName ||
+        `${seasonRecord.competitionType || "5X5"}-Season-${
+          seasonRecord.season || 1
+        }`
+    )
+      .replace(/[^a-zA-Z0-9ก-๙_-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const exportData = {
+      version: "BAM_SEASON_HISTORY_V1",
+      exportedAt: new Date().toISOString(),
+      seasonRecord,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${safeName || "bam-season-history"}.json`;
+    link.click();
+  };
+
+  const buildSeasonRecordFromBackup = (data, options = {}) => {
+    const selectedType = options.competitionType === "3X3" ? "3X3" : "5X5";
+    const selectedSeason =
+      Number.isFinite(Number(options.season)) && Number(options.season) >= 1
+        ? Number(options.season)
+        : 1;
+
+    const sourceRecord = data?.seasonRecord || data;
+    const sourceArchived =
+      sourceRecord?.archivedData || data?.archivedData || data;
+    const sourceTeams = Array.isArray(sourceArchived?.teams)
+      ? sourceArchived.teams
+      : Array.isArray(data?.teams)
+      ? data.teams
+      : [];
+    const sourceSchedule = Array.isArray(sourceArchived?.schedule)
+      ? sourceArchived.schedule
+      : Array.isArray(data?.schedule)
+      ? data.schedule
+      : [];
+    const sourcePlayerStats =
+      sourceArchived?.playerStats &&
+      typeof sourceArchived.playerStats === "object"
+        ? sourceArchived.playerStats
+        : data?.playerStats && typeof data.playerStats === "object"
+        ? data.playerStats
+        : {};
+
+    const standingsRows = Array.isArray(sourceRecord?.standings)
+      ? sourceRecord.standings
+      : Array.isArray(sourceArchived?.standings)
+      ? sourceArchived.standings
+      : [];
+    const champion = sourceRecord?.champion || standingsRows[0]?.team || "-";
+    const runnerUp = sourceRecord?.runnerUp || standingsRows[1]?.team || "-";
+
+    return {
+      id: Date.now(),
+      competitionType: selectedType,
+      season: selectedSeason,
+      projectName:
+        options.projectName?.trim() ||
+        sourceRecord?.projectName ||
+        `${selectedType} Season ${selectedSeason}`,
+      teamCount: Number(
+        sourceRecord?.teamCount ||
+          sourceArchived?.teamCount ||
+          sourceTeams.length ||
+          defaultTeamCount
+      ),
+      closedAt: sourceRecord?.closedAt || new Date().toISOString(),
+      closedAtText: sourceRecord?.closedAtText || new Date().toLocaleString(),
+      champion,
+      runnerUp,
+      thirdPlace: sourceRecord?.thirdPlace || "-",
+      finalScore: sourceRecord?.finalScore || "-",
+      thirdPlaceScore: sourceRecord?.thirdPlaceScore || "-",
+      mvp: sourceRecord?.mvp || "-",
+      mvpTeam: sourceRecord?.mvpTeam || "-",
+      mvpScore: Number(sourceRecord?.mvpScore || 0),
+      topScorer: sourceRecord?.topScorer || "-",
+      topScorerTeam: sourceRecord?.topScorerTeam || "-",
+      topScorerPts: Number(sourceRecord?.topScorerPts || 0),
+      reboundLeader: sourceRecord?.reboundLeader || "-",
+      reboundLeaderReb: Number(sourceRecord?.reboundLeaderReb || 0),
+      assistLeader: sourceRecord?.assistLeader || "-",
+      assistLeaderAst: Number(sourceRecord?.assistLeaderAst || 0),
+      standings: standingsRows,
+      archivedData: {
+        competitionType: selectedType,
+        season: selectedSeason,
+        projectName:
+          options.projectName?.trim() ||
+          sourceRecord?.projectName ||
+          `${selectedType} Season ${selectedSeason}`,
+        teamCount: Number(
+          sourceRecord?.teamCount ||
+            sourceArchived?.teamCount ||
+            sourceTeams.length ||
+            defaultTeamCount
+        ),
+        players: Array.isArray(sourceArchived?.players)
+          ? sourceArchived.players
+          : Array.isArray(data?.players)
+          ? data.players
+          : [],
+        teams: sourceTeams,
+        schedule: sourceSchedule,
+        drafts: Array.isArray(sourceArchived?.drafts)
+          ? sourceArchived.drafts
+          : Array.isArray(data?.drafts)
+          ? data.drafts
+          : [],
+        matchRosters:
+          sourceArchived?.matchRosters &&
+          typeof sourceArchived.matchRosters === "object"
+            ? sourceArchived.matchRosters
+            : data?.matchRosters && typeof data.matchRosters === "object"
+            ? data.matchRosters
+            : {},
+        playerStats: sourcePlayerStats,
+        matchStatInputs:
+          sourceArchived?.matchStatInputs &&
+          typeof sourceArchived.matchStatInputs === "object"
+            ? sourceArchived.matchStatInputs
+            : data?.matchStatInputs && typeof data.matchStatInputs === "object"
+            ? data.matchStatInputs
+            : {},
+        teamNames: Array.isArray(sourceArchived?.teamNames)
+          ? sourceArchived.teamNames
+          : Array.isArray(data?.teamNames)
+          ? data.teamNames
+          : [],
+        teamLogos:
+          sourceArchived?.teamLogos &&
+          typeof sourceArchived.teamLogos === "object"
+            ? sourceArchived.teamLogos
+            : data?.teamLogos && typeof data.teamLogos === "object"
+            ? data.teamLogos
+            : {},
+        lockGroups: Array.isArray(sourceArchived?.lockGroups)
+          ? sourceArchived.lockGroups
+          : Array.isArray(data?.lockGroups)
+          ? data.lockGroups
+          : [],
+        standings: standingsRows,
+      },
+    };
+  };
+
+  const importSeasonHistoryBackup = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (!data || typeof data !== "object") {
+        alert("ไฟล์ Season Backup ไม่ถูกต้อง");
+        event.target.value = "";
+        return;
+      }
+
+      if (Array.isArray(data.seasonHistory) && data.seasonHistory.length > 0) {
+        const importAll = window.confirm(
+          `พบ Season History ในไฟล์ ${data.seasonHistory.length} รายการ\nต้องการ Import ทั้งหมดหรือไม่?\n\nกด Cancel หากต้องการ Import เฉพาะข้อมูลลีกปัจจุบันเป็น 1 Season`
+        );
+
+        if (importAll) {
+          const normalizedRecords = data.seasonHistory.map((record, index) => ({
+            ...record,
+            id: Date.now() + index,
+            competitionType: record.competitionType === "3X3" ? "3X3" : "5X5",
+            season: Number(record.season || 1),
+            projectName:
+              record.projectName ||
+              `${
+                record.competitionType === "3X3" ? "3X3" : "5X5"
+              } Season ${Number(record.season || 1)}`,
+          }));
+
+          setSeasonHistory((prevHistory) => [
+            ...normalizedRecords,
+            ...prevHistory,
+          ]);
+          alert(
+            `Import Season History สำเร็จ ${normalizedRecords.length} รายการ`
+          );
+          event.target.value = "";
+          return;
+        }
+      }
+
+      const targetTypeInput = window.prompt(
+        "ประเภทการแข่งขันของ Season นี้? พิมพ์ 3X3 หรือ 5X5",
+        data.competitionType === "3X3" ? "3X3" : competitionType
+      );
+      if (!targetTypeInput) {
+        event.target.value = "";
+        return;
+      }
+
+      const targetType =
+        targetTypeInput.toUpperCase() === "3X3" ? "3X3" : "5X5";
+      const targetSeasonInput = window.prompt(
+        "ต้องการบันทึกเป็น Season ที่เท่าไหร่?",
+        String(seasonByType[targetType] || 1)
+      );
+      if (!targetSeasonInput) {
+        event.target.value = "";
+        return;
+      }
+
+      const targetSeason = Number(targetSeasonInput);
+      if (!Number.isFinite(targetSeason) || targetSeason < 1) {
+        alert("Season ต้องเป็นตัวเลขตั้งแต่ 1 ขึ้นไป");
+        event.target.value = "";
+        return;
+      }
+
+      const defaultName =
+        data?.seasonRecord?.projectName ||
+        `${targetType} Season ${targetSeason}`;
+      const projectName = window.prompt(
+        "ชื่อโครงการ / รายการแข่งขัน",
+        defaultName
+      );
+      if (!projectName || !projectName.trim()) {
+        event.target.value = "";
+        return;
+      }
+
+      const newRecord = buildSeasonRecordFromBackup(data, {
+        competitionType: targetType,
+        season: targetSeason,
+        projectName: projectName.trim(),
+      });
+
+      setSeasonHistory((prevHistory) => [newRecord, ...prevHistory]);
+      setSeasonByType((prevSeasons) => ({
+        ...prevSeasons,
+        [targetType]: Math.max(
+          Number(prevSeasons[targetType] || 1),
+          targetSeason + 1
+        ),
+      }));
+
+      alert(`Import ${newRecord.projectName} เข้า Season History สำเร็จ`);
+    } catch (error) {
+      alert("Import Season Backup ไม่สำเร็จ กรุณาตรวจสอบไฟล์ .json");
+    }
+
+    event.target.value = "";
+  };
+
+  const clearSeasonHistory = () => {
+    if (!window.confirm("ต้องการลบ Season History ทั้งหมดใช่ไหม?")) return;
+    setSeasonHistory([]);
+    localStorage.removeItem("seasonHistory");
+  };
+
+  const exportLeagueBackup = () => {
+    const backupData = {
+      competitionType,
+      teamCount,
+      teamNames,
+      players,
+      teams,
+      schedule,
+      drafts,
+      matchRosters,
+      playerStats,
+      matchStatInputs,
+      teamLogos,
+      lockGroups,
+      seasonByType,
+      currentSeason,
+      seasonProjectName,
+      seasonHistory,
+    };
+
+    const backupFile = {
+      app: "BAM_LEAGUE_SYSTEM",
+      version: "3.1.1",
+      exportDate: new Date().toISOString(),
+      data: backupData,
+    };
+
+    const blob = new Blob([JSON.stringify(backupFile, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `bam-league-full-backup-${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
+    link.click();
+  };
+
+  const restoreLeagueData = (rawData) => {
+    const data =
+      rawData?.data && typeof rawData.data === "object"
+        ? rawData.data
+        : rawData;
+
+    setTeamCount(
+      Number.isFinite(Number(data.teamCount)) && Number(data.teamCount) >= 3
+        ? Number(data.teamCount)
+        : defaultTeamCount
+    );
+    setCompetitionType(data.competitionType === "3X3" ? "3X3" : "5X5");
+    setTeamNames(
+      Array.isArray(data.teamNames)
+        ? data.teamNames
+        : createDefaultTeamNames(defaultTeamCount)
+    );
+    setPlayers(Array.isArray(data.players) ? data.players : []);
+    setTeams(Array.isArray(data.teams) ? data.teams : []);
+    setSchedule(Array.isArray(data.schedule) ? data.schedule : []);
+    setDrafts(Array.isArray(data.drafts) ? data.drafts : []);
+    setMatchRosters(
+      data.matchRosters && typeof data.matchRosters === "object"
+        ? data.matchRosters
+        : {}
+    );
+    setPlayerStats(
+      data.playerStats && typeof data.playerStats === "object"
+        ? data.playerStats
+        : {}
+    );
+    setMatchStatInputs(
+      data.matchStatInputs && typeof data.matchStatInputs === "object"
+        ? data.matchStatInputs
+        : {}
+    );
+    setTeamLogos(
+      data.teamLogos && typeof data.teamLogos === "object" ? data.teamLogos : {}
+    );
+    setLockGroups(Array.isArray(data.lockGroups) ? data.lockGroups : []);
+
+    if (data.seasonByType && typeof data.seasonByType === "object") {
+      setSeasonByType({
+        "3X3": Number(data.seasonByType["3X3"] || 1),
+        "5X5": Number(data.seasonByType["5X5"] || 1),
+      });
+    } else {
+      const legacySeason =
+        Number.isFinite(Number(data.currentSeason)) &&
+        Number(data.currentSeason) >= 1
+          ? Number(data.currentSeason)
+          : 1;
+
+      setSeasonByType({
+        "3X3": 1,
+        "5X5": legacySeason,
+      });
+    }
+
+    setSeasonProjectName(
+      typeof data.seasonProjectName === "string" ? data.seasonProjectName : ""
+    );
+    setSeasonHistory(
+      Array.isArray(data.seasonHistory) ? data.seasonHistory : []
+    );
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedProfilePlayerId("");
+    setSelectedPublicTeam("");
+    setSelectedPublicPlayer(null);
+    setSelectedPublicMatch(null);
+  };
+
+  const importLeagueBackup = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      if (!parsed || typeof parsed !== "object") {
+        alert("ไฟล์ Backup ไม่ถูกต้อง");
+        event.target.value = "";
+        return;
+      }
+
+      const backupVersion = parsed.version || parsed.data?.version || "legacy";
+      const confirmImport = window.confirm(
+        `การ Import Backup จะเขียนทับข้อมูลลีกปัจจุบันทั้งหมด\n\nไฟล์ Version: ${backupVersion}\n\nต้องการดำเนินการต่อไหม?`
+      );
+
+      if (!confirmImport) {
+        event.target.value = "";
+        return;
+      }
+
+      restoreLeagueData(parsed);
+      alert("Import All Data สำเร็จ");
+    } catch (error) {
+      alert("Import ไม่สำเร็จ กรุณาตรวจสอบไฟล์ .json");
+    }
+
+    event.target.value = "";
+  };
+
+  const getAllBackupData = () => ({
+    competitionType,
+    teamCount,
+    teamNames,
+    players,
+    teams,
+    schedule,
+    drafts,
+    matchRosters,
+    playerStats,
+    matchStatInputs,
+    teamLogos,
+    lockGroups,
+    seasonByType,
+    currentSeason,
+    seasonProjectName,
+    seasonHistory,
+  });
+
+  const uploadToCloud = async () => {
+    const confirmUpload = window.confirm(
+      "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ"
+    );
+
+    if (!confirmUpload) return;
+
+    try {
+      setCloudStatus("Uploading...");
+      const cloudData = {
+        app: "BAM_LEAGUE_SYSTEM",
+        version: "3.1.3",
+        updatedAt: new Date().toISOString(),
+        data: getAllBackupData(),
+      };
+
+      const safeCloudData = JSON.parse(JSON.stringify(cloudData));
+
+      await setDoc(doc(db, "bamLeague", "main"), safeCloudData);
+      setCloudStatus("Cloud Uploaded");
+      alert("Upload To Cloud สำเร็จ");
+    } catch (error) {
+      console.error("Upload To Cloud Error:", error);
+      setCloudStatus("Cloud Error");
+      alert(
+        "Upload To Cloud ไม่สำเร็จ\n\nถ้ามีรูปผู้เล่น/โลโก้จำนวนมาก ไฟล์อาจใหญ่เกินขนาดที่ Firestore รับได้"
+      );
+    }
+  };
+
+  const downloadFromCloud = async () => {
+    const confirmDownload = window.confirm(
+      "ต้องการ Download ข้อมูลจาก Cloud ใช่ไหม?\n\nข้อมูลในเครื่องปัจจุบันจะถูกเขียนทับ"
+    );
+
+    if (!confirmDownload) return;
+
+    try {
+      setCloudStatus("Downloading...");
+      const snap = await getDoc(doc(db, "bamLeague", "main"));
+
+      if (!snap.exists()) {
+        setCloudStatus("No Cloud Data");
+        alert("ยังไม่มีข้อมูล BAM League บน Cloud");
+        return;
+      }
+
+      restoreLeagueData(snap.data());
+      setCloudStatus("Cloud Downloaded");
+      alert("Download From Cloud สำเร็จ");
+    } catch (error) {
+      console.error("Download From Cloud Error:", error);
+      setCloudStatus("Cloud Error");
+      alert("Download From Cloud ไม่สำเร็จ กรุณาตรวจสอบ Firebase / Firestore");
+    }
+  };
+
+  const clearCloudData = async () => {
+    const firstConfirm = window.confirm(
+      "ต้องการลบข้อมูลบน Cloud ใช่ไหม?\n\nระบบจะลบเฉพาะข้อมูลใน Firebase เท่านั้น และจะไม่ลบข้อมูลในเครื่องนี้"
+    );
+
+    if (!firstConfirm) return;
+
+    const secondConfirm = window.confirm(
+      "ยืนยันอีกครั้ง: ลบข้อมูล Cloud ที่ bamLeague/main ใช่ไหม?\n\nถ้าต้องการใช้ข้อมูลเดิมในเครื่องต่อ ห้ามกด Download From Cloud หลังลบ"
+    );
+
+    if (!secondConfirm) return;
+
+    try {
+      await deleteDoc(doc(db, "bamLeague", "main"));
+      setCloudStatus("Cloud Cleared");
+      alert(
+        "ลบข้อมูลบน Cloud สำเร็จแล้ว\n\nข้อมูลใน LocalStorage / หน้าเว็บปัจจุบันยังอยู่เหมือนเดิม"
+      );
+    } catch (error) {
+      console.error("Clear Cloud Data Error:", error);
+      setCloudStatus("Cloud Error");
+      alert("ลบข้อมูลบน Cloud ไม่สำเร็จ กรุณาตรวจสอบ Firebase / Firestore");
+    }
+  };
+
+  const clearCurrentProject = () => {
+    const confirmClear = window.confirm(
+      "ต้องการล้างโปรเจค/ซีซั่นปัจจุบันใช่ไหม?\n\nระบบจะล้าง Teams, Schedule, Drafts, Match Roster และ Stats\nแต่จะเก็บ Players, รูปผู้เล่น, โลโก้ทีม, Season History และการตั้งค่า Season ไว้"
+    );
+
+    if (!confirmClear) return;
+
+    setTeams([]);
+    setSchedule([]);
+    setDrafts([]);
+    setMatchRosters({});
+    setPlayerStats({});
+    setMatchStatInputs({});
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedProfilePlayerId("");
+    setSelectedPublicTeam("");
+    setSelectedPublicPlayer(null);
+    setSelectedPublicMatch(null);
+    setPlayers((prevPlayers) =>
+      prevPlayers.map((player) => ({
+        ...player,
+        teamName: "",
+      }))
+    );
+
+    [
+      "teams",
+      "schedule",
+      "drafts",
+      "matchRosters",
+      "playerStats",
+      "matchStatInputs",
+    ].forEach((key) => localStorage.removeItem(key));
+
+    alert(
+      "ล้างโปรเจคปัจจุบันเรียบร้อย โดยยังเก็บรายชื่อผู้เล่นและประวัติ Season ไว้"
+    );
+  };
+
+  const resetLeagueData = () => {
+    if (
+      !window.confirm(
+        "ต้องการล้างข้อมูลลีกทั้งหมดใช่ไหม? การกระทำนี้ย้อนกลับไม่ได้"
+      )
+    )
+      return;
+
+    setTeamCount(defaultTeamCount);
+    setCompetitionType("5X5");
+    setPlayers([]);
+    setTeams([]);
+    setSchedule([]);
+    setDrafts([]);
+    setMatchRosters({});
+    setPlayerStats({});
+    setMatchStatInputs({});
+    setTeamNames(createDefaultTeamNames(defaultTeamCount));
+    setTeamLogos({});
+    setLockGroups([]);
+    setSeasonProjectName("");
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedProfilePlayerId("");
+    resetForm();
+
+    localStorage.removeItem("teamCount");
+    localStorage.removeItem("competitionType");
+    localStorage.removeItem("players");
+    localStorage.removeItem("teams");
+    localStorage.removeItem("schedule");
+    localStorage.removeItem("drafts");
+    localStorage.removeItem("teamNames");
+    localStorage.removeItem("matchRosters");
+    localStorage.removeItem("playerStats");
+    localStorage.removeItem("matchStatInputs");
+    localStorage.removeItem("teamLogos");
+    localStorage.removeItem("lockGroups");
+    localStorage.removeItem("seasonProjectName");
+  };
+
+  const resetAllSystem = () => {
+    const confirmReset = window.confirm(
+      "⚠️ RESET ALL SYSTEM\n\nจะลบข้อมูลทั้งหมดของ BAM League ได้แก่:\n- Players\n- Teams\n- Schedule\n- Drafts\n- Match Roster\n- Player Stats\n- Team Names\n- League Settings\n\nการกระทำนี้ย้อนกลับไม่ได้\n\nต้องการดำเนินการต่อหรือไม่?"
+    );
+
+    if (!confirmReset) return;
+
+    setTeamCount(defaultTeamCount);
+    setCompetitionType("5X5");
+    setTeamNames(createDefaultTeamNames(defaultTeamCount));
+    setTeamLogos({});
+    setLockGroups([]);
+    setSelectedLockPlayerIds([]);
+    setLockGroupName("");
+    setSeasonByType({ "3X3": 1, "5X5": 1 });
+    setSeasonProjectName("");
+    setSeasonHistory([]);
+    setPlayers([]);
+    setTeams([]);
+    setSchedule([]);
+    setDrafts([]);
+    setMatchRosters({});
+    setPlayerStats({});
+    setMatchStatInputs({});
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedProfilePlayerId("");
+    resetForm();
+
+    [
+      "teamCount",
+      "competitionType",
+      "players",
+      "teams",
+      "schedule",
+      "drafts",
+      "teamNames",
+      "matchRosters",
+      "playerStats",
+      "matchStatInputs",
+      "teamLogos",
+      "lockGroups",
+      "seasonByType",
+      "currentSeason",
+      "seasonProjectName",
+      "seasonHistory",
+    ].forEach((key) => localStorage.removeItem(key));
+
+    alert("ล้างข้อมูลทั้งหมดเรียบร้อย พร้อมเริ่มโปรเจคใหม่");
+    window.location.reload();
+  };
+
+  const standings = calculateStandings();
+
+  const getTeamDashboardData = () => {
+    const playerRows = getPlayerStatRows();
+
+    return teams
+      .map((team) => {
+        const standing = standings.find((row) => row.team === team.name) || {
+          played: 0,
+          win: 0,
+          loss: 0,
+          pf: 0,
+          pa: 0,
+          diff: 0,
+        };
+
+        const gp = Number(standing.played || 0);
+        const win = Number(standing.win || 0);
+        const loss = Number(standing.loss || 0);
+        const pf = Number(standing.pf || 0);
+        const pa = Number(standing.pa || 0);
+        const diff = Number(standing.diff || 0);
+        const winPct = gp > 0 ? ((win / gp) * 100).toFixed(1) : "0.0";
+        const ppg = gp > 0 ? (pf / gp).toFixed(1) : "0.0";
+        const papg = gp > 0 ? (pa / gp).toFixed(1) : "0.0";
+
+        const teamPlayerIds = (team.players || []).map((player) =>
+          String(player.id)
+        );
+
+        const teamStats = playerRows.filter((stat) => {
+          const statPlayerId = String(stat.playerId);
+          return (
+            teamPlayerIds.includes(statPlayerId) || stat.teamName === team.name
+          );
+        });
+
+        const topScorer = [...teamStats].sort(
+          (a, b) => Number(b.pts || 0) - Number(a.pts || 0)
+        )[0];
+
+        const teamMvp = [...teamStats].sort(
+          (a, b) => Number(b.mvpScore || 0) - Number(a.mvpScore || 0)
+        )[0];
+
+        const totalMvpScore = teamStats.reduce(
+          (sum, stat) => sum + Number(stat.mvpScore || 0),
+          0
+        );
+
+        const powerScore = win * 100 + diff + totalMvpScore * 0.05;
+
+        return {
+          teamName: team.name,
+          rosterCount: (team.players || []).length,
+          gp,
+          win,
+          loss,
+          pf,
+          pa,
+          diff,
+          winPct,
+          ppg,
+          papg,
+          topScorer,
+          teamMvp,
+          powerScore,
+        };
+      })
+      .sort((a, b) => {
+        if (Number(b.winPct) !== Number(a.winPct)) {
+          return Number(b.winPct) - Number(a.winPct);
+        }
+        if (b.diff !== a.diff) return b.diff - a.diff;
+        return b.powerScore - a.powerScore;
+      });
+  };
+
+  const getFinishedMatchWinnerLoser = (match) => {
+    if (!match || match.status !== "Finished") return null;
+    if (match.scoreA === "" || match.scoreB === "") return null;
+
+    const scoreA = Number(match.scoreA);
+    const scoreB = Number(match.scoreB);
+
+    if (scoreA === scoreB) {
+      return {
+        winner: "Tie",
+        loser: "Tie",
+        score: `${scoreA}-${scoreB}`,
+      };
+    }
+
+    return {
+      winner: scoreA > scoreB ? match.teamA : match.teamB,
+      loser: scoreA > scoreB ? match.teamB : match.teamA,
+      score: `${scoreA}-${scoreB}`,
+    };
+  };
+
+  const getSeasonTeamAwards = () => {
+    const finalMatch = schedule.find(
+      (match) =>
+        match.playoffType === "final" || match.playoffType === "final_1v2"
+    );
+    const thirdPlaceMatch = schedule.find(
+      (match) => match.playoffType === "third_place"
+    );
+
+    const finalResult = getFinishedMatchWinnerLoser(finalMatch);
+    const thirdPlaceResult = getFinishedMatchWinnerLoser(thirdPlaceMatch);
+
+    return {
+      champion: finalResult?.winner || "-",
+      runnerUp: finalResult?.loser || "-",
+      thirdPlace: thirdPlaceResult?.winner || "-",
+      finalScore: finalResult?.score || "-",
+      thirdPlaceScore: thirdPlaceResult?.score || "-",
+      finalFinished: Boolean(finalResult),
+      thirdPlaceFinished: Boolean(thirdPlaceResult),
+    };
+  };
+
+  const getSeasonAwards = () => {
+    const mvp = getMVPRanking()[0];
+    const topScorer = getStatLeaders("pts")[0];
+    const reboundLeader = getStatLeaders("reb")[0];
+    const assistLeader = getStatLeaders("ast")[0];
+    const stealLeader = getStatLeaders("stl")[0];
+    const blockLeader = getStatLeaders("blk")[0];
+    const teamAwards = getSeasonTeamAwards();
+
+    return {
+      ...teamAwards,
+      mvp,
+      topScorer,
+      reboundLeader,
+      assistLeader,
+      stealLeader,
+      blockLeader,
+    };
+  };
+
+  const getHallOfFameData = () => {
+    const isValidValue = (value) => {
+      const text = String(value || "").trim();
+      return text && text !== "-" && text.toLowerCase() !== "unknown";
+    };
+
+    const filteredHistory =
+      hallOfFameFilter === "ALL"
+        ? seasonHistory
+        : seasonHistory.filter(
+            (season) => (season.competitionType || "5X5") === hallOfFameFilter
+          );
+
+    const countMap = (field) => {
+      const result = {};
+
+      filteredHistory.forEach((season) => {
+        const value = season[field];
+        if (!isValidValue(value)) return;
+        result[value] = (result[value] || 0) + 1;
+      });
+
+      return Object.entries(result)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return a.name.localeCompare(b.name);
+        });
+    };
+
+    return {
+      champions: countMap("champion"),
+      runnerUps: countMap("runnerUp"),
+      thirdPlaces: countMap("thirdPlace"),
+      mvps: countMap("mvp"),
+      topScorers: countMap("topScorer"),
+      reboundLeaders: countMap("reboundLeader"),
+      assistLeaders: countMap("assistLeader"),
+    };
+  };
+
+  const renderHallOfFameList = (items, emptyText = "ยังไม่มีข้อมูล") => {
+    if (!items || items.length === 0) {
+      return <p style={{ color: "#777" }}>{emptyText}</p>;
+    }
+
+    return (
+      <ol style={{ margin: 0, paddingLeft: "20px" }}>
+        {items.map((item) => (
+          <li key={item.name} style={{ marginBottom: "6px" }}>
+            <strong>{item.name}</strong> x{item.count}
+          </li>
+        ))}
+      </ol>
+    );
+  };
+
+  const renderAwardPlayer = (player, valueLabel, value) => {
+    if (!player) return <span>-</span>;
+
+    return (
+      <button
+        onClick={() => setSelectedProfilePlayerId(String(player.playerId))}
+        style={{ cursor: "pointer" }}
+      >
+        {renderPlayerAvatar(getPlayerPhotoUrl(player.playerId), 34)}{" "}
+        {player.playerName} {player.teamName ? `(${player.teamName})` : ""}
+        {valueLabel ? ` / ${valueLabel}: ${value}` : ""}
+      </button>
+    );
+  };
+
+  const getPublicDashboardSummary = () => {
+    const awards = getSeasonAwards();
+    const statRows = getPlayerStatRows();
+    const finishedMatches = schedule.filter(
+      (match) => match.status === "Finished"
+    ).length;
+    const totalMatches = schedule.length;
+    const availablePlayers = players.filter(
+      (player) => player.available
+    ).length;
+    const balance = teams.length > 0 ? getBalancePercent() : "0.0";
+
+    return {
+      awards,
+      statRows,
+      finishedMatches,
+      totalMatches,
+      availablePlayers,
+      balance,
+      topTeams: standings.slice(0, 4),
+      topScorers: getTopScorers().slice(0, 5),
+      mvpRace: getMVPRanking().slice(0, 5),
+    };
+  };
+
+  const renderDashboardStatCard = (label, value, subText = "") => (
+    <div
+      style={{
+        border: "1px solid #ddd",
+        borderRadius: "14px",
+        padding: "16px",
+        background: "white",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+      }}
+    >
+      <div style={{ color: "#666", fontSize: "13px", marginBottom: "6px" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
+      {subText ? (
+        <div style={{ color: "#777", marginTop: "4px" }}>{subText}</div>
+      ) : null}
+    </div>
+  );
+
+  const renderPublicPlayerRow = (player, index, valueText) => (
+    <div
+      key={`${player.playerId || player.playerName}-${index}`}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "12px",
+        borderBottom: "1px solid #eee",
+        padding: "8px 0",
+      }}
+    >
+      <span
+        style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+      >
+        <strong>#{index + 1}</strong>
+        {renderPlayerAvatar(getPlayerPhotoUrl(player.playerId), 34)}
+        <span>
+          <strong>{player.playerName}</strong>
+          <br />
+          <span style={{ color: "#777", fontSize: "12px" }}>
+            {player.teamName || "-"}
+          </span>
+        </span>
+      </span>
+      <strong>{valueText}</strong>
+    </div>
+  );
+
+  const renderPublicDashboard = () => {
+    const selectedHistorySeason =
+      publicSeasonId === "CURRENT"
+        ? null
+        : seasonHistory.find(
+            (season) => String(season.id) === String(publicSeasonId)
+          );
+
+    const isHistoryView = Boolean(selectedHistorySeason);
+    const archivedData = selectedHistorySeason?.archivedData || {};
+
+    const dashboardTeams = isHistoryView ? archivedData.teams || [] : teams;
+    const dashboardPlayers = isHistoryView
+      ? archivedData.players || []
+      : players;
+    const dashboardSchedule = isHistoryView
+      ? archivedData.schedule || []
+      : schedule;
+    const dashboardTeamLogos = isHistoryView
+      ? archivedData.teamLogos || {}
+      : teamLogos;
+    const dashboardStandings = isHistoryView
+      ? selectedHistorySeason?.standings || archivedData.standings || []
+      : standings;
+
+    const dashboardCompetitionType = isHistoryView
+      ? selectedHistorySeason?.competitionType ||
+        archivedData.competitionType ||
+        competitionType
+      : competitionType;
+    const dashboardSeason = isHistoryView
+      ? selectedHistorySeason?.season || archivedData.season || currentSeason
+      : currentSeason;
+    const dashboardTitle = isHistoryView
+      ? selectedHistorySeason?.projectName ||
+        archivedData.projectName ||
+        `${dashboardCompetitionType} Season ${dashboardSeason}`
+      : getCurrentSeasonTitle();
+
+    const dashboardFinishedMatches = dashboardSchedule.filter(
+      (match) => match.status === "Finished"
+    ).length;
+    const dashboardAvailablePlayers = dashboardPlayers.filter(
+      (player) => player.available !== false
+    ).length;
+
+    const getArchivedStatRows = (statsObject = {}) => {
+      return Object.values(statsObject || {})
+        .filter((stat) => Number(stat.games || 0) > 0)
+        .map((stat) => {
+          const appearances = Number(stat.appearances || 0);
+          const pts = Number(stat.pts || 0);
+          const reb = Number(stat.reb || 0);
+          const ast = Number(stat.ast || 0);
+          const stl = Number(stat.stl || 0);
+          const blk = Number(stat.blk || 0);
+          const ppg = appearances > 0 ? (pts / appearances).toFixed(1) : "0.0";
+          const mvpScore =
+            Number(stat.mvpScore || 0) ||
+            pts +
+              reb * 1.2 +
+              ast * 1.5 +
+              stl * 2 +
+              blk * 2 +
+              appearances * 0.75;
+
+          return {
+            ...stat,
+            appearances,
+            pts,
+            reb,
+            ast,
+            stl,
+            blk,
+            ppg,
+            mvpScore,
+          };
+        });
+    };
+
+    const archivedStatRows = getArchivedStatRows(archivedData.playerStats);
+    const dashboardPlayerStatRows = isHistoryView
+      ? archivedStatRows
+      : getPlayerStatRows();
+
+    const getDashboardPlayerStatRow = (playerId) => {
+      return dashboardPlayerStatRows.find(
+        (row) => String(row.playerId) === String(playerId)
+      );
+    };
+
+    const getDashboardPlayerStats = (playerId) => {
+      const stat = getDashboardPlayerStatRow(playerId);
+
+      return {
+        games: stat ? Number(stat.appearances || stat.games || 0) : 0,
+        pts: stat ? Number(stat.pts || 0) : 0,
+        reb: stat ? Number(stat.reb || 0) : 0,
+        ast: stat ? Number(stat.ast || 0) : 0,
+        stl: stat ? Number(stat.stl || 0) : 0,
+        blk: stat ? Number(stat.blk || 0) : 0,
+        ppg: stat ? String(stat.ppg || "0.0") : "0.0",
+        mvpScore: stat ? Number(stat.mvpScore || 0).toFixed(1) : "-",
+        scoring: stat ? Number(stat.pts || 0) : "-",
+        raw: stat || null,
+      };
+    };
+
+    const getDashboardPlayerMatchLog = (playerId) => {
+      const stat = getDashboardPlayerStatRow(playerId);
+      if (!stat || !stat.gamesByMatch) return [];
+
+      return Object.values(stat.gamesByMatch)
+        .map((game) => {
+          const match = dashboardSchedule.find(
+            (item) => String(item.id) === String(game.matchId)
+          );
+
+          const opponent =
+            game.opponent ||
+            (match
+              ? game.matchTeam === match.teamA
+                ? match.teamB
+                : match.teamA
+              : "-");
+
+          return {
+            ...game,
+            week: game.week || match?.week || "-",
+            label: match?.label || "League",
+            opponent,
+            status: match?.status || "Pending",
+            score:
+              match && match.scoreA !== "" && match.scoreB !== ""
+                ? `${match.scoreA}-${match.scoreB}`
+                : "-",
+            pts: Number(game.pts || 0),
+            reb: Number(game.reb || 0),
+            ast: Number(game.ast || 0),
+            stl: Number(game.stl || 0),
+            blk: Number(game.blk || 0),
+          };
+        })
+        .sort((a, b) => Number(a.week || 0) - Number(b.week || 0));
+    };
+
+    const getDashboardPlayerCareerAwards = (playerName) => {
+      const result = {
+        champion: { "3X3": 0, "5X5": 0 },
+        mvp: { "3X3": 0, "5X5": 0 },
+        topScorer: { "3X3": 0, "5X5": 0 },
+      };
+
+      seasonHistory.forEach((season) => {
+        const type = season.competitionType === "3X3" ? "3X3" : "5X5";
+
+        if (season.mvp === playerName) {
+          result.mvp[type] += 1;
+        }
+
+        if (season.topScorer === playerName) {
+          result.topScorer[type] += 1;
+        }
+
+        const championTeam = season.champion;
+        const seasonTeams = season.archivedData?.teams || [];
+        const championRoster =
+          seasonTeams.find((team) => team.name === championTeam)?.players || [];
+
+        if (championRoster.some((player) => player.name === playerName)) {
+          result.champion[type] += 1;
+        }
+      });
+
+      return result;
+    };
+
+    const renderSplitAwardCard = (icon, label, counts) => {
+      const count3x3 = counts?.["3X3"] || 0;
+      const count5x5 = counts?.["5X5"] || 0;
+      const total = count3x3 + count5x5;
+
+      return (
+        <div
+          style={{
+            border: "1px solid #eee",
+            borderRadius: "14px",
+            padding: "12px",
+          }}
+        >
+          <div style={{ fontWeight: "700", marginBottom: "8px" }}>
+            {icon} {label} x{total}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              flexWrap: "wrap",
+              color: "#555",
+              fontSize: "13px",
+            }}
+          >
+            <span
+              style={{
+                background: "#f5f5f5",
+                borderRadius: "999px",
+                padding: "4px 8px",
+              }}
+            >
+              3X3 x{count3x3}
+            </span>
+            <span
+              style={{
+                background: "#f5f5f5",
+                borderRadius: "999px",
+                padding: "4px 8px",
+              }}
+            >
+              5X5 x{count5x5}
+            </span>
+          </div>
+        </div>
+      );
+    };
+
+    const dashboardTopScorers = isHistoryView
+      ? archivedStatRows
+          .filter((stat) => Number(stat.pts || 0) > 0)
+          .sort((a, b) => Number(b.pts || 0) - Number(a.pts || 0))
+          .slice(0, 5)
+      : getTopScorers().slice(0, 5);
+    const dashboardMvpRace = isHistoryView
+      ? archivedStatRows
+          .filter((stat) => Number(stat.mvpScore || 0) > 0)
+          .sort((a, b) => Number(b.mvpScore || 0) - Number(a.mvpScore || 0))
+          .slice(0, 5)
+      : getMVPRanking().slice(0, 5);
+
+    const currentAwards = getSeasonAwards();
+    const getDashboardStatLeader = (field) => {
+      const rows = isHistoryView ? archivedStatRows : getPlayerStatRows();
+
+      return rows
+        .filter((stat) => Number(stat[field] || 0) > 0)
+        .sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0))[0];
+    };
+
+    const getDashboardDefenseLeader = () => {
+      const rows = isHistoryView ? archivedStatRows : getPlayerStatRows();
+
+      return rows
+        .map((stat) => ({
+          ...stat,
+          defenseScore: Number(stat.stl || 0) + Number(stat.blk || 0),
+        }))
+        .filter((stat) => Number(stat.defenseScore || 0) > 0)
+        .sort((a, b) => {
+          if (Number(b.defenseScore || 0) !== Number(a.defenseScore || 0)) {
+            return Number(b.defenseScore || 0) - Number(a.defenseScore || 0);
+          }
+          return Number(b.stl || 0) - Number(a.stl || 0);
+        })[0];
+    };
+
+    const dashboardReboundLeader = getDashboardStatLeader("reb");
+    const dashboardAssistLeader = getDashboardStatLeader("ast");
+    const dashboardDefenseLeader = getDashboardDefenseLeader();
+
+    const dashboardAwards = isHistoryView
+      ? {
+          champion: selectedHistorySeason?.champion || "-",
+          runnerUp: selectedHistorySeason?.runnerUp || "-",
+          thirdPlace: selectedHistorySeason?.thirdPlace || "-",
+          mvp: selectedHistorySeason?.mvp || "-",
+          topScorer: selectedHistorySeason?.topScorer || "-",
+          reboundLeader: dashboardReboundLeader?.playerName || "-",
+          assistLeader: dashboardAssistLeader?.playerName || "-",
+          defenseLeader: dashboardDefenseLeader?.playerName || "-",
+          reboundValue: dashboardReboundLeader?.reb || 0,
+          assistValue: dashboardAssistLeader?.ast || 0,
+          defenseValue: dashboardDefenseLeader?.defenseScore || 0,
+        }
+      : {
+          champion: currentAwards.champion || "-",
+          runnerUp: currentAwards.runnerUp || "-",
+          thirdPlace: currentAwards.thirdPlace || "-",
+          mvp: currentAwards.mvp?.playerName || "-",
+          topScorer: currentAwards.topScorer?.playerName || "-",
+          reboundLeader: currentAwards.reboundLeader?.playerName || "-",
+          assistLeader: currentAwards.assistLeader?.playerName || "-",
+          defenseLeader: dashboardDefenseLeader?.playerName || "-",
+          reboundValue: currentAwards.reboundLeader?.reb || 0,
+          assistValue: currentAwards.assistLeader?.ast || 0,
+          defenseValue: dashboardDefenseLeader?.defenseScore || 0,
+        };
+
+    const dashboardAwardRows = [
+      ["🏆", "Champion", dashboardAwards.champion],
+      ["🥈", "Runner Up", dashboardAwards.runnerUp],
+      ["🥉", "3rd Place", dashboardAwards.thirdPlace],
+      ["👑", "MVP", dashboardAwards.mvp],
+      ["🎯", "Top Scorer", dashboardAwards.topScorer],
+      [
+        "💪",
+        "Best Rebounder",
+        dashboardAwards.reboundLeader,
+        dashboardAwards.reboundValue
+          ? `${dashboardAwards.reboundValue} REB`
+          : "",
+      ],
+      [
+        "🧠",
+        "Best Assist",
+        dashboardAwards.assistLeader,
+        dashboardAwards.assistValue ? `${dashboardAwards.assistValue} AST` : "",
+      ],
+      [
+        "🛡️",
+        "Best Defense",
+        dashboardAwards.defenseLeader,
+        dashboardAwards.defenseValue
+          ? `${dashboardAwards.defenseValue} STL+BLK`
+          : "",
+      ],
+    ];
+
+    const publicSeasonOptions = [
+      {
+        id: "CURRENT",
+        label: `${getCurrentSeasonTitle()} (ปัจจุบัน)`,
+        projectName: getCurrentSeasonTitle(),
+        competitionType,
+        season: currentSeason,
+        champion: "-",
+        closedAtText: "ยังไม่ปิด Season",
+        isCurrent: true,
+      },
+      ...seasonHistory.map((season) => ({
+        id: String(season.id),
+        label:
+          season.projectName ||
+          `${season.competitionType || "5X5"} Season ${season.season || 1}`,
+        projectName:
+          season.projectName ||
+          `${season.competitionType || "5X5"} Season ${season.season || 1}`,
+        competitionType: season.competitionType || "5X5",
+        season: season.season || 1,
+        champion: season.champion || "-",
+        closedAtText: season.closedAtText || "-",
+        isCurrent: false,
+      })),
+    ];
+
+    const renderPublicTeamWithLogo = (teamName, size = 28) => (
+      <span
+        style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+      >
+        {dashboardTeamLogos[teamName] ? (
+          <img
+            src={dashboardTeamLogos[teamName]}
+            alt={teamName}
+            width={size}
+            height={size}
+            style={{
+              objectFit: "contain",
+              borderRadius: "8px",
+              border: "1px solid #ddd",
+            }}
+          />
+        ) : (
+          <span
+            style={{
+              width: size,
+              height: size,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "8px",
+              background: "#f1f1f1",
+              border: "1px solid #ddd",
+            }}
+          >
+            🛡️
+          </span>
+        )}
+        <span>{teamName}</span>
+      </span>
+    );
+
+    const dashboardStandingMap = new Map(
+      dashboardStandings.map((row) => [row.team, row])
+    );
+
+    const dashboardTeamRows = dashboardTeams.map((team) => {
+      const standing = dashboardStandingMap.get(team.name) || {
+        played: 0,
+        win: 0,
+        loss: 0,
+        pf: 0,
+        pa: 0,
+        diff: 0,
+      };
+
+      const roster =
+        team.players ||
+        dashboardPlayers.filter((player) => player.teamName === team.name);
+
+      return {
+        ...team,
+        roster,
+        standing,
+        totalScore: team.totalScore || calculateTeamScore(roster),
+        positionSummary: team.positionSummary || getPositionSummary(roster),
+      };
+    });
+
+    const selectedPublicTeamName =
+      selectedPublicTeam &&
+      dashboardTeamRows.some((team) => team.name === selectedPublicTeam)
+        ? selectedPublicTeam
+        : "";
+
+    const selectedPublicTeamData = dashboardTeamRows.find(
+      (team) => team.name === selectedPublicTeamName
+    );
+
+    const renderPublicTeamCard = (team) => {
+      const standing = team.standing || {};
+      const diff = Number(standing.diff || 0);
+      const isSelected = team.name === selectedPublicTeamName;
+
+      return (
+        <button
+          key={`public-team-card-${team.name}`}
+          onClick={() =>
+            setSelectedPublicTeam((current) =>
+              current === team.name ? "" : team.name
+            )
+          }
+          style={{
+            textAlign: "left",
+            border: isSelected ? "2px solid #111" : "1px solid #ddd",
+            borderRadius: "18px",
+            padding: "16px",
+            background: isSelected ? "#f5f5f5" : "white",
+            cursor: "pointer",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {dashboardTeamLogos[team.name] ? (
+              <img
+                src={dashboardTeamLogos[team.name]}
+                alt={team.name}
+                width={56}
+                height={56}
+                style={{
+                  objectFit: "contain",
+                  borderRadius: "12px",
+                  border: "1px solid #ddd",
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: "12px",
+                  background: "#eee",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "26px",
+                  border: "1px solid #ddd",
+                }}
+              >
+                🛡️
+              </div>
+            )}
+            <div>
+              <h3 style={{ margin: 0 }}>{team.name}</h3>
+              <div style={{ color: "#666", marginTop: "4px" }}>
+                {team.roster.length} Players / Rating {team.totalScore || 0}
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4,1fr)",
+              gap: "8px",
+              marginTop: "14px",
+              textAlign: "center",
+            }}
+          >
+            <div>
+              <strong>
+                {standing.win || 0}-{standing.loss || 0}
+              </strong>
+              <br />
+              <span style={{ color: "#777" }}>W-L</span>
+            </div>
+            <div>
+              <strong>{standing.pf || 0}</strong>
+              <br />
+              <span style={{ color: "#777" }}>PF</span>
+            </div>
+            <div>
+              <strong>{standing.pa || 0}</strong>
+              <br />
+              <span style={{ color: "#777" }}>PA</span>
+            </div>
+            <div>
+              <strong>{diff > 0 ? `+${diff}` : diff}</strong>
+              <br />
+              <span style={{ color: "#777" }}>Diff</span>
+            </div>
+          </div>
+        </button>
+      );
+    };
+
+    const getPublicMatchWinner = (match) => {
+      if (
+        match.status !== "Finished" ||
+        match.scoreA === "" ||
+        match.scoreB === ""
+      )
+        return "";
+      const scoreA = Number(match.scoreA);
+      const scoreB = Number(match.scoreB);
+      if (scoreA > scoreB) return match.teamA;
+      if (scoreB > scoreA) return match.teamB;
+      return "DRAW";
+    };
+
+    const publicScheduleByWeek = dashboardSchedule
+      .slice()
+      .sort((a, b) => {
+        if (Number(a.week || 0) !== Number(b.week || 0)) {
+          return Number(a.week || 0) - Number(b.week || 0);
+        }
+        return Number(a.id || 0) - Number(b.id || 0);
+      })
+      .reduce((groups, match) => {
+        const weekKey = match.week || "-";
+        if (!groups[weekKey]) groups[weekKey] = [];
+        groups[weekKey].push(match);
+        return groups;
+      }, {});
+
+    const publicScheduleWeeks = Object.keys(publicScheduleByWeek).sort(
+      (a, b) => Number(a || 0) - Number(b || 0)
+    );
+
+    const getDashboardMatchStatRows = (match) => {
+      if (!match) return [];
+
+      return dashboardPlayerStatRows
+        .map((stat) => {
+          const game = stat.gamesByMatch?.[match.id];
+          if (!game) return null;
+
+          const played =
+            Boolean(game.appearanceCounted) ||
+            Number(game.pts || 0) > 0 ||
+            Number(game.reb || 0) > 0 ||
+            Number(game.ast || 0) > 0 ||
+            Number(game.stl || 0) > 0 ||
+            Number(game.blk || 0) > 0;
+
+          if (!played) return null;
+
+          return {
+            playerId: stat.playerId,
+            playerName: stat.playerName,
+            teamName: game.matchTeam || stat.teamName || "-",
+            opponent: game.opponent || "-",
+            pts: Number(game.pts || 0),
+            reb: Number(game.reb || 0),
+            ast: Number(game.ast || 0),
+            stl: Number(game.stl || 0),
+            blk: Number(game.blk || 0),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+          if (a.teamName !== b.teamName)
+            return String(a.teamName).localeCompare(String(b.teamName));
+          return Number(b.pts || 0) - Number(a.pts || 0);
+        });
+    };
+
+    const cardStyle = {
+      border: "1px solid #ddd",
+      borderRadius: "18px",
+      padding: "18px",
+      background: "white",
+      boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+    };
+
+    const sectionTitleStyle = {
+      marginTop: 0,
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+    };
+
+    const publicDashboardTabs = [
+      { key: "overview", label: "Overview", icon: "🏠" },
+      { key: "teams", label: "Teams", icon: "🏀" },
+      { key: "schedule", label: "Schedule", icon: "🗓️" },
+      { key: "awards", label: "Awards", icon: "🏆" },
+    ];
+
+    const renderPublicDashboardNav = () => (
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "10px",
+          marginBottom: "22px",
+          background: "white",
+          border: "1px solid #ddd",
+          borderRadius: "18px",
+          padding: "10px",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+          position: "sticky",
+          top: "10px",
+          zIndex: 20,
+        }}
+      >
+        {publicDashboardTabs.map((tab) => {
+          const active = publicDashboardTab === tab.key;
+
+          return (
+            <button
+              key={`public-dashboard-tab-${tab.key}`}
+              type="button"
+              onClick={() => {
+                setPublicDashboardTab(tab.key);
+                if (tab.key !== "teams") setSelectedPublicTeam("");
+              }}
+              style={{
+                border: active ? "1px solid #111" : "1px solid #e5e5e5",
+                background: active ? "#111" : "#f8f8f8",
+                color: active ? "white" : "#222",
+                borderRadius: "999px",
+                padding: "10px 16px",
+                fontWeight: "800",
+                cursor: "pointer",
+                minWidth: "110px",
+              }}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+
+    return (
+      <div>
+        <div
+          style={{
+            padding: "28px 34px",
+            borderRadius: "24px",
+            color: "white",
+            background: "linear-gradient(135deg,#151515,#303030)",
+            marginBottom: "22px",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "18px",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <h1 style={{ margin: 0, fontSize: "36px" }}>🏀 {dashboardTitle}</h1>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: "16px",
+              padding: "14px",
+              background: "rgba(255,255,255,0.08)",
+              minWidth: "260px",
+            }}
+          >
+            <label
+              style={{
+                display: "block",
+                marginBottom: "8px",
+                fontWeight: "bold",
+              }}
+            >
+              เลือกดู Season
+            </label>
+            <select
+              value={publicSeasonId}
+              onChange={(event) => {
+                setPublicSeasonId(event.target.value);
+                setSelectedPublicTeam("");
+                setSelectedPublicMatch(null);
+                setSelectedPublicPlayer(null);
+              }}
+              style={{
+                width: "100%",
+                padding: "12px",
+                borderRadius: "10px",
+                border: "1px solid #ddd",
+                fontSize: "15px",
+              }}
+            >
+              {publicSeasonOptions.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {renderPublicDashboardNav()}
+
+        {publicDashboardTab === "overview" ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+              gap: "16px",
+              marginBottom: "22px",
+            }}
+          >
+            {renderDashboardStatCard(
+              "Teams",
+              dashboardTeams.length,
+              `${dashboardTeams.length || teamCount} team setting`
+            )}
+            {renderDashboardStatCard(
+              "Players",
+              dashboardAvailablePlayers,
+              "Available players"
+            )}
+            {renderDashboardStatCard(
+              "Matches",
+              `${dashboardFinishedMatches}/${dashboardSchedule.length}`,
+              "Finished / Total"
+            )}
+          </div>
+        ) : null}
+
+        {publicDashboardTab === "teams" ? (
+          <div style={{ ...cardStyle, marginBottom: "22px" }}>
+            <h2 style={sectionTitleStyle}>🏀 Team View</h2>
+            {dashboardTeamRows.length === 0 ? (
+              <p>ยังไม่มีข้อมูลทีม</p>
+            ) : (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
+                    gap: "14px",
+                    marginBottom: "18px",
+                  }}
+                >
+                  {dashboardTeamRows.map(renderPublicTeamCard)}
+                </div>
+
+                {selectedPublicTeamData ? (
+                  <div
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: "18px",
+                      padding: "18px",
+                      background: "#fafafa",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "16px",
+                        flexWrap: "wrap",
+                        marginBottom: "16px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                        }}
+                      >
+                        {renderPublicTeamWithLogo(
+                          selectedPublicTeamData.name,
+                          48
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "14px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <strong>
+                          Record: {selectedPublicTeamData.standing.win || 0}-
+                          {selectedPublicTeamData.standing.loss || 0}
+                        </strong>
+                        <strong>
+                          PF: {selectedPublicTeamData.standing.pf || 0}
+                        </strong>
+                        <strong>
+                          PA: {selectedPublicTeamData.standing.pa || 0}
+                        </strong>
+                        <strong>
+                          Diff: {selectedPublicTeamData.standing.diff || 0}
+                        </strong>
+                        <strong>
+                          Total Rating: {selectedPublicTeamData.totalScore || 0}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: "12px", color: "#555" }}>
+                      Position Summary:{" "}
+                      {validPositions
+                        .map(
+                          (pos) =>
+                            `${pos} ${
+                              selectedPublicTeamData.positionSummary?.[pos] || 0
+                            }`
+                        )
+                        .join(" / ")}
+                    </div>
+
+                    <div style={{ overflowX: "auto" }}>
+                      <table
+                        style={{
+                          width: "100%",
+                          borderCollapse: "collapse",
+                          background: "white",
+                        }}
+                      >
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid #eee" }}>
+                            <th style={{ textAlign: "left", padding: "8px" }}>
+                              Player
+                            </th>
+                            <th style={{ padding: "8px" }}>POS</th>
+                            <th style={{ padding: "8px" }}>MVP Score</th>
+                            <th style={{ padding: "8px" }}>Scoring</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(selectedPublicTeamData.roster || []).map(
+                            (player) => {
+                              const dashboardStats = getDashboardPlayerStats(
+                                player.id
+                              );
+
+                              return (
+                                <tr
+                                  key={`public-team-roster-${selectedPublicTeamData.name}-${player.id}`}
+                                  onClick={() =>
+                                    setSelectedPublicPlayer({
+                                      ...player,
+                                      teamName: selectedPublicTeamData.name,
+                                    })
+                                  }
+                                  style={{
+                                    borderBottom: "1px solid #f1f1f1",
+                                    cursor: "pointer",
+                                  }}
+                                  title="กดเพื่อดูข้อมูลผู้เล่น"
+                                >
+                                  <td style={{ padding: "8px" }}>
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                      }}
+                                    >
+                                      {renderPlayerAvatar(
+                                        player.photoUrl ||
+                                          getPlayerPhotoUrl(player.id),
+                                        34
+                                      )}
+                                      <strong
+                                        style={{ textDecoration: "underline" }}
+                                      >
+                                        {player.name}
+                                      </strong>
+                                    </span>
+                                  </td>
+                                  <td
+                                    style={{
+                                      textAlign: "center",
+                                      padding: "8px",
+                                    }}
+                                  >
+                                    {player.pos1 || "-"}
+                                    {player.pos2 ? ` / ${player.pos2}` : ""}
+                                  </td>
+                                  <td
+                                    style={{
+                                      textAlign: "center",
+                                      padding: "8px",
+                                      fontWeight: "bold",
+                                    }}
+                                  >
+                                    {dashboardStats.mvpScore}
+                                  </td>
+                                  <td
+                                    style={{
+                                      textAlign: "center",
+                                      padding: "8px",
+                                      fontWeight: "bold",
+                                    }}
+                                  >
+                                    {dashboardStats.scoring}
+                                  </td>
+                                </tr>
+                              );
+                            }
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
+
+        {publicDashboardTab === "schedule" ? (
+          <div style={{ ...cardStyle, marginBottom: "22px" }}>
+            <h2 style={sectionTitleStyle}>🗓️ Schedule View</h2>
+            {dashboardSchedule.length === 0 ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  color: "#777",
+                  padding: "34px 0",
+                }}
+              >
+                <div style={{ fontSize: "52px" }}>📅</div>
+                <p>ยังไม่มีตารางแข่งขัน</p>
+                <p style={{ fontSize: "13px" }}>
+                  เมื่อสร้าง Schedule แล้ว ตารางจะแสดงที่นี่
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "16px" }}>
+                {publicScheduleWeeks.map((week) => (
+                  <div
+                    key={`public-schedule-week-${week}`}
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: "18px",
+                      overflow: "hidden",
+                      background: "#fafafa",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        background: "#111",
+                        color: "white",
+                        fontWeight: "800",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "12px",
+                      }}
+                    >
+                      <span>Week {week}</span>
+                      <span style={{ fontSize: "13px", opacity: 0.8 }}>
+                        {publicScheduleByWeek[week].length} Match
+                        {publicScheduleByWeek[week].length > 1 ? "es" : ""}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{ display: "grid", gap: "10px", padding: "14px" }}
+                    >
+                      {publicScheduleByWeek[week].map((match) => {
+                        const winner = getPublicMatchWinner(match);
+                        const isFinished = match.status === "Finished";
+                        const isTeamAWinner = winner === match.teamA;
+                        const isTeamBWinner = winner === match.teamB;
+
+                        return (
+                          <div
+                            key={`public-schedule-match-${match.id}`}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr auto 1fr",
+                              gap: "12px",
+                              alignItems: "center",
+                              padding: "14px",
+                              borderRadius: "16px",
+                              background: "white",
+                              border: "1px solid #eee",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                justifyContent: "flex-start",
+                                fontWeight: isTeamAWinner ? "900" : "600",
+                                opacity:
+                                  isFinished &&
+                                  winner &&
+                                  !isTeamAWinner &&
+                                  winner !== "DRAW"
+                                    ? 0.55
+                                    : 1,
+                              }}
+                            >
+                              {renderPublicTeamWithLogo(match.teamA, 32)}
+                            </div>
+
+                            <div
+                              style={{ textAlign: "center", minWidth: "120px" }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: "800",
+                                  marginBottom: "6px",
+                                  color:
+                                    match.label === "Final"
+                                      ? "#b45309"
+                                      : match.label === "Semi Final"
+                                      ? "#7c3aed"
+                                      : "#555",
+                                }}
+                              >
+                                {match.label || "League"}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedPublicMatch(match)}
+                                title="กดเพื่อดูสถิติผู้เล่นในแมตช์นี้"
+                                style={{
+                                  fontSize: "22px",
+                                  fontWeight: "900",
+                                  background: isFinished
+                                    ? "#f0fdf4"
+                                    : "#f5f5f5",
+                                  borderRadius: "12px",
+                                  padding: "6px 10px",
+                                  border: "none",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {match.scoreA !== "" && match.scoreB !== ""
+                                  ? `${match.scoreA} - ${match.scoreB}`
+                                  : "VS"}
+                              </button>
+                              <div
+                                style={{
+                                  marginTop: "6px",
+                                  fontSize: "12px",
+                                  color: "#777",
+                                }}
+                              >
+                                {isFinished ? "Finished" : "Pending"}
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                justifyContent: "flex-end",
+                                fontWeight: isTeamBWinner ? "900" : "600",
+                                opacity:
+                                  isFinished &&
+                                  winner &&
+                                  !isTeamBWinner &&
+                                  winner !== "DRAW"
+                                    ? 0.55
+                                    : 1,
+                              }}
+                            >
+                              {renderPublicTeamWithLogo(match.teamB, 32)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {publicDashboardTab === "overview" ||
+        publicDashboardTab === "awards" ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
+              gap: "18px",
+              marginBottom: "22px",
+            }}
+          >
+            <div style={cardStyle}>
+              <h2 style={sectionTitleStyle}>🏆 Current Awards</h2>
+              {dashboardAwardRows.map(([icon, label, value, detail]) => (
+                <div
+                  key={`public-award-${label}`}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderBottom: "1px solid #eee",
+                    padding: "10px 0",
+                    gap: "12px",
+                  }}
+                >
+                  <strong>
+                    {icon} {label}
+                  </strong>
+                  <span style={{ textAlign: "right" }}>
+                    {value || "-"}
+                    {detail ? (
+                      <span
+                        style={{
+                          color: "#777",
+                          fontSize: "12px",
+                          marginLeft: "6px",
+                        }}
+                      >
+                        ({detail})
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={cardStyle}>
+              <h2 style={sectionTitleStyle}>📊 Standings</h2>
+              {dashboardStandings.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: "center",
+                    color: "#777",
+                    padding: "40px 0",
+                  }}
+                >
+                  <div style={{ fontSize: "54px" }}>📋</div>
+                  <p>ยังไม่มีตารางคะแนน</p>
+                  <p style={{ fontSize: "13px" }}>
+                    เมื่อมีผลการแข่งขัน ตารางคะแนนจะปรากฏที่นี่
+                  </p>
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #eee" }}>
+                      <th style={{ textAlign: "left", padding: "8px" }}>#</th>
+                      <th style={{ textAlign: "left", padding: "8px" }}>
+                        Team
+                      </th>
+                      <th style={{ padding: "8px" }}>W</th>
+                      <th style={{ padding: "8px" }}>L</th>
+                      <th style={{ padding: "8px" }}>PF</th>
+                      <th style={{ padding: "8px" }}>PA</th>
+                      <th style={{ padding: "8px" }}>+/-</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardStandings.map((row, index) => (
+                      <tr
+                        key={`public-standing-${row.team}`}
+                        style={{ borderBottom: "1px solid #f1f1f1" }}
+                      >
+                        <td style={{ padding: "8px" }}>{index + 1}</td>
+                        <td style={{ padding: "8px" }}>
+                          {renderPublicTeamWithLogo(row.team, 28)}
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          {row.win}
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          {row.loss}
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          {row.pf}
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          {row.pa}
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          {row.diff}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {publicDashboardTab === "overview" ||
+        publicDashboardTab === "awards" ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
+              gap: "14px",
+              marginBottom: "18px",
+            }}
+          >
+            <div style={cardStyle}>
+              <h2>👑 MVP Race</h2>
+              {dashboardMvpRace.length === 0 ? (
+                <p>ยังไม่มีข้อมูล MVP</p>
+              ) : (
+                dashboardMvpRace.map((player, index) =>
+                  renderPublicPlayerRow(
+                    player,
+                    index,
+                    `${Number(player.mvpScore || 0).toFixed(1)}`
+                  )
+                )
+              )}
+            </div>
+
+            <div style={cardStyle}>
+              <h2>🎯 Top Scorers</h2>
+              {dashboardTopScorers.length === 0 ? (
+                <p>ยังไม่มีข้อมูลคะแนนผู้เล่น</p>
+              ) : (
+                dashboardTopScorers.map((player, index) =>
+                  renderPublicPlayerRow(player, index, `${player.pts || 0} PTS`)
+                )
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {publicDashboardTab === "schedule" ? (
+          <div style={cardStyle}>
+            <h2>🗓️ Schedule</h2>
+            {dashboardSchedule.length === 0 ? (
+              <p>ยังไม่มี Schedule</p>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #eee" }}>
+                    <th style={{ textAlign: "left", padding: "8px" }}>Week</th>
+                    <th style={{ textAlign: "left", padding: "8px" }}>Stage</th>
+                    <th style={{ textAlign: "left", padding: "8px" }}>Match</th>
+                    <th style={{ padding: "8px" }}>Score</th>
+                    <th style={{ padding: "8px" }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboardSchedule.map((match) => (
+                    <tr
+                      key={`public-schedule-${match.id}`}
+                      style={{ borderBottom: "1px solid #f1f1f1" }}
+                    >
+                      <td style={{ padding: "8px" }}>{match.week}</td>
+                      <td style={{ padding: "8px" }}>{match.label}</td>
+                      <td style={{ padding: "8px" }}>
+                        {match.teamA} vs {match.teamB}
+                      </td>
+                      <td style={{ textAlign: "center", padding: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPublicMatch(match)}
+                          style={{
+                            border: "none",
+                            background: "#f0fdf4",
+                            borderRadius: "8px",
+                            padding: "4px 8px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {match.scoreA !== "" && match.scoreB !== ""
+                            ? `${match.scoreA}-${match.scoreB}`
+                            : "VS"}
+                        </button>
+                      </td>
+                      <td style={{ textAlign: "center", padding: "8px" }}>
+                        {match.status}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ) : null}
+
+        {selectedPublicMatch
+          ? (() => {
+              const matchStatRows =
+                getDashboardMatchStatRows(selectedPublicMatch);
+
+              return (
+                <div
+                  onClick={() => setSelectedPublicMatch(null)}
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "rgba(0,0,0,0.55)",
+                    zIndex: 9999,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "20px",
+                  }}
+                >
+                  <div
+                    onClick={(event) => event.stopPropagation()}
+                    style={{
+                      background: "white",
+                      borderRadius: "22px",
+                      padding: "22px",
+                      width: "min(900px, 96vw)",
+                      maxHeight: "86vh",
+                      overflow: "auto",
+                      boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: "16px",
+                        marginBottom: "16px",
+                      }}
+                    >
+                      <div>
+                        <h2 style={{ margin: 0 }}>📊 Match Stats</h2>
+                        <p style={{ margin: "6px 0 0", color: "#555" }}>
+                          Week {selectedPublicMatch.week} ·{" "}
+                          {selectedPublicMatch.label || "League"}
+                        </p>
+                        <h3 style={{ margin: "10px 0 0" }}>
+                          {selectedPublicMatch.teamA}{" "}
+                          {selectedPublicMatch.scoreA !== ""
+                            ? selectedPublicMatch.scoreA
+                            : "-"}
+                          {" - "}
+                          {selectedPublicMatch.scoreB !== ""
+                            ? selectedPublicMatch.scoreB
+                            : "-"}{" "}
+                          {selectedPublicMatch.teamB}
+                        </h3>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPublicMatch(null)}
+                        style={{
+                          border: "none",
+                          background: "#111",
+                          color: "white",
+                          borderRadius: "999px",
+                          padding: "8px 12px",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {matchStatRows.length === 0 ? (
+                      <div
+                        style={{
+                          textAlign: "center",
+                          color: "#777",
+                          padding: "34px 0",
+                        }}
+                      >
+                        <div style={{ fontSize: "46px" }}>🏀</div>
+                        <p>ยังไม่มีสถิติผู้เล่นของ Match นี้</p>
+                        <p style={{ fontSize: "13px" }}>
+                          บันทึก Match Roster และ Player Stats ก่อน
+                          ข้อมูลจะแสดงที่นี่
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table
+                          style={{ width: "100%", borderCollapse: "collapse" }}
+                        >
+                          <thead>
+                            <tr
+                              style={{
+                                borderBottom: "1px solid #eee",
+                                background: "#fafafa",
+                              }}
+                            >
+                              <th
+                                style={{ textAlign: "left", padding: "10px" }}
+                              >
+                                Player
+                              </th>
+                              <th
+                                style={{ textAlign: "left", padding: "10px" }}
+                              >
+                                Team
+                              </th>
+                              <th style={{ padding: "10px" }}>PTS</th>
+                              <th style={{ padding: "10px" }}>REB</th>
+                              <th style={{ padding: "10px" }}>AST</th>
+                              <th style={{ padding: "10px" }}>STL</th>
+                              <th style={{ padding: "10px" }}>BLK</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matchStatRows.map((row) => (
+                              <tr
+                                key={`public-match-stat-${selectedPublicMatch.id}-${row.playerId}-${row.teamName}`}
+                                style={{ borderBottom: "1px solid #f1f1f1" }}
+                              >
+                                <td style={{ padding: "10px" }}>
+                                  <span
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "8px",
+                                    }}
+                                  >
+                                    {renderPlayerAvatar(
+                                      getPlayerPhotoUrl(row.playerId),
+                                      32
+                                    )}
+                                    <strong>{row.playerName}</strong>
+                                  </span>
+                                </td>
+                                <td style={{ padding: "10px" }}>
+                                  {renderPublicTeamWithLogo(row.teamName, 26)}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "10px",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {row.pts}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "10px",
+                                  }}
+                                >
+                                  {row.reb}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "10px",
+                                  }}
+                                >
+                                  {row.ast}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "10px",
+                                  }}
+                                >
+                                  {row.stl}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "10px",
+                                  }}
+                                >
+                                  {row.blk}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          : null}
+
+        {selectedPublicPlayer
+          ? (() => {
+              const playerStats = getDashboardPlayerStats(
+                selectedPublicPlayer.id
+              );
+              const matchLog = getDashboardPlayerMatchLog(
+                selectedPublicPlayer.id
+              );
+              const careerAwards = getDashboardPlayerCareerAwards(
+                selectedPublicPlayer.name
+              );
+
+              return (
+                <div
+                  onClick={() => setSelectedPublicPlayer(null)}
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "rgba(0,0,0,0.55)",
+                    zIndex: 9999,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "20px",
+                  }}
+                >
+                  <div
+                    onClick={(event) => event.stopPropagation()}
+                    style={{
+                      background: "white",
+                      borderRadius: "22px",
+                      padding: "22px",
+                      width: "min(760px, 100%)",
+                      maxHeight: "90vh",
+                      overflowY: "auto",
+                      boxShadow: "0 20px 70px rgba(0,0,0,0.28)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        gap: "16px",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "14px",
+                        }}
+                      >
+                        {renderPlayerAvatar(
+                          selectedPublicPlayer.photoUrl ||
+                            getPlayerPhotoUrl(selectedPublicPlayer.id),
+                          70
+                        )}
+                        <div>
+                          <h2 style={{ margin: 0 }}>
+                            {selectedPublicPlayer.name}
+                          </h2>
+                          <div style={{ color: "#666", marginTop: "6px" }}>
+                            {selectedPublicPlayer.teamName || "-"} ·{" "}
+                            {selectedPublicPlayer.pos1 || "-"}
+                            {selectedPublicPlayer.pos2
+                              ? ` / ${selectedPublicPlayer.pos2}`
+                              : ""}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedPublicPlayer(null)}
+                        style={{
+                          border: "1px solid #ddd",
+                          background: "#f7f7f7",
+                          borderRadius: "999px",
+                          width: "36px",
+                          height: "36px",
+                          cursor: "pointer",
+                          fontSize: "18px",
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit,minmax(130px,1fr))",
+                        gap: "10px",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      {[
+                        ["GP", playerStats.games],
+                        ["PTS", playerStats.pts],
+                        ["PPG", playerStats.ppg],
+                        ["REB", playerStats.reb],
+                        ["AST", playerStats.ast],
+                        ["STL", playerStats.stl],
+                        ["BLK", playerStats.blk],
+                        ["MVP Score", playerStats.mvpScore],
+                      ].map(([label, value]) => (
+                        <div
+                          key={`public-player-popup-stat-${label}`}
+                          style={{
+                            border: "1px solid #eee",
+                            borderRadius: "14px",
+                            padding: "12px",
+                            background: "#fafafa",
+                            textAlign: "center",
+                          }}
+                        >
+                          <div style={{ color: "#777", fontSize: "12px" }}>
+                            {label}
+                          </div>
+                          <strong style={{ fontSize: "20px" }}>{value}</strong>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit,minmax(160px,1fr))",
+                        gap: "10px",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      {renderSplitAwardCard(
+                        "🏆",
+                        "Champion",
+                        careerAwards.champion
+                      )}
+                      {renderSplitAwardCard("👑", "MVP", careerAwards.mvp)}
+                      {renderSplitAwardCard(
+                        "🎯",
+                        "Top Scorer",
+                        careerAwards.topScorer
+                      )}
+                    </div>
+
+                    <h3 style={{ marginTop: 0 }}>Match Log</h3>
+                    {matchLog.length === 0 ? (
+                      <p style={{ color: "#777" }}>
+                        ยังไม่มีข้อมูลรายเกมของผู้เล่นนี้
+                      </p>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table
+                          style={{ width: "100%", borderCollapse: "collapse" }}
+                        >
+                          <thead>
+                            <tr style={{ borderBottom: "1px solid #eee" }}>
+                              <th style={{ textAlign: "left", padding: "8px" }}>
+                                Week
+                              </th>
+                              <th style={{ textAlign: "left", padding: "8px" }}>
+                                Opponent
+                              </th>
+                              <th style={{ padding: "8px" }}>Score</th>
+                              <th style={{ padding: "8px" }}>PTS</th>
+                              <th style={{ padding: "8px" }}>REB</th>
+                              <th style={{ padding: "8px" }}>AST</th>
+                              <th style={{ padding: "8px" }}>STL</th>
+                              <th style={{ padding: "8px" }}>BLK</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matchLog.map((game) => (
+                              <tr
+                                key={`public-player-match-log-${game.matchId}-${game.matchTeam}`}
+                                style={{ borderBottom: "1px solid #f1f1f1" }}
+                              >
+                                <td style={{ padding: "8px" }}>{game.week}</td>
+                                <td style={{ padding: "8px" }}>
+                                  {game.opponent}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "8px",
+                                  }}
+                                >
+                                  {game.score}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "8px",
+                                  }}
+                                >
+                                  {game.pts}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "8px",
+                                  }}
+                                >
+                                  {game.reb}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "8px",
+                                  }}
+                                >
+                                  {game.ast}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "8px",
+                                  }}
+                                >
+                                  {game.stl}
+                                </td>
+                                <td
+                                  style={{
+                                    textAlign: "center",
+                                    padding: "8px",
+                                  }}
+                                >
+                                  {game.blk}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          : null}
+      </div>
+    );
+  };
+
+  const hallOfFame = getHallOfFameData();
+
+  const adminAccordionStyle = {
+    border: "1px solid #d9d9d9",
+    borderRadius: "14px",
+    marginBottom: "14px",
+    background: "white",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+    overflow: "hidden",
+  };
+
+  const adminAccordionSummaryStyle = {
+    padding: "14px 16px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "18px",
+    background: "#f7f7f7",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+  };
+
+  const adminAccordionHintStyle = {
+    fontSize: "12px",
+    color: "#666",
+    fontWeight: "normal",
+  };
+
+  const adminTabs = [
+    { key: "systemTools", label: "⚙️ System Tools" },
+    { key: "leagueSettings", label: "⚙️ League Settings" },
+    { key: "players", label: "👤 Players" },
+    { key: "teams", label: "🏀 Teams" },
+    { key: "leagueManagement", label: "🏀 League" },
+    { key: "schedule", label: "📅 Schedule" },
+    { key: "stats", label: "📊 Stats" },
+    { key: "seasonAwards", label: "🏆 Awards / HOF" },
+    { key: "seasonHistory", label: "🏛️ History" },
+    { key: "draftHistory", label: "🗂️ Drafts" },
+  ];
+
+  const adminTabBarStyle = {
+    position: "sticky",
+    top: 0,
+    zIndex: 1000,
+    background: "rgba(255,255,255,0.96)",
+    backdropFilter: "blur(8px)",
+    border: "1px solid #e5e7eb",
+    borderRadius: "16px",
+    padding: "10px",
+    margin: "0 0 18px",
+    display: "flex",
+    gap: "8px",
+    overflowX: "auto",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+  };
+
+  const adminTabButtonStyle = (key) => ({
+    flex: "0 0 auto",
+    border: "1px solid " + (activeAdminMenu === key ? "#111" : "#e5e7eb"),
+    borderRadius: "999px",
+    padding: "10px 14px",
+    background: activeAdminMenu === key ? "#111" : "#f9fafb",
+    color: activeAdminMenu === key ? "white" : "#111",
+    fontWeight: "bold",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    boxShadow: activeAdminMenu === key ? "0 4px 12px rgba(0,0,0,0.18)" : "none",
+  });
+
+  if (viewMode === "PUBLIC") {
+    return (
+      <div
+        style={{
+          padding: "24px",
+          fontFamily: "Arial",
+          background: "#f5f5f5",
+          minHeight: "100vh",
+        }}
+      >
+        <button
+          onClick={() => setViewMode("ADMIN")}
+          style={{ marginBottom: "14px" }}
+        >
+          🔧 Back to Admin Mode
+        </button>
+        {renderPublicDashboard()}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "24px", fontFamily: "Arial" }}>
+      <h1>BAM Team Generator</h1>
+
+      <div
+        style={{
+          padding: "6px 12px",
+          borderRadius: "8px",
+          background: "#222",
+          color: "#fff",
+          display: "inline-block",
+          marginBottom: "10px",
+        }}
+      >
+        ☁️ Cloud: {cloudStatus}
+      </div>
+
+      <h2 style={{ marginTop: 0 }}>
+        {competitionType} Season {currentSeason}
+      </h2>
+      <p style={{ marginTop: "-8px", color: "#555" }}>
+        {competitionType} Season {currentSeason}
+      </p>
+
+      <button
+        onClick={() => setViewMode("PUBLIC")}
+        style={{
+          marginBottom: "16px",
+          background: "#111",
+          color: "white",
+          border: "none",
+          borderRadius: "8px",
+          padding: "10px 14px",
+          cursor: "pointer",
+          fontWeight: "bold",
+        }}
+      >
+        👀 Open Public Dashboard
+      </button>
+
+      <div style={adminTabBarStyle}>
+        {adminTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveAdminMenu(tab.key)}
+            style={adminTabButtonStyle(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <details
+        open
+        style={{
+          ...adminAccordionStyle,
+          display: activeAdminMenu === "systemTools" ? "block" : "none",
+        }}
+      >
+        <summary style={adminAccordionSummaryStyle}>
+          <span>⚙️ System Tools</span>
+          <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+        </summary>
+        <div
+          style={{
+            border: "1px solid #d9d9d9",
+            borderRadius: "14px",
+            padding: "16px",
+            marginBottom: "20px",
+            background: "#fafafa",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>⚙️ System Tools</h2>
+          <p style={{ marginTop: 0, color: "#555" }}>
+            จัดกลุ่มเครื่องมือเพื่อกันกดผิด: Backup, Cloud, Season และ Danger
+            Zone แยกกันชัดเจน
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "14px",
+              alignItems: "stretch",
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid #bfdbfe",
+                borderRadius: "12px",
+                padding: "14px",
+                background: "#eff6ff",
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: "#1d4ed8" }}>
+                💾 Backup & Restore
+              </h3>
+              <p style={{ color: "#555", fontSize: "14px" }}>
+                สำรองข้อมูลเป็นไฟล์ในเครื่อง ใช้ก่อนแก้โค้ดใหญ่ ก่อนย้ายข้อมูล
+                หรือก่อนลบข้อมูล
+              </p>
+
+              <button
+                onClick={exportLeagueBackup}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "10px",
+                  background: "#2563eb",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                💾 Export All Data
+              </button>
+
+              <label
+                style={{
+                  display: "block",
+                  padding: "10px",
+                  background: "white",
+                  border: "1px dashed #93c5fd",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                <strong>📥 Import Backup File</strong>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={importLeagueBackup}
+                  style={{ display: "block", marginTop: "8px", width: "100%" }}
+                />
+              </label>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #99f6e4",
+                borderRadius: "12px",
+                padding: "14px",
+                background: "#f0fdfa",
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: "#0f766e" }}>
+                ☁️ Cloud Storage
+              </h3>
+              <p style={{ color: "#555", fontSize: "14px" }}>
+                Manual Cloud Mode: ต้องกด Upload เองเท่านั้น
+                เพื่อป้องกันการเขียนทับ Cloud โดยไม่ตั้งใจ
+              </p>
+
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "6px 10px",
+                  marginBottom: "10px",
+                  borderRadius: "999px",
+                  background: "#0f172a",
+                  color: "white",
+                  fontSize: "13px",
+                  fontWeight: "bold",
+                }}
+              >
+                ☁️ Status: {cloudStatus}
+              </div>
+
+              <button
+                onClick={uploadToCloud}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "8px",
+                  background: "#2563eb",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                ☁️ Upload To Cloud
+              </button>
+
+              <button
+                onClick={downloadFromCloud}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "8px",
+                  background: "#0f766e",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                ☁️ Download From Cloud
+              </button>
+
+              <button
+                onClick={clearCloudData}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  background: "#b91c1c",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                🗑️ Clear Cloud Data
+              </button>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #fed7aa",
+                borderRadius: "12px",
+                padding: "14px",
+                background: "#fff7ed",
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: "#c2410c" }}>
+                🏀 Season Management
+              </h3>
+              <p style={{ color: "#555", fontSize: "14px" }}>
+                ใช้ปิดซีซั่น เก็บประวัติ และเริ่ม Season ใหม่
+                โดยไม่ลบรายชื่อผู้เล่น
+              </p>
+
+              <label
+                style={{
+                  display: "block",
+                  padding: "10px",
+                  marginBottom: "10px",
+                  background: "white",
+                  border: "1px dashed #fdba74",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                <strong>📥 Import Season History</strong>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={importSeasonHistoryBackup}
+                  style={{ display: "block", marginTop: "8px", width: "100%" }}
+                />
+              </label>
+
+              <button
+                onClick={closeSeason}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "8px",
+                  background: "#2e7d32",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                🏁 Close Season
+              </button>
+
+              <button
+                onClick={clearCurrentProject}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  background: "#f59e0b",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                🟠 Start New Season
+              </button>
+
+              <p
+                style={{ marginBottom: 0, color: "#9a3412", fontSize: "13px" }}
+              >
+                ล้าง Teams, Schedule, Draft, Match Roster และ Stats แต่เก็บ
+                Players / Season History ไว้
+              </p>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #fecaca",
+                borderRadius: "12px",
+                padding: "14px",
+                background: "#fef2f2",
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: "#b91c1c" }}>⚠️ Danger Zone</h3>
+              <p style={{ color: "#7f1d1d", fontSize: "14px" }}>
+                ใช้เมื่อต้องการล้างข้อมูลทั้งหมดในเครื่องเพื่อเริ่มระบบใหม่ ควร
+                Export Backup ก่อนทุกครั้ง
+              </p>
+
+              <button
+                onClick={resetAllSystem}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  background: "#7f1d1d",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                🔴 Delete All League Data
+              </button>
+
+              <p
+                style={{ marginBottom: 0, color: "#991b1b", fontSize: "13px" }}
+              >
+                ลบ Players, Teams, Schedule, Stats, Season History และ
+                LocalStorage แต่ไม่ลบ Source Code
+              </p>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details
+        open
+        style={{
+          ...adminAccordionStyle,
+          display: activeAdminMenu === "leagueSettings" ? "block" : "none",
+        }}
+      >
+        <summary style={adminAccordionSummaryStyle}>
+          <span>⚙️ League Settings</span>
+          <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+        </summary>
+        <div
+          style={{
+            border: "1px solid #dbeafe",
+            padding: "16px",
+            marginBottom: "20px",
+            background: "#f8fbff",
+            borderRadius: "10px",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>⚙️ League Settings</h2>
+          <p style={{ marginTop: 0, color: "#555" }}>
+            ตั้งค่าประเภทการแข่งขัน จำนวนทีม และชื่อ Season ก่อนเริ่ม Draft
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: "14px",
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid #bfdbfe",
+                background: "white",
+                borderRadius: "10px",
+                padding: "14px",
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: "#1d4ed8" }}>
+                🏀 Competition Setup
+              </h3>
+              <p style={{ color: "#555", fontSize: "14px" }}>
+                เลือกรูปแบบการแข่งขันและจำนวนทีมหลักของ Season นี้
+              </p>
+
+              <label style={{ display: "block", marginBottom: "10px" }}>
+                ประเภทการแข่งขัน
+                <select
+                  value={competitionType}
+                  onChange={(e) => handleCompetitionTypeChange(e.target.value)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "8px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                  }}
+                >
+                  <option value="5X5">5X5</option>
+                  <option value="3X3">3X3</option>
+                </select>
+              </label>
+
+              <label style={{ display: "block" }}>
+                จำนวนทีม
+                <select
+                  value={teamCount}
+                  onChange={(e) => handleTeamCountChange(e.target.value)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "8px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                  }}
+                >
+                  {Array.from({ length: 10 }, (_, index) => index + 3).map(
+                    (count) => (
+                      <option key={count} value={count}>
+                        {count} Teams
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+
+              <div
+                style={{
+                  marginTop: "12px",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  background: "#eff6ff",
+                  color: "#1e40af",
+                  fontSize: "13px",
+                }}
+              >
+                ⚠️ การเปลี่ยนประเภทหรือจำนวนทีม อาจล้าง Teams, Schedule, Draft
+                และ Stats ปัจจุบัน แต่ไม่ลบรายชื่อ Players
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #fed7aa",
+                background: "white",
+                borderRadius: "10px",
+                padding: "14px",
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: "#c2410c" }}>
+                📅 Season Setup
+              </h3>
+              <p style={{ color: "#555", fontSize: "14px" }}>
+                ตั้งชื่อรายการสำหรับแสดงใน Dashboard และ Public View
+              </p>
+
+              <label style={{ display: "block" }}>
+                ชื่อโครงการ / รายการแข่งขัน
+                <input
+                  value={seasonProjectName}
+                  onChange={(e) => setSeasonProjectName(e.target.value)}
+                  placeholder={getDefaultSeasonProjectName()}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    boxSizing: "border-box",
+                    marginTop: "6px",
+                    padding: "8px",
+                    borderRadius: "8px",
+                    border: "1px solid #ccc",
+                  }}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setSeasonProjectName("")}
+                style={{
+                  marginTop: "10px",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #fb923c",
+                  background: "#fff7ed",
+                  color: "#9a3412",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                ใช้ชื่อเริ่มต้น
+              </button>
+
+              <div
+                style={{
+                  marginTop: "12px",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  background: "#fff7ed",
+                  color: "#9a3412",
+                  fontSize: "13px",
+                }}
+              >
+                Current: {getCurrentSeasonTitle()} | Season {currentSeason}
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: "14px",
+              padding: "12px",
+              borderRadius: "10px",
+              background: "#f1f5f9",
+              color: "#334155",
+              fontSize: "14px",
+            }}
+          >
+            รองรับ 3-12 ทีม | ประเภท {competitionType} | Match Roster ขั้นต่ำ{" "}
+            {getMinPlayersPerGame()} คน | 3 ทีมใช้ Final 1 vs 2 | 4 ทีมขึ้นไปใช้
+            Top 4 Playoff
+          </div>
+        </div>
+      </details>
+
+      <details
+        open
+        style={{
+          ...adminAccordionStyle,
+          display: activeAdminMenu === "players" ? "block" : "none",
+        }}
+      >
+        <summary style={adminAccordionSummaryStyle}>
+          <span>👤 Players</span>
+          <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+        </summary>
+        <div
+          style={{
+            border: "1px solid #ddd",
+            padding: "16px",
+            marginBottom: "20px",
+            background: "#ffffff",
+            borderRadius: "10px",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>
+            👤 {editingId ? "Edit Player" : "Players"}
+          </h2>
+          <p style={{ marginTop: 0, color: "#555" }}>
+            เพิ่ม / แก้ไขรายชื่อผู้เล่น กำหนดตำแหน่ง สกิล และสถานะพร้อมแข่ง
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: "14px",
+              marginBottom: "16px",
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid #e0e0e0",
+                borderRadius: "10px",
+                padding: "14px",
+                background: "#fafafa",
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>📝 Player Info</h3>
+
+              <label style={{ display: "block", marginBottom: "10px" }}>
+                ชื่อผู้เล่น
+                <input
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    boxSizing: "border-box",
+                    marginTop: "4px",
+                    padding: "8px",
+                  }}
+                  placeholder="Player name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </label>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <label>
+                  Tier
+                  <select
+                    style={{
+                      display: "block",
+                      marginTop: "4px",
+                      padding: "6px",
+                    }}
+                    value={form.tier}
+                    onChange={(e) => setForm({ ...form, tier: e.target.value })}
+                  >
+                    <option value="">Auto Tier</option>
+                    {validTiers.map((tier) => (
+                      <option key={tier}>{tier}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  POS 1
+                  <select
+                    style={{
+                      display: "block",
+                      marginTop: "4px",
+                      padding: "6px",
+                    }}
+                    value={form.pos1}
+                    onChange={(e) => setForm({ ...form, pos1: e.target.value })}
+                  >
+                    {validPositions.map((pos) => (
+                      <option key={pos}>{pos}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  POS 2
+                  <select
+                    style={{
+                      display: "block",
+                      marginTop: "4px",
+                      padding: "6px",
+                    }}
+                    value={form.pos2}
+                    onChange={(e) => setForm({ ...form, pos2: e.target.value })}
+                  >
+                    <option value="">-</option>
+                    {validPositions.map((pos) => (
+                      <option key={pos}>{pos}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label style={{ display: "block", marginTop: "12px" }}>
+                <input
+                  type="checkbox"
+                  checked={form.available}
+                  onChange={(e) =>
+                    setForm({ ...form, available: e.target.checked })
+                  }
+                />{" "}
+                Available Player
+              </label>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #e0e0e0",
+                borderRadius: "10px",
+                padding: "14px",
+                background: "#fafafa",
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>🏀 Skill Rating</h3>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(90px, 1fr))",
+                  gap: "10px",
+                }}
+              >
+                {[
+                  ["เลี้ยง", "dribbling"],
+                  ["วงใน", "insideScoring"],
+                  ["ยิง", "shooting"],
+                  ["ป้องกัน", "defense"],
+                  ["จ่ายบอล", "passing"],
+                ].map(([label, key]) => (
+                  <label key={key}>
+                    {label}
+                    <input
+                      type="number"
+                      min="1"
+                      max="5"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        boxSizing: "border-box",
+                        marginTop: "4px",
+                        padding: "6px",
+                      }}
+                      value={form[key]}
+                      onChange={(e) =>
+                        setForm({ ...form, [key]: Number(e.target.value) })
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #e0e0e0",
+                borderRadius: "10px",
+                padding: "14px",
+                background: "#fafafa",
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>📷 Photo & Action</h3>
+
+              <label style={{ display: "block", marginBottom: "10px" }}>
+                Player Photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePlayerPhotoUpload}
+                  style={{ display: "block", marginTop: "6px" }}
+                />
+              </label>
+
+              {form.photoUrl && (
+                <div style={{ marginBottom: "10px" }}>
+                  {renderPlayerAvatar(form.photoUrl, 48)}
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, photoUrl: "" })}
+                    style={{ marginLeft: "8px" }}
+                  >
+                    Remove Photo
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={addOrUpdatePlayer}
+                style={{
+                  marginRight: "8px",
+                  padding: "8px 14px",
+                  background: "#1565c0",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontWeight: "bold",
+                }}
+              >
+                {editingId ? "Save Update" : "Add Player"}
+              </button>
+
+              {editingId && (
+                <button type="button" onClick={resetForm}>
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #d9e2ef",
+              borderRadius: "10px",
+              padding: "14px",
+              background: "#f7fbff",
+              marginBottom: "14px",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>📄 Player Import / Export</h3>
+            <button
+              type="button"
+              onClick={downloadTemplate}
+              style={{ marginRight: "8px", marginBottom: "8px" }}
+            >
+              Download CSV Template
+            </button>
+
+            <label
+              style={{
+                marginRight: "8px",
+                marginBottom: "8px",
+                display: "inline-block",
+              }}
+            >
+              Import CSV
+              <input
+                type="file"
+                accept=".csv"
+                onChange={importCSV}
+                style={{ display: "block", marginTop: "4px" }}
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={exportCSV}
+              style={{ marginRight: "8px", marginBottom: "8px" }}
+            >
+              Export CSV
+            </button>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #ffe0b2",
+              borderRadius: "10px",
+              padding: "14px",
+              background: "#fff8e1",
+              marginBottom: "14px",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>🎲 Draft & Team Actions</h3>
+            <button
+              type="button"
+              onClick={generateTeams}
+              style={{ marginRight: "8px", marginBottom: "8px" }}
+            >
+              Generate {teamCount} Teams
+            </button>
+
+            <button
+              type="button"
+              onClick={saveDraft}
+              style={{ marginRight: "8px", marginBottom: "8px" }}
+            >
+              Save Draft
+            </button>
+
+            <button
+              type="button"
+              onClick={exportTeamsCSV}
+              style={{ marginRight: "8px", marginBottom: "8px" }}
+            >
+              Export Teams
+            </button>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #d1c4e9",
+              borderRadius: "10px",
+              padding: "14px",
+              marginBottom: "14px",
+              background: "#faf5ff",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>🔒 Lock Groups</h3>
+            <p>
+              ใช้สำหรับล็อคผู้เล่นที่ต้องอยู่ทีมเดียวกัน
+              แล้วให้ระบบสุ่มผู้เล่นที่เหลือลงทีมอื่นอัตโนมัติ
+            </p>
+
+            <div style={{ marginBottom: "10px" }}>
+              <input
+                placeholder="ชื่อกลุ่ม เช่น ปอน+หมาย+เกี๋ย"
+                value={lockGroupName}
+                onChange={(e) => setLockGroupName(e.target.value)}
+                style={{ marginRight: "8px", minWidth: "220px" }}
+              />
+
+              <select
+                multiple
+                value={selectedLockPlayerIds.map(String)}
+                onChange={(e) =>
+                  setSelectedLockPlayerIds(
+                    Array.from(e.target.selectedOptions).map(
+                      (option) => option.value
+                    )
+                  )
+                }
+                style={{
+                  minWidth: "260px",
+                  minHeight: "90px",
+                  marginRight: "8px",
+                }}
+              >
+                {players
+                  .filter((player) => player.available)
+                  .map((player) => (
+                    <option key={player.id} value={player.id}>
+                      {player.name} | {player.tier} | {player.pos1}
+                      {player.pos2 ? `/${player.pos2}` : ""}
+                    </option>
+                  ))}
+              </select>
+
+              <button onClick={createLockGroup} style={{ marginRight: "8px" }}>
+                Create Lock Group
+              </button>
+
+              {lockGroups.length > 0 && (
+                <button onClick={clearLockGroups}>Clear Lock Groups</button>
+              )}
+            </div>
+
+            {lockGroups.length === 0 ? (
+              <p style={{ marginBottom: 0 }}>ยังไม่มี Lock Group</p>
+            ) : (
+              <div>
+                {lockGroups.map((group) => (
+                  <div
+                    key={group.id}
+                    style={{
+                      border: "1px solid #ddd",
+                      padding: "8px",
+                      marginBottom: "8px",
+                      background: "white",
+                    }}
+                  >
+                    <strong>{group.name}</strong>:{" "}
+                    {group.playerIds.map(getPlayerNameById).join(", ")}
+                    <button
+                      onClick={() => deleteLockGroup(group.id)}
+                      style={{ marginLeft: "8px" }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid #ffcdd2",
+              borderRadius: "10px",
+              padding: "14px",
+              background: "#fff5f5",
+              marginBottom: "14px",
+            }}
+          >
+            <h3 style={{ marginTop: 0, color: "#b71c1c" }}>
+              ⚠️ Player Danger Zone
+            </h3>
+            <button
+              type="button"
+              onClick={clearAllPlayers}
+              style={{
+                background: "#c62828",
+                color: "white",
+                fontWeight: "bold",
+                border: "none",
+                borderRadius: "6px",
+                padding: "8px 14px",
+              }}
+            >
+              Clear All Players
+            </button>
+            <p style={{ marginBottom: 0, color: "#777" }}>
+              ลบรายชื่อผู้เล่นทั้งหมดจาก LocalStorage แต่ไม่ลบ Cloud โดยตรง
+            </p>
+          </div>
+
+          <div
+            style={{
+              padding: "10px 12px",
+              background: "#f5f5f5",
+              borderRadius: "8px",
+              display: "inline-block",
+            }}
+          >
+            <strong>Total Players:</strong> {players.length} |{" "}
+            <strong>Available:</strong>{" "}
+            {players.filter((p) => p.available).length}
+          </div>
+        </div>
+      </details>
+
+      <div
+        style={{
+          display: activeAdminMenu === "players" ? "block" : "none",
+          border: "1px solid #ddd",
+          borderRadius: "10px",
+          padding: "16px",
+          marginTop: "16px",
+          marginBottom: "20px",
+          background: "#ffffff",
+          overflowX: "auto",
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>👥 Player List</h3>
+        <table
+          border="1"
+          cellPadding="8"
+          cellSpacing="0"
+          style={{ width: "100%" }}
+        >
+          <thead>
+            <tr>
+              <th>Photo</th>
+              <th>Name</th>
+              <th>Tier</th>
+              <th>Rating</th>
+              <th>Pos1</th>
+              <th>Pos2</th>
+              <th>Available</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {players.length === 0 ? (
+              <tr>
+                <td colSpan="8" style={{ textAlign: "center" }}>
+                  ยังไม่มีผู้เล่น
+                </td>
+              </tr>
+            ) : (
+              players.map((p) => (
+                <tr key={p.id}>
+                  <td>{renderPlayerAvatar(p.photoUrl, 42)}</td>
+                  <td>{p.name}</td>
+                  <td>{p.tier}</td>
+                  <td>{p.rating}</td>
+                  <td>{p.pos1}</td>
+                  <td>{p.pos2 || "-"}</td>
+
+                  <td>
+                    <button onClick={() => toggleAvailable(p.id)}>
+                      {p.available ? "Yes" : "No"}
+                    </button>
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => startEditPlayer(p)}
+                      style={{ marginRight: "6px" }}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={() => deletePlayer(p.id)}
+                      style={{ marginRight: "6px" }}
+                    >
+                      Delete
+                    </button>
+
+                    <label
+                      style={{
+                        cursor: "pointer",
+                        color: "#1976d2",
+                        marginRight: "6px",
+                      }}
+                    >
+                      Upload Photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: "none" }}
+                        onChange={(e) => uploadExistingPlayerPhoto(p.id, e)}
+                      />
+                    </label>
+
+                    {p.photoUrl && (
+                      <button onClick={() => removeExistingPlayerPhoto(p.id)}>
+                        Remove Photo
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {teams.length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "teams" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>🏀 Draft Results / Generated Teams</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>Generated Teams</h2>
+
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: "10px",
+                padding: "16px",
+                marginBottom: "20px",
+                background: "#ffffff",
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>🛡️ Team Names & Logos</h3>
+              <p style={{ marginTop: 0, color: "#555" }}>
+                ตั้งชื่อทีมและอัปโหลดโลโก้หลังจากสุ่มทีมเสร็จแล้ว
+              </p>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "12px",
+                }}
+              >
+                {teams.map((team, index) => (
+                  <div
+                    key={`team-rename-${index}`}
+                    style={{
+                      border: "1px solid #ddd",
+                      borderRadius: "10px",
+                      padding: "12px",
+                      background: "#f9fafb",
+                    }}
+                  >
+                    <div style={{ fontWeight: "bold", marginBottom: "8px" }}>
+                      Team {index + 1}
+                    </div>
+                    <div style={{ marginBottom: "8px" }}>
+                      {renderTeamLogo(team.name, 52)}
+                    </div>
+                    <input
+                      value={team.name}
+                      onChange={(e) => updateTeamName(index, e.target.value)}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        padding: "8px",
+                        borderRadius: "8px",
+                        border: "1px solid #ccc",
+                      }}
+                    />
+                    <div style={{ marginTop: "10px" }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => uploadTeamLogo(team.name, e)}
+                      />
+                      {teamLogos[team.name] && (
+                        <button
+                          onClick={() => removeTeamLogo(team.name)}
+                          style={{ marginTop: "8px" }}
+                        >
+                          Remove Logo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <h3>Balance Score: {getBalancePercent()}%</h3>
+            <p style={{ color: "#555", marginTop: 0 }}>
+              รายละเอียดทีม / รายชื่อผู้เล่น / Position / Skill ถูกย้ายไปไว้ใน
+              Team Dashboard ด้านล่างแล้ว กดการ์ดทีมเพื่อเปิดดูรายละเอียด
+            </p>
+          </div>
+        </details>
+      )}
+
+      {teams.length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "teams" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>📋 Team View / Team Dashboard</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>Team Dashboard</h2>
+            <p>ภาพรวมทีมสำหรับเตรียมต่อยอดไป Public Dashboard</p>
+
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              {getTeamDashboardData().map((teamData, index) => (
+                <div
+                  key={`team-dashboard-${teamData.teamName}`}
+                  onClick={() =>
+                    setExpandedTeamDashboard((prev) =>
+                      prev === teamData.teamName ? "" : teamData.teamName
+                    )
+                  }
+                  style={{
+                    border:
+                      expandedTeamDashboard === teamData.teamName
+                        ? "2px solid #111"
+                        : "1px solid #222",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    minWidth: "280px",
+                    background: "#fafafa",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ textAlign: "center", marginBottom: "12px" }}>
+                    {renderTeamLogo(teamData.teamName, 82)}
+                    <h3 style={{ marginBottom: "4px" }}>
+                      #{index + 1} {teamData.teamName}
+                    </h3>
+                    <div>
+                      <strong>Power Score:</strong>{" "}
+                      {teamData.powerScore.toFixed(1)}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "8px",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <div>
+                      <strong>GP</strong>
+                      <br />
+                      {teamData.gp}
+                    </div>
+                    <div>
+                      <strong>W-L</strong>
+                      <br />
+                      {teamData.win}-{teamData.loss}
+                    </div>
+                    <div>
+                      <strong>Win%</strong>
+                      <br />
+                      {teamData.winPct}%
+                    </div>
+                    <div>
+                      <strong>Roster</strong>
+                      <br />
+                      {teamData.rosterCount}
+                    </div>
+                    <div>
+                      <strong>PF</strong>
+                      <br />
+                      {teamData.pf}
+                    </div>
+                    <div>
+                      <strong>PA</strong>
+                      <br />
+                      {teamData.pa}
+                    </div>
+                    <div>
+                      <strong>Diff</strong>
+                      <br />
+                      {teamData.diff > 0 ? `+${teamData.diff}` : teamData.diff}
+                    </div>
+                    <div>
+                      <strong>PPG / PAPG</strong>
+                      <br />
+                      {teamData.ppg} / {teamData.papg}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{ borderTop: "1px solid #ddd", paddingTop: "10px" }}
+                  >
+                    <p style={{ margin: "6px 0" }}>
+                      <strong>Team MVP:</strong>{" "}
+                      {teamData.teamMvp ? (
+                        <button
+                          onClick={() =>
+                            setSelectedProfilePlayerId(
+                              teamData.teamMvp.playerId
+                            )
+                          }
+                        >
+                          {renderPlayerAvatar(
+                            getPlayerPhotoUrl(teamData.teamMvp.playerId),
+                            24
+                          )}{" "}
+                          {teamData.teamMvp.playerName} /{" "}
+                          {teamData.teamMvp.mvpScore.toFixed(1)}
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                    </p>
+
+                    <p style={{ margin: "6px 0" }}>
+                      <strong>Top Scorer:</strong>{" "}
+                      {teamData.topScorer ? (
+                        <button
+                          onClick={() =>
+                            setSelectedProfilePlayerId(
+                              teamData.topScorer.playerId
+                            )
+                          }
+                        >
+                          {renderPlayerAvatar(
+                            getPlayerPhotoUrl(teamData.topScorer.playerId),
+                            24
+                          )}{" "}
+                          {teamData.topScorer.playerName} /{" "}
+                          {teamData.topScorer.pts} PTS
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                    </p>
+                    <p style={{ margin: "6px 0", color: "#666" }}>
+                      {expandedTeamDashboard === teamData.teamName
+                        ? "▲ คลิกเพื่อปิดรายละเอียดทีม"
+                        : "▼ คลิกเพื่อดูรายละเอียดทีม"}
+                    </p>
+
+                    {expandedTeamDashboard === teamData.teamName && (
+                      <div
+                        style={{
+                          marginTop: "12px",
+                          paddingTop: "12px",
+                          borderTop: "1px dashed #ccc",
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {(() => {
+                          const team = teams.find(
+                            (item) => item.name === teamData.teamName
+                          );
+
+                          if (!team) return <p>ไม่พบข้อมูลทีม</p>;
+
+                          return (
+                            <div>
+                              {team.lockedGroupName && (
+                                <div
+                                  style={{
+                                    fontWeight: "bold",
+                                    color: "#d35400",
+                                    marginBottom: "8px",
+                                  }}
+                                >
+                                  🔒 {team.lockedGroupName}
+                                </div>
+                              )}
+
+                              <p>
+                                <strong>Total Score:</strong> {team.totalScore}
+                              </p>
+
+                              {team.eliteWarning && (
+                                <p>⚠️ SSS+ อยู่ร่วมกับ S+ / S-</p>
+                              )}
+
+                              <p>
+                                <strong>Position:</strong> PG{" "}
+                                {team.positionSummary.PG} | SG{" "}
+                                {team.positionSummary.SG} | SF{" "}
+                                {team.positionSummary.SF} | PF{" "}
+                                {team.positionSummary.PF} | C{" "}
+                                {team.positionSummary.C}
+                              </p>
+
+                              {team.missingPositions.length === 0 ? (
+                                <p>✅ Position Complete</p>
+                              ) : (
+                                <p>
+                                  ⚠️ Missing: {team.missingPositions.join(", ")}
+                                </p>
+                              )}
+
+                              <p>
+                                <strong>Skill:</strong> เลี้ยง{" "}
+                                {team.skillTotals.dribbling} | วงใน{" "}
+                                {team.skillTotals.insideScoring} | ยิง{" "}
+                                {team.skillTotals.shooting} | ป้องกัน{" "}
+                                {team.skillTotals.defense} | จ่าย{" "}
+                                {team.skillTotals.passing}
+                              </p>
+
+                              <ol style={{ paddingLeft: "20px" }}>
+                                {(team.players || []).map((player) => (
+                                  <li
+                                    key={player.id}
+                                    style={{ marginBottom: "6px" }}
+                                  >
+                                    {renderPlayerAvatar(
+                                      player.photoUrl ||
+                                        getPlayerPhotoUrl(player.id),
+                                      28
+                                    )}{" "}
+                                    {player.name} | {player.tier} |{" "}
+                                    {player.rating} | {player.pos1}
+                                    {player.pos2 ? `/${player.pos2}` : ""}
+                                    {player.lockedGroupName
+                                      ? ` 🔒 ${player.lockedGroupName}`
+                                      : ""}
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
+      )}
+
+      {teams.length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "leagueManagement" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>🏀 League Management</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>League Management</h2>
+            <p>เพิ่ม / ย้าย / ลบผู้เล่นจากทีม หลังจาก Draft แล้ว</p>
+
+            <h3>Add Existing Player To Team</h3>
+            <div style={{ marginBottom: "16px" }}>
+              <select
+                value={rosterExistingPlayerId}
+                onChange={(e) => setRosterExistingPlayerId(e.target.value)}
+                style={{ marginRight: "8px" }}
+              >
+                <option value="">เลือกผู้เล่น</option>
+                {players.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    {player.name}
+                    {player.teamName ? ` (${player.teamName})` : ""}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={rosterTargetTeam}
+                onChange={(e) => setRosterTargetTeam(e.target.value)}
+                style={{ marginRight: "8px" }}
+              >
+                <option value="">เลือกทีม</option>
+                {teams.map((team) => (
+                  <option key={team.name}>{team.name}</option>
+                ))}
+              </select>
+
+              <button onClick={addExistingPlayerToTeam}>Add To Team</button>
+            </div>
+
+            <h3>Add New Player To Team</h3>
+            <div style={{ marginBottom: "16px" }}>
+              <input
+                placeholder="New player name"
+                value={newRosterForm.name}
+                onChange={(e) =>
+                  setNewRosterForm({ ...newRosterForm, name: e.target.value })
+                }
+                style={{ marginRight: "8px" }}
+              />
+
+              <select
+                value={newRosterForm.tier}
+                onChange={(e) =>
+                  setNewRosterForm({ ...newRosterForm, tier: e.target.value })
+                }
+                style={{ marginRight: "8px" }}
+              >
+                <option value="">Auto Tier</option>
+                {validTiers.map((tier) => (
+                  <option key={tier}>{tier}</option>
+                ))}
+              </select>
+
+              <select
+                value={newRosterForm.pos1}
+                onChange={(e) =>
+                  setNewRosterForm({ ...newRosterForm, pos1: e.target.value })
+                }
+                style={{ marginRight: "8px" }}
+              >
+                {validPositions.map((pos) => (
+                  <option key={pos}>{pos}</option>
+                ))}
+              </select>
+
+              <select
+                value={newRosterForm.pos2}
+                onChange={(e) =>
+                  setNewRosterForm({ ...newRosterForm, pos2: e.target.value })
+                }
+                style={{ marginRight: "8px" }}
+              >
+                <option value="">-</option>
+                {validPositions.map((pos) => (
+                  <option key={pos}>{pos}</option>
+                ))}
+              </select>
+
+              <select
+                value={newRosterForm.targetTeam}
+                onChange={(e) =>
+                  setNewRosterForm({
+                    ...newRosterForm,
+                    targetTeam: e.target.value,
+                  })
+                }
+                style={{ marginRight: "8px" }}
+              >
+                <option value="">เลือกทีม</option>
+                {teams.map((team) => (
+                  <option key={team.name}>{team.name}</option>
+                ))}
+              </select>
+
+              <label style={{ marginRight: "8px" }}>
+                Photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleNewRosterPhotoUpload}
+                  style={{ marginLeft: "6px" }}
+                />
+              </label>
+
+              {newRosterForm.photoUrl && (
+                <span>
+                  {renderPlayerAvatar(newRosterForm.photoUrl, 42)}
+                  <button
+                    onClick={() =>
+                      setNewRosterForm({ ...newRosterForm, photoUrl: "" })
+                    }
+                    style={{ marginLeft: "6px" }}
+                  >
+                    Remove Photo
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              {[
+                ["เลี้ยง", "dribbling"],
+                ["วงใน", "insideScoring"],
+                ["ยิง", "shooting"],
+                ["ป้องกัน", "defense"],
+                ["จ่ายบอล", "passing"],
+              ].map(([label, key]) => (
+                <label key={key} style={{ marginRight: "8px" }}>
+                  {label}
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    style={{ width: "50px", marginLeft: "4px" }}
+                    value={newRosterForm[key]}
+                    onChange={(e) =>
+                      setNewRosterForm({
+                        ...newRosterForm,
+                        [key]: Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+              ))}
+
+              <button onClick={createNewPlayerToTeam}>Create & Add</button>
+            </div>
+
+            <h3>Team Roster</h3>
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              {teams.map((team) => (
+                <div
+                  key={`roster-${team.name}`}
+                  style={{
+                    border: "1px solid #aaa",
+                    padding: "12px",
+                    minWidth: "320px",
+                  }}
+                >
+                  <h4>{team.name}</h4>
+
+                  {team.players.length === 0 ? (
+                    <p>ยังไม่มีผู้เล่นในทีม</p>
+                  ) : (
+                    <table border="1" cellPadding="6" cellSpacing="0">
+                      <thead>
+                        <tr>
+                          <th>Photo</th>
+                          <th>Player</th>
+                          <th>Move</th>
+                          <th>Remove</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {team.players.map((player) => (
+                          <tr key={player.id}>
+                            <td>
+                              {renderPlayerAvatar(
+                                player.photoUrl || getPlayerPhotoUrl(player.id),
+                                34
+                              )}
+                            </td>
+                            <td>
+                              {player.name} | {player.tier} | {player.rating}
+                            </td>
+                            <td>
+                              <select
+                                value={team.name}
+                                onChange={(e) =>
+                                  movePlayerToTeam(player.id, e.target.value)
+                                }
+                              >
+                                {teams.map((targetTeam) => (
+                                  <option key={targetTeam.name}>
+                                    {targetTeam.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>
+                              <button
+                                onClick={() => removePlayerFromTeam(player.id)}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
+      )}
+
+      {activeAdminMenu === "schedule" && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "schedule" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>📅 Schedule / Match Control</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>📅 Schedule / Match Control</h2>
+            <p style={{ color: "#555" }}>
+              จัดการตารางแข่ง กรอกคะแนน Manage Roster และ Enter Stats
+              ของแต่ละแมตช์ในแท็บนี้
+            </p>
+
+            {teams.length === 0 ? (
+              <p>กรุณา Generate Teams ก่อนสร้างตารางแข่ง</p>
+            ) : (
+              <button
+                onClick={createSchedule}
+                style={{ marginRight: "8px", marginBottom: "12px" }}
+              >
+                {schedule.length > 0 ? "Recreate Schedule" : "Create Schedule"}
+              </button>
+            )}
+
+            {schedule.length > 0 && (
+              <>
+                <button
+                  onClick={updatePlayoffTeams}
+                  style={{ marginRight: "8px", marginBottom: "12px" }}
+                >
+                  Update Playoff Teams
+                </button>
+
+                <button
+                  onClick={clearSchedule}
+                  style={{ marginBottom: "12px" }}
+                >
+                  Clear Schedule
+                </button>
+
+                {[...new Set(schedule.map((match) => match.week))]
+                  .sort((a, b) => a - b)
+                  .map((week) => (
+                    <div key={week} style={{ marginTop: "20px" }}>
+                      <h3>Week {week}</h3>
+
+                      <table border="1" cellPadding="8" cellSpacing="0">
+                        <thead>
+                          <tr>
+                            <th>Round</th>
+                            <th>Team A</th>
+                            <th>Score A</th>
+                            <th>Team B</th>
+                            <th>Score B</th>
+                            <th>Status</th>
+                            <th>Roster</th>
+                            <th>Stats</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {schedule
+                            .filter((match) => match.week === week)
+                            .map((match) => (
+                              <tr key={match.id}>
+                                <td>{match.label}</td>
+                                <td>{renderTeamWithLogo(match.teamA, 30)}</td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    value={match.scoreA}
+                                    onChange={(e) =>
+                                      updateMatchScore(
+                                        match.id,
+                                        "scoreA",
+                                        e.target.value
+                                      )
+                                    }
+                                    style={{ width: "70px" }}
+                                  />
+                                </td>
+                                <td>{renderTeamWithLogo(match.teamB, 30)}</td>
+                                <td>
+                                  <input
+                                    type="number"
+                                    value={match.scoreB}
+                                    onChange={(e) =>
+                                      updateMatchScore(
+                                        match.id,
+                                        "scoreB",
+                                        e.target.value
+                                      )
+                                    }
+                                    style={{ width: "70px" }}
+                                  />
+                                </td>
+                                <td>{match.status}</td>
+                                <td>
+                                  <button
+                                    onClick={() =>
+                                      setSelectedRosterMatchId(String(match.id))
+                                    }
+                                  >
+                                    Manage Roster
+                                  </button>
+                                </td>
+                                <td>
+                                  <button
+                                    onClick={() =>
+                                      setSelectedStatsMatchId(String(match.id))
+                                    }
+                                  >
+                                    Enter Stats
+                                  </button>
+                                </td>
+                                <td>
+                                  <button onClick={() => finishMatch(match.id)}>
+                                    Finish
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+              </>
+            )}
+
+            {schedule.length === 0 && teams.length > 0 && (
+              <p>ยังไม่มีตารางแข่ง กด Create Schedule เพื่อสร้างตาราง</p>
+            )}
+          </div>
+        </details>
+      )}
+
+      {selectedRosterMatchId &&
+        schedule.find(
+          (m) => String(m.id) === String(selectedRosterMatchId)
+        ) && (
+          <details
+            open
+            style={{
+              ...adminAccordionStyle,
+              display: activeAdminMenu === "schedule" ? "block" : "none",
+            }}
+          >
+            <summary style={adminAccordionSummaryStyle}>
+              <span>📝 Match Roster</span>
+              <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+            </summary>
+            <div style={{ marginTop: "32px" }}>
+              {(() => {
+                const selectedMatch = schedule.find(
+                  (m) => String(m.id) === String(selectedRosterMatchId)
+                );
+                const roster = getMatchRoster(selectedMatch);
+
+                const renderSideRoster = (side, title) => {
+                  const teamName = getSideTeamName(selectedMatch, side);
+                  const teamPlayers = getTeamPlayers(teamName);
+                  const activePlayers = roster[side].activePlayers || [];
+                  const loanPlayers = roster[side].loanPlayers || [];
+                  const loanCandidates = getLoanCandidates(selectedMatch, side);
+                  const totalPlayers =
+                    activePlayers.length + loanPlayers.length;
+
+                  return (
+                    <div
+                      style={{
+                        border: "1px solid #999",
+                        padding: "12px",
+                        minWidth: "340px",
+                      }}
+                    >
+                      <h3>
+                        {title}: {renderTeamWithLogo(teamName, 36)}
+                      </h3>
+
+                      <p>
+                        Active + Loan: <strong>{totalPlayers}</strong> คน
+                        {totalPlayers < 5 ? " ⚠️ ยังไม่ครบ 5" : " ✅ ครบ 5"}
+                      </p>
+
+                      <h4>Regular Players</h4>
+                      {teamPlayers.length === 0 ? (
+                        <p>ยังไม่มีผู้เล่นในทีม</p>
+                      ) : (
+                        teamPlayers.map((player) => (
+                          <label
+                            key={`${side}-active-${player.id}`}
+                            style={{ display: "block", marginBottom: "6px" }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={activePlayers.includes(player.id)}
+                              onChange={() =>
+                                toggleActivePlayer(
+                                  selectedMatch,
+                                  side,
+                                  player.id
+                                )
+                              }
+                            />{" "}
+                            {player.name} | {player.tier} | {player.rating}
+                          </label>
+                        ))
+                      )}
+
+                      <h4>Loan Players</h4>
+                      <div style={{ marginBottom: "8px" }}>
+                        <select
+                          value={
+                            loanForm.side === side ? loanForm.playerId : ""
+                          }
+                          onChange={(e) =>
+                            setLoanForm({ side, playerId: e.target.value })
+                          }
+                          style={{ marginRight: "8px" }}
+                        >
+                          <option value="">เลือกผู้เล่นยืมตัว</option>
+                          {loanCandidates.map((player) => (
+                            <option
+                              key={`loan-candidate-${side}-${player.id}`}
+                              value={player.id}
+                            >
+                              {player.name} ({player.teamName})
+                            </option>
+                          ))}
+                        </select>
+
+                        <button
+                          onClick={() =>
+                            addLoanPlayerToMatch(selectedMatch, side)
+                          }
+                        >
+                          Add Loan
+                        </button>
+                      </div>
+
+                      {loanPlayers.length === 0 ? (
+                        <p>ไม่มีผู้เล่นยืมตัว</p>
+                      ) : (
+                        <ul>
+                          {loanPlayers.map((loan) => (
+                            <li key={`${side}-loan-${loan.playerId}`}>
+                              {renderPlayerAvatar(
+                                getPlayerPhotoUrl(loan.playerId),
+                                26
+                              )}{" "}
+                              {loan.playerName} | From: {loan.ownerTeam} | LOAN
+                              | ไม่นับสถิติส่วนตัว{" "}
+                              <button
+                                onClick={() =>
+                                  removeLoanPlayerFromMatch(
+                                    selectedMatch,
+                                    side,
+                                    loan.playerId
+                                  )
+                                }
+                              >
+                                Remove
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    <h2>Match Roster</h2>
+                    <p>
+                      Match: Week {selectedMatch.week} | {selectedMatch.label} |{" "}
+                      {selectedMatch.teamA} vs {selectedMatch.teamB}
+                    </p>
+                    <p>
+                      Regular Player = นับสถิติในอนาคต / Loan Player = ช่วยแข่ง
+                      แต่ไม่นับสถิติส่วนตัว
+                    </p>
+
+                    <div
+                      style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}
+                    >
+                      {renderSideRoster("teamA", "Team A")}
+                      {renderSideRoster("teamB", "Team B")}
+                    </div>
+
+                    <div style={{ marginTop: "16px" }}>
+                      <button
+                        onClick={() => saveMatchRoster(selectedMatch)}
+                        style={{ marginRight: "8px" }}
+                      >
+                        Save Match Roster
+                      </button>
+
+                      <button
+                        onClick={() => clearMatchRoster(selectedMatch.id)}
+                        style={{ marginRight: "8px" }}
+                      >
+                        Clear Match Roster
+                      </button>
+
+                      <button onClick={() => setSelectedRosterMatchId("")}>
+                        Close
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </details>
+        )}
+
+      {selectedStatsMatchId &&
+        schedule.find((m) => String(m.id) === String(selectedStatsMatchId)) && (
+          <details
+            open
+            style={{
+              ...adminAccordionStyle,
+              display: activeAdminMenu === "schedule" ? "block" : "none",
+            }}
+          >
+            <summary style={adminAccordionSummaryStyle}>
+              <span>📊 Player Match Stats</span>
+              <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+            </summary>
+            <div style={{ marginTop: "32px" }}>
+              {(() => {
+                const selectedMatch = schedule.find(
+                  (m) => String(m.id) === String(selectedStatsMatchId)
+                );
+                const statRows = getAllStatRowsForMatch(selectedMatch);
+
+                return (
+                  <>
+                    <h2>Player Match Stats</h2>
+                    <p>
+                      Match: Week {selectedMatch.week} | {selectedMatch.label} |{" "}
+                      {selectedMatch.teamA} vs {selectedMatch.teamB}
+                    </p>
+                    <p>
+                      กรอก PTS / REB / AST / STL / BLK / Games นับตามเกมของทีม /
+                      Appear นับเฉพาะคนที่ติ๊กลงจริง / Loan Player
+                      ไม่นับสถิติส่วนตัว
+                    </p>
+
+                    {statRows.length === 0 ? (
+                      <p>ยังไม่มีรายชื่อผู้เล่น กรุณากด Manage Roster ก่อน</p>
+                    ) : (
+                      <table border="1" cellPadding="8" cellSpacing="0">
+                        <thead>
+                          <tr>
+                            <th>Player</th>
+                            <th>Match Team</th>
+                            <th>Owner Team</th>
+                            <th>Role</th>
+                            {statFields.map((field) => (
+                              <th key={`stat-head-${field.key}`}>
+                                {field.label}
+                              </th>
+                            ))}
+                            <th>Personal Stat</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {statRows.map((player) => (
+                            <tr
+                              key={`${selectedMatch.id}-${
+                                player.playerId || player.id
+                              }-${player.role}-${player.matchTeam}`}
+                            >
+                              <td>{player.name}</td>
+                              <td>{player.matchTeam}</td>
+                              <td>{player.ownerTeam}</td>
+                              <td>
+                                {player.role === "loan" ? "LOAN" : "REGULAR"}
+                              </td>
+                              {statFields.map((field) => (
+                                <td
+                                  key={`${selectedMatch.id}-${
+                                    player.playerId || player.id
+                                  }-${field.key}`}
+                                >
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={getStatInputValue(
+                                      selectedMatch,
+                                      player,
+                                      field.key
+                                    )}
+                                    onChange={(e) =>
+                                      updateMatchStatInput(
+                                        selectedMatch,
+                                        player,
+                                        field.key,
+                                        e.target.value
+                                      )
+                                    }
+                                    style={{ width: "70px" }}
+                                  />
+                                </td>
+                              ))}
+                              <td>
+                                {player.countPersonalStats ? "นับ" : "ไม่นับ"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    <div style={{ marginTop: "16px" }}>
+                      <button
+                        onClick={() => saveMatchStats(selectedMatch)}
+                        style={{ marginRight: "8px" }}
+                      >
+                        Save Match Stats
+                      </button>
+                      <button onClick={() => setSelectedStatsMatchId("")}>
+                        Close
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </details>
+        )}
+
+      {activeAdminMenu === "stats" && (
+        <div
+          style={{
+            ...adminAccordionStyle,
+            padding: "16px",
+            background: "#f8fafc",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>📊 Stats Center</h2>
+          <p style={{ color: "#555", marginBottom: 0 }}>
+            สรุปสถิติผู้เล่น MVP Ranking, Player Profile และ Stat Leaders
+            อยู่ในแท็บนี้ ส่วนการกรอกคะแนน/Match Roster ยังอยู่ใน 📅 Schedule
+          </p>
+          {getPlayerStatRows().length === 0 && (
+            <p style={{ marginBottom: 0 }}>
+              ยังไม่มีสถิติผู้เล่น ให้ไปที่ 📅 Schedule แล้วกด Enter Stats
+              ของแมตช์ก่อน
+            </p>
+          )}
+        </div>
+      )}
+
+      {getPlayerStatRows().length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "stats" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>📈 MVP Ranking</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>MVP Ranking</h2>
+            <p>
+              Formula: PTS + REB×1.2 + AST×1.5 + STL×2 + BLK×2 + Appearance
+              Bonus
+            </p>
+
+            <table border="1" cellPadding="8" cellSpacing="0">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Photo</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th>MVP Score</th>
+                  <th>Games</th>
+                  <th>Appear</th>
+                  <th>PTS</th>
+                  <th>REB</th>
+                  <th>AST</th>
+                  <th>STL</th>
+                  <th>BLK</th>
+                  <th>PPG</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {getMVPRanking()
+                  .slice(0, 10)
+                  .map((stat, index) => (
+                    <tr key={`mvp-${stat.playerId}`}>
+                      <td>{index + 1}</td>
+                      <td>
+                        {renderPlayerAvatar(
+                          getPlayerPhotoUrl(stat.playerId),
+                          38
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          onClick={() => {
+                            setSelectedProfilePlayerId(String(stat.playerId));
+                            setActiveAdminMenu("stats");
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          {stat.playerName}
+                        </button>
+                      </td>
+                      <td>{stat.teamName || "-"}</td>
+                      <td>{Number(stat.mvpScore || 0).toFixed(1)}</td>
+                      <td>{stat.games}</td>
+                      <td>{stat.appearances || 0}</td>
+                      <td>{stat.pts || 0}</td>
+                      <td>{stat.reb || 0}</td>
+                      <td>{stat.ast || 0}</td>
+                      <td>{stat.stl || 0}</td>
+                      <td>{stat.blk || 0}</td>
+                      <td>{stat.ppg}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      {activeAdminMenu === "seasonAwards" && (
+        <div
+          style={{
+            ...adminAccordionStyle,
+            padding: "16px",
+            background: "#fffdf5",
+            border: "1px solid #facc15",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>🏆 Awards Center</h2>
+          <p style={{ marginBottom: 0 }}>
+            Current Awards คือรางวัลของ Season ปัจจุบัน ส่วน Hall Of Fame
+            คือประวัติรางวัลจาก Season ที่ปิดแล้ว
+          </p>
+        </div>
+      )}
+
+      {getPlayerStatRows().length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "seasonAwards" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>🏆 Current Season Awards</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div
+            style={{
+              marginTop: "32px",
+              border: "2px solid #222",
+              borderRadius: "12px",
+              padding: "16px",
+              background: "#fffdf5",
+            }}
+          >
+            <h2>🏆 Current Season Awards</h2>
+            <p>
+              รางวัลของ Season ปัจจุบัน คำนวณจากผลการแข่งขัน Playoff
+              และสถิติผู้เล่น
+            </p>
+
+            {(() => {
+              const awards = getSeasonAwards();
+
+              const awardCards = [
+                {
+                  title: "MVP",
+                  icon: "🏆",
+                  content: renderAwardPlayer(
+                    awards.mvp,
+                    "MVP",
+                    awards.mvp
+                      ? Number(awards.mvp.mvpScore || 0).toFixed(1)
+                      : "-"
+                  ),
+                },
+                {
+                  title: "Scoring Champion",
+                  icon: "🔥",
+                  content: renderAwardPlayer(
+                    awards.topScorer,
+                    "PTS",
+                    awards.topScorer?.pts || 0
+                  ),
+                },
+                {
+                  title: "Rebound Leader",
+                  icon: "💪",
+                  content: renderAwardPlayer(
+                    awards.reboundLeader,
+                    "REB",
+                    awards.reboundLeader?.reb || 0
+                  ),
+                },
+                {
+                  title: "Assist Leader",
+                  icon: "🎯",
+                  content: renderAwardPlayer(
+                    awards.assistLeader,
+                    "AST",
+                    awards.assistLeader?.ast || 0
+                  ),
+                },
+                {
+                  title: "Steal Leader",
+                  icon: "⚡",
+                  content: renderAwardPlayer(
+                    awards.stealLeader,
+                    "STL",
+                    awards.stealLeader?.stl || 0
+                  ),
+                },
+                {
+                  title: "Block Leader",
+                  icon: "🧱",
+                  content: renderAwardPlayer(
+                    awards.blockLeader,
+                    "BLK",
+                    awards.blockLeader?.blk || 0
+                  ),
+                },
+              ];
+
+              return (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(260px, 1fr))",
+                      gap: "12px",
+                      marginBottom: "18px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        border: "1px solid #ddd",
+                        padding: "12px",
+                        background: "white",
+                      }}
+                    >
+                      <h3>🥇 Champion</h3>
+                      <div>
+                        {awards.champion !== "-"
+                          ? renderTeamWithLogo(awards.champion, 42)
+                          : "ยังไม่จบ Final"}
+                      </div>
+                      <p style={{ marginBottom: 0 }}>
+                        Final Score: {awards.finalScore}
+                      </p>
+                    </div>
+
+                    <div
+                      style={{
+                        border: "1px solid #ddd",
+                        padding: "12px",
+                        background: "white",
+                      }}
+                    >
+                      <h3>🥈 Runner Up</h3>
+                      <div>
+                        {awards.runnerUp !== "-"
+                          ? renderTeamWithLogo(awards.runnerUp, 42)
+                          : "ยังไม่จบ Final"}
+                      </div>
+                      <p style={{ marginBottom: 0 }}>
+                        Final Score: {awards.finalScore}
+                      </p>
+                    </div>
+
+                    <div
+                      style={{
+                        border: "1px solid #ddd",
+                        padding: "12px",
+                        background: "white",
+                      }}
+                    >
+                      <h3>🥉 Third Place</h3>
+                      <div>
+                        {awards.thirdPlace !== "-"
+                          ? renderTeamWithLogo(awards.thirdPlace, 42)
+                          : "ยังไม่จบ 3rd Place / หรือไม่มีรอบนี้"}
+                      </div>
+                      <p style={{ marginBottom: 0 }}>
+                        Score: {awards.thirdPlaceScore}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(260px, 1fr))",
+                      gap: "12px",
+                    }}
+                  >
+                    {awardCards.map((award) => (
+                      <div
+                        key={`season-award-${award.title}`}
+                        style={{
+                          border: "1px solid #ddd",
+                          padding: "12px",
+                          background: "white",
+                        }}
+                      >
+                        <h3>
+                          {award.icon} {award.title}
+                        </h3>
+                        <div>{award.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </details>
+      )}
+
+      <details
+        open
+        style={{
+          ...adminAccordionStyle,
+          display: activeAdminMenu === "seasonHistory" ? "block" : "none",
+        }}
+      >
+        <summary style={adminAccordionSummaryStyle}>
+          <span>🏛️ Season History</span>
+          <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+        </summary>
+        <div
+          style={{
+            marginTop: "32px",
+            border: "2px solid #1b5e20",
+            borderRadius: "12px",
+            padding: "16px",
+            background: "#f4fff4",
+          }}
+        >
+          <h2>🏛️ Season History</h2>
+          <p>
+            ประวัติ Champion / MVP / Top Scorer ที่บันทึกจากการกด Close Season
+          </p>
+
+          {seasonHistory.length === 0 ? (
+            <p>ยังไม่มี Season History</p>
+          ) : (
+            <>
+              <button
+                onClick={clearSeasonHistory}
+                style={{ marginBottom: "12px", color: "#d32f2f" }}
+              >
+                Clear Season History
+              </button>
+
+              {seasonHistory.map((season) => (
+                <div
+                  key={season.id}
+                  style={{
+                    border: "1px solid #c8e6c9",
+                    borderRadius: "10px",
+                    padding: "12px",
+                    marginBottom: "12px",
+                    background: "white",
+                  }}
+                >
+                  <h3>
+                    {season.projectName ||
+                      `${season.competitionType || "5X5"} Season ${
+                        season.season
+                      }`}
+                  </h3>
+                  <p style={{ marginTop: 0 }}>
+                    Type: {season.competitionType || "5X5"} | Season{" "}
+                    {season.season} | Closed: {season.closedAtText || "-"}
+                  </p>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      🏆 Champion: <strong>{season.champion || "-"}</strong>
+                    </div>
+                    <div>
+                      🥈 Runner Up: <strong>{season.runnerUp || "-"}</strong>
+                    </div>
+                    <div>
+                      🥉 Third Place:{" "}
+                      <strong>{season.thirdPlace || "-"}</strong>
+                    </div>
+                    <div>
+                      👑 MVP: <strong>{season.mvp || "-"}</strong>
+                    </div>
+                    <div>
+                      🔥 Top Scorer: <strong>{season.topScorer || "-"}</strong>{" "}
+                      ({season.topScorerPts || 0} PTS)
+                    </div>
+                    <div>
+                      💪 Rebound Leader:{" "}
+                      <strong>{season.reboundLeader || "-"}</strong> (
+                      {season.reboundLeaderReb || 0} REB)
+                    </div>
+                    <div>
+                      🎯 Assist Leader:{" "}
+                      <strong>{season.assistLeader || "-"}</strong> (
+                      {season.assistLeaderAst || 0} AST)
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button onClick={() => renameSeasonHistoryItem(season.id)}>
+                      Rename Project
+                    </button>
+
+                    <button onClick={() => exportSeasonHistoryItem(season)}>
+                      Export This Season
+                    </button>
+
+                    <button
+                      onClick={() => deleteSeasonHistoryItem(season.id)}
+                      style={{ color: "#d32f2f" }}
+                    >
+                      Delete Season Record
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </details>
+
+      <details
+        open
+        style={{
+          ...adminAccordionStyle,
+          display: activeAdminMenu === "seasonAwards" ? "block" : "none",
+        }}
+      >
+        <summary style={adminAccordionSummaryStyle}>
+          <span>🏛️ Hall Of Fame</span>
+          <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+        </summary>
+        <div
+          style={{
+            marginTop: "32px",
+            border: "2px solid #4a148c",
+            borderRadius: "12px",
+            padding: "16px",
+            background: "#fbf5ff",
+          }}
+        >
+          <h2>🏛️ Hall Of Fame</h2>
+          <p>
+            คลังรางวัลย้อนหลังจาก Season ที่กด Close Season แล้ว สามารถกรองแยก
+            3X3 / 5X5 ได้
+          </p>
+
+          <div style={{ marginBottom: "14px" }}>
+            <label style={{ marginRight: "8px", fontWeight: "bold" }}>
+              Filter:
+            </label>
+            <select
+              value={hallOfFameFilter}
+              onChange={(e) => setHallOfFameFilter(e.target.value)}
+            >
+              <option value="ALL">ALL</option>
+              <option value="3X3">3X3</option>
+              <option value="5X5">5X5</option>
+            </select>
+          </div>
+
+          {seasonHistory.length === 0 ? (
+            <p>ยังไม่มี Season History สำหรับสร้าง Hall Of Fame</p>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "12px",
+              }}
+            >
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>🏆 Champions</h3>
+                {renderHallOfFameList(hallOfFame.champions)}
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>🥈 Runner Up</h3>
+                {renderHallOfFameList(hallOfFame.runnerUps)}
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>🥉 Third Place</h3>
+                {renderHallOfFameList(hallOfFame.thirdPlaces)}
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>👑 MVP</h3>
+                {renderHallOfFameList(hallOfFame.mvps)}
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>🔥 Top Scorer</h3>
+                {renderHallOfFameList(hallOfFame.topScorers)}
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>💪 Rebound Leader</h3>
+                {renderHallOfFameList(hallOfFame.reboundLeaders)}
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>🎯 Assist Leader</h3>
+                {renderHallOfFameList(hallOfFame.assistLeaders)}
+              </div>
+            </div>
+          )}
+        </div>
+      </details>
+
+      {getPlayerStatRows().length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "stats" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>👤 Player Profile Card</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>Player Profile Card</h2>
+
+            <select
+              value={selectedProfilePlayerId}
+              onChange={(e) => setSelectedProfilePlayerId(e.target.value)}
+              style={{ marginBottom: "16px", marginRight: "8px" }}
+            >
+              <option value="">เลือกผู้เล่น</option>
+              {getPlayerStatRows()
+                .sort((a, b) =>
+                  String(a.playerName).localeCompare(String(b.playerName))
+                )
+                .map((stat) => (
+                  <option
+                    key={`profile-option-${stat.playerId}`}
+                    value={stat.playerId}
+                  >
+                    {stat.playerName}{" "}
+                    {stat.teamName ? `(${stat.teamName})` : ""}
+                  </option>
+                ))}
+            </select>
+
+            {selectedProfilePlayerId &&
+              getSelectedPlayerProfile() &&
+              (() => {
+                const profile = getSelectedPlayerProfile();
+                const matchLogs = getPlayerMatchLog(profile);
+
+                return (
+                  <div
+                    style={{
+                      border: "2px solid #222",
+                      padding: "16px",
+                      maxWidth: "980px",
+                      background: "#fafafa",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "16px",
+                      }}
+                    >
+                      {renderPlayerAvatar(
+                        getPlayerPhotoUrl(profile.playerId),
+                        96
+                      )}
+                      <div>
+                        <h3 style={{ marginBottom: "6px" }}>
+                          🏀 {profile.playerName}
+                        </h3>
+                        <div>
+                          {profile.teamName
+                            ? renderTeamWithLogo(profile.teamName, 40)
+                            : "-"}
+                        </div>
+                      </div>
+                    </div>
+                    <p>
+                      <strong>Team:</strong> {profile.teamName || "-"} |{" "}
+                      <strong>MVP Score:</strong>{" "}
+                      {Number(profile.mvpScore || 0).toFixed(1)}
+                    </p>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(110px, 1fr))",
+                        gap: "8px",
+                        marginBottom: "16px",
+                      }}
+                    >
+                      {[
+                        ["Games", profile.games || 0],
+                        ["Appear", profile.appearances || 0],
+                        ["PTS", profile.pts || 0],
+                        ["REB", profile.reb || 0],
+                        ["AST", profile.ast || 0],
+                        ["STL", profile.stl || 0],
+                        ["BLK", profile.blk || 0],
+                        ["PPG", profile.ppg || "0.0"],
+                      ].map(([label, value]) => (
+                        <div
+                          key={`profile-stat-${label}`}
+                          style={{
+                            border: "1px solid #ccc",
+                            padding: "8px",
+                            background: "white",
+                          }}
+                        >
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            {label}
+                          </div>
+                          <strong>{value}</strong>
+                        </div>
+                      ))}
+                    </div>
+
+                    <h4>Match Log</h4>
+                    {matchLogs.length === 0 ? (
+                      <p>ยังไม่มี Match Log</p>
+                    ) : (
+                      <table border="1" cellPadding="8" cellSpacing="0">
+                        <thead>
+                          <tr>
+                            <th>Week</th>
+                            <th>Round</th>
+                            <th>Opponent</th>
+                            <th>Status</th>
+                            <th>Score</th>
+                            <th>Result</th>
+                            <th>PTS</th>
+                            <th>REB</th>
+                            <th>AST</th>
+                            <th>STL</th>
+                            <th>BLK</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {matchLogs.map((log) => (
+                            <tr
+                              key={`profile-log-${profile.playerId}-${log.matchId}`}
+                            >
+                              <td>{log.week}</td>
+                              <td>{log.label}</td>
+                              <td>{log.opponent}</td>
+                              <td>{log.status}</td>
+                              <td>{log.score}</td>
+                              <td>{log.appearance ? "Played" : "DNP"}</td>
+                              <td>{log.appearance ? log.pts : "-"}</td>
+                              <td>{log.appearance ? log.reb : "-"}</td>
+                              <td>{log.appearance ? log.ast : "-"}</td>
+                              <td>{log.appearance ? log.stl : "-"}</td>
+                              <td>{log.appearance ? log.blk : "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                );
+              })()}
+          </div>
+        </details>
+      )}
+
+      {getPlayerStatRows().length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "stats" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>📊 Player Stat Leaders</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>Player Stat Leaders</h2>
+            <button onClick={clearPlayerStats} style={{ marginBottom: "12px" }}>
+              Clear Player Stats
+            </button>
+
+            {[
+              { title: "Top Scorer", field: "pts", label: "PTS" },
+              { title: "Top Rebound", field: "reb", label: "REB" },
+              { title: "Top Assist", field: "ast", label: "AST" },
+              { title: "Top Steal", field: "stl", label: "STL" },
+              { title: "Top Block", field: "blk", label: "BLK" },
+            ].map((board) => {
+              const leaders = getStatLeaders(board.field);
+
+              return (
+                <div key={board.field} style={{ marginBottom: "24px" }}>
+                  <h3>{board.title}</h3>
+
+                  {leaders.length === 0 ? (
+                    <p>ยังไม่มีข้อมูล {board.label}</p>
+                  ) : (
+                    <table border="1" cellPadding="8" cellSpacing="0">
+                      <thead>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Player</th>
+                          <th>Team</th>
+                          <th>Games</th>
+                          <th>Appear</th>
+                          <th>{board.label}</th>
+                          {board.field === "pts" && <th>PPG</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaders.map((stat, index) => (
+                          <tr key={`${board.field}-${stat.playerId}`}>
+                            <td>{index + 1}</td>
+                            <td>
+                              <button
+                                onClick={() => {
+                                  setSelectedProfilePlayerId(
+                                    String(stat.playerId)
+                                  );
+                                  setActiveAdminMenu("stats");
+                                }}
+                                style={{ cursor: "pointer" }}
+                              >
+                                {stat.playerName}
+                              </button>
+                            </td>
+                            <td>{stat.teamName || "-"}</td>
+                            <td>{stat.games}</td>
+                            <td>{stat.appearances || 0}</td>
+                            <td>{stat[board.field] || 0}</td>
+                            {board.field === "pts" && <td>{stat.ppg}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+
+      {standings.length > 0 && (
+        <details
+          open
+          style={{
+            ...adminAccordionStyle,
+            display: activeAdminMenu === "schedule" ? "block" : "none",
+          }}
+        >
+          <summary style={adminAccordionSummaryStyle}>
+            <span>📋 League Standings</span>
+            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+          </summary>
+          <div style={{ marginTop: "32px" }}>
+            <h2>League Standings</h2>
+
+            <table border="1" cellPadding="8" cellSpacing="0">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Logo</th>
+                  <th>Team</th>
+                  <th>P</th>
+                  <th>W</th>
+                  <th>L</th>
+                  <th>PF</th>
+                  <th>PA</th>
+                  <th>Diff</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {standings.map((row, index) => (
+                  <tr key={row.team}>
+                    <td>{index + 1}</td>
+                    <td>{renderTeamLogo(row.team, 34)}</td>
+                    <td>{row.team}</td>
+                    <td>{row.played}</td>
+                    <td>{row.win}</td>
+                    <td>{row.loss}</td>
+                    <td>{row.pf}</td>
+                    <td>{row.pa}</td>
+                    <td>{row.diff}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      <details
+        open
+        style={{
+          ...adminAccordionStyle,
+          display: activeAdminMenu === "teams" ? "block" : "none",
+        }}
+      >
+        <summary style={adminAccordionSummaryStyle}>
+          <span>🗂️ Saved Drafts</span>
+          <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
+        </summary>
+        <div style={{ marginTop: "32px" }}>
+          <h2>Draft History</h2>
+
+          {drafts.length > 0 && (
+            <button onClick={clearAllDrafts} style={{ marginBottom: "12px" }}>
+              Clear All Drafts
+            </button>
+          )}
+
+          {drafts.length === 0 ? (
+            <p>ยังไม่มี Draft ที่บันทึกไว้</p>
+          ) : (
+            drafts.map((draft) => (
+              <div
+                key={draft.id}
+                style={{
+                  border: "1px solid #ccc",
+                  padding: "12px",
+                  marginBottom: "10px",
+                }}
+              >
+                <strong>{draft.name}</strong>
+                <p>
+                  Balance: {draft.balanceScore}% | {draft.createdAt}
+                </p>
+
+                <button
+                  onClick={() => loadDraft(draft)}
+                  style={{ marginRight: "8px" }}
+                >
+                  Load
+                </button>
+
+                <button
+                  onClick={() => renameDraft(draft.id)}
+                  style={{ marginRight: "8px" }}
+                >
+                  Rename
+                </button>
+
+                <button onClick={() => deleteDraft(draft.id)}>Delete</button>
+              </div>
+            ))
+          )}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+export default Players;
