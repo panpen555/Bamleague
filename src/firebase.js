@@ -1,8 +1,9 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCbK9VmWQ9e-VuYY1vqpOLYHLtcy7yl3QI",
+  apiKey: "AIzaSyCbK9VmWQ9e-VuYY1vqpoLYHLtcy7y13QI",
   authDomain: "bam-league.firebaseapp.com",
   projectId: "bam-league",
   storageBucket: "bam-league.firebasestorage.app",
@@ -14,3 +15,4 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
+export const storage = getStorage(app);

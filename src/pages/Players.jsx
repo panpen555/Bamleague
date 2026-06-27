@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { db } from "../firebase";
-import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
+import CloudTools from "../components/cloud/CloudTools";
+
+import {
+  uploadPlayerPhoto,
+  uploadTeamLogo as uploadTeamLogoToCloud,
+} from "../storage";
+
+import {
+  uploadLeagueBackup,
+  downloadLeagueBackup,
+  clearLeagueBackup,
+} from "../services/cloud/backupService";
 
 function Players() {
   const validTiers = ["SSS+", "S+", "S-", "A+", "A-", "B+", "B-", "C"];
@@ -453,15 +463,27 @@ function Players() {
     reader.readAsDataURL(file);
   };
 
-  const handlePlayerPhotoUpload = (event) => {
+  const handlePlayerPhotoUpload = async (event) => {
     const file = event.target.files?.[0];
-    readImageAsDataUrl(file, (imageUrl) => {
+    if (!file) return;
+
+    try {
+      setCloudStatus("Uploading player photo...");
+      const imageUrl = await uploadPlayerPhoto(file, editingId || "new");
+
       setForm((prevForm) => ({
         ...prevForm,
         photoUrl: imageUrl,
       }));
-    });
-    event.target.value = "";
+
+      setCloudStatus("Saved");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "อัปโหลดรูปผู้เล่นไม่สำเร็จ");
+      setCloudStatus("Upload failed");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const handleNewRosterPhotoUpload = (event) => {
@@ -475,15 +497,27 @@ function Players() {
     event.target.value = "";
   };
 
-  const uploadTeamLogo = (teamName, event) => {
+  const uploadTeamLogo = async (teamName, event) => {
     const file = event.target.files?.[0];
-    readImageAsDataUrl(file, (imageUrl) => {
+    if (!file) return;
+
+    try {
+      setCloudStatus("Uploading team logo...");
+      const imageUrl = await uploadTeamLogoToCloud(file, teamName);
+
       setTeamLogos((prevLogos) => ({
         ...prevLogos,
         [teamName]: imageUrl,
       }));
-    });
-    event.target.value = "";
+
+      setCloudStatus("Saved");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "อัปโหลดโลโก้ทีมไม่สำเร็จ");
+      setCloudStatus("Upload failed");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const removeTeamLogo = (teamName) => {
@@ -494,10 +528,14 @@ function Players() {
     });
   };
 
-  const uploadExistingPlayerPhoto = (playerId, event) => {
+  const uploadExistingPlayerPhoto = async (playerId, event) => {
     const file = event.target.files?.[0];
+    if (!file) return;
 
-    readImageAsDataUrl(file, (imageUrl) => {
+    try {
+      setCloudStatus("Uploading player photo...");
+      const imageUrl = await uploadPlayerPhoto(file, playerId);
+
       setPlayers((prevPlayers) =>
         prevPlayers.map((player) =>
           player.id === playerId
@@ -524,9 +562,15 @@ function Players() {
           }))
         )
       );
-    });
 
-    event.target.value = "";
+      setCloudStatus("Saved");
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "อัปโหลดรูปผู้เล่นไม่สำเร็จ");
+      setCloudStatus("Upload failed");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const removeExistingPlayerPhoto = (playerId) => {
@@ -3011,25 +3055,14 @@ function Players() {
     if (!confirmUpload) return;
 
     try {
-      setCloudStatus("Uploading...");
-      const cloudData = {
-        app: "BAM_LEAGUE_SYSTEM",
-        version: "3.1.3",
-        updatedAt: new Date().toISOString(),
-        data: getAllBackupData(),
-      };
-
-      const safeCloudData = JSON.parse(JSON.stringify(cloudData));
-
-      await setDoc(doc(db, "bamLeague", "main"), safeCloudData);
+      setCloudStatus("Uploading.");
+      await uploadLeagueBackup(getAllBackupData());
       setCloudStatus("Cloud Uploaded");
       alert("Upload To Cloud สำเร็จ");
     } catch (error) {
       console.error("Upload To Cloud Error:", error);
       setCloudStatus("Cloud Error");
-      alert(
-        "Upload To Cloud ไม่สำเร็จ\n\nถ้ามีรูปผู้เล่น/โลโก้จำนวนมาก ไฟล์อาจใหญ่เกินขนาดที่ Firestore รับได้"
-      );
+      alert("Upload To Cloud ไม่สำเร็จ");
     }
   };
 
@@ -3041,16 +3074,16 @@ function Players() {
     if (!confirmDownload) return;
 
     try {
-      setCloudStatus("Downloading...");
-      const snap = await getDoc(doc(db, "bamLeague", "main"));
+      setCloudStatus("Downloading.");
+      const cloudData = await downloadLeagueBackup();
 
-      if (!snap.exists()) {
+      if (!cloudData) {
         setCloudStatus("No Cloud Data");
         alert("ยังไม่มีข้อมูล BAM League บน Cloud");
         return;
       }
 
-      restoreLeagueData(snap.data());
+      restoreLeagueData(cloudData);
       setCloudStatus("Cloud Downloaded");
       alert("Download From Cloud สำเร็จ");
     } catch (error) {
@@ -3062,27 +3095,26 @@ function Players() {
 
   const clearCloudData = async () => {
     const firstConfirm = window.confirm(
-      "ต้องการลบข้อมูลบน Cloud ใช่ไหม?\n\nระบบจะลบเฉพาะข้อมูลใน Firebase เท่านั้น และจะไม่ลบข้อมูลในเครื่องนี้"
+      "ต้องการลบข้อมูล BAM League บน Cloud ใช่ไหม?\n\nข้อมูลในเครื่องจะไม่ถูกลบ"
     );
 
     if (!firstConfirm) return;
 
     const secondConfirm = window.confirm(
-      "ยืนยันอีกครั้ง: ลบข้อมูล Cloud ที่ bamLeague/main ใช่ไหม?\n\nถ้าต้องการใช้ข้อมูลเดิมในเครื่องต่อ ห้ามกด Download From Cloud หลังลบ"
+      "ยืนยันอีกครั้ง: ข้อมูลบน Cloud จะถูกลบ และไม่สามารถกู้คืนจาก Cloud ได้ ต้องการดำเนินการต่อไหม?"
     );
 
     if (!secondConfirm) return;
 
     try {
-      await deleteDoc(doc(db, "bamLeague", "main"));
+      setCloudStatus("Clearing.");
+      await clearLeagueBackup();
       setCloudStatus("Cloud Cleared");
-      alert(
-        "ลบข้อมูลบน Cloud สำเร็จแล้ว\n\nข้อมูลใน LocalStorage / หน้าเว็บปัจจุบันยังอยู่เหมือนเดิม"
-      );
+      alert("ลบข้อมูลบน Cloud สำเร็จ");
     } catch (error) {
-      console.error("Clear Cloud Data Error:", error);
+      console.error("Clear Cloud Error:", error);
       setCloudStatus("Cloud Error");
-      alert("ลบข้อมูลบน Cloud ไม่สำเร็จ กรุณาตรวจสอบ Firebase / Firestore");
+      alert("ลบข้อมูลบน Cloud ไม่สำเร็จ");
     }
   };
 
@@ -5501,87 +5533,12 @@ function Players() {
               </label>
             </div>
 
-            <div
-              style={{
-                border: "1px solid #99f6e4",
-                borderRadius: "12px",
-                padding: "14px",
-                background: "#f0fdfa",
-              }}
-            >
-              <h3 style={{ marginTop: 0, color: "#0f766e" }}>
-                ☁️ Cloud Storage
-              </h3>
-              <p style={{ color: "#555", fontSize: "14px" }}>
-                Manual Cloud Mode: ต้องกด Upload เองเท่านั้น
-                เพื่อป้องกันการเขียนทับ Cloud โดยไม่ตั้งใจ
-              </p>
-
-              <div
-                style={{
-                  display: "inline-block",
-                  padding: "6px 10px",
-                  marginBottom: "10px",
-                  borderRadius: "999px",
-                  background: "#0f172a",
-                  color: "white",
-                  fontSize: "13px",
-                  fontWeight: "bold",
-                }}
-              >
-                ☁️ Status: {cloudStatus}
-              </div>
-
-              <button
-                onClick={uploadToCloud}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  marginBottom: "8px",
-                  background: "#2563eb",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                ☁️ Upload To Cloud
-              </button>
-
-              <button
-                onClick={downloadFromCloud}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  marginBottom: "8px",
-                  background: "#0f766e",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                ☁️ Download From Cloud
-              </button>
-
-              <button
-                onClick={clearCloudData}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  background: "#b91c1c",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                🗑️ Clear Cloud Data
-              </button>
-            </div>
+<CloudTools
+  cloudStatus={cloudStatus}
+  uploadToCloud={uploadToCloud}
+  downloadFromCloud={downloadFromCloud}
+  clearCloudData={clearCloudData}
+/>
 
             <div
               style={{
