@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import CloudTools from "../components/cloud/CloudTools";
+import BackupRestoreTools from "../components/cloud/BackupRestoreTools";
 
 import {
   uploadPlayerPhoto,
@@ -2912,12 +2913,19 @@ function Players() {
       type: "application/json;charset=utf-8;",
     });
 
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+
+    link.href = url;
     link.download = `bam-league-full-backup-${new Date()
       .toISOString()
       .slice(0, 10)}.json`;
+
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
   };
 
   const restoreLeagueData = (rawData) => {
@@ -5480,65 +5488,17 @@ function Players() {
               alignItems: "stretch",
             }}
           >
-            <div
-              style={{
-                border: "1px solid #bfdbfe",
-                borderRadius: "12px",
-                padding: "14px",
-                background: "#eff6ff",
-              }}
-            >
-              <h3 style={{ marginTop: 0, color: "#1d4ed8" }}>
-                💾 Backup & Restore
-              </h3>
-              <p style={{ color: "#555", fontSize: "14px" }}>
-                สำรองข้อมูลเป็นไฟล์ในเครื่อง ใช้ก่อนแก้โค้ดใหญ่ ก่อนย้ายข้อมูล
-                หรือก่อนลบข้อมูล
-              </p>
+            <BackupRestoreTools
+              exportAllData={exportLeagueBackup}
+              importLeagueBackup={importLeagueBackup}
+            />
 
-              <button
-                onClick={exportLeagueBackup}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  marginBottom: "10px",
-                  background: "#2563eb",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                💾 Export All Data
-              </button>
-
-              <label
-                style={{
-                  display: "block",
-                  padding: "10px",
-                  background: "white",
-                  border: "1px dashed #93c5fd",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                }}
-              >
-                <strong>📥 Import Backup File</strong>
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={importLeagueBackup}
-                  style={{ display: "block", marginTop: "8px", width: "100%" }}
-                />
-              </label>
-            </div>
-
-<CloudTools
-  cloudStatus={cloudStatus}
-  uploadToCloud={uploadToCloud}
-  downloadFromCloud={downloadFromCloud}
-  clearCloudData={clearCloudData}
-/>
+            <CloudTools
+              cloudStatus={cloudStatus}
+              uploadToCloud={uploadToCloud}
+              downloadFromCloud={downloadFromCloud}
+              clearCloudData={clearCloudData}
+            />
 
             <div
               style={{
