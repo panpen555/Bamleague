@@ -1,7 +1,9 @@
 import React from "react";
 
 function BackupRestoreTools({ exportAllData, importLeagueBackup }) {
-  const handleExport = () => {
+  const handleExport = (event) => {
+    event.preventDefault();
+
     if (typeof exportAllData !== "function") {
       alert("Export function ไม่ถูกส่งเข้ามา");
       return;
@@ -27,6 +29,7 @@ function BackupRestoreTools({ exportAllData, importLeagueBackup }) {
       </p>
 
       <button
+        type="button"
         onClick={handleExport}
         style={{
           width: "100%",
