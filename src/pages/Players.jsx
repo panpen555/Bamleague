@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import CloudTools from "../components/cloud/CloudTools";
 import BackupRestoreTools from "../components/cloud/BackupRestoreTools";
+import SeasonManagementTools from "../components/season/SeasonManagementTools";
+import DangerZoneTools from "../components/system/DangerZoneTools";
 
 import {
   uploadPlayerPhoto,
@@ -5500,120 +5502,13 @@ function Players() {
               clearCloudData={clearCloudData}
             />
 
-            <div
-              style={{
-                border: "1px solid #fed7aa",
-                borderRadius: "12px",
-                padding: "14px",
-                background: "#fff7ed",
-              }}
-            >
-              <h3 style={{ marginTop: 0, color: "#c2410c" }}>
-                🏀 Season Management
-              </h3>
-              <p style={{ color: "#555", fontSize: "14px" }}>
-                ใช้ปิดซีซั่น เก็บประวัติ และเริ่ม Season ใหม่
-                โดยไม่ลบรายชื่อผู้เล่น
-              </p>
+            <SeasonManagementTools
+              importSeasonHistory={importSeasonHistoryBackup}
+              closeCurrentSeason={closeSeason}
+              startNewSeason={clearCurrentProject}
+            />
 
-              <label
-                style={{
-                  display: "block",
-                  padding: "10px",
-                  marginBottom: "10px",
-                  background: "white",
-                  border: "1px dashed #fdba74",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                }}
-              >
-                <strong>📥 Import Season History</strong>
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={importSeasonHistoryBackup}
-                  style={{ display: "block", marginTop: "8px", width: "100%" }}
-                />
-              </label>
-
-              <button
-                onClick={closeSeason}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  marginBottom: "8px",
-                  background: "#2e7d32",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                🏁 Close Season
-              </button>
-
-              <button
-                onClick={clearCurrentProject}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  background: "#f59e0b",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                🟠 Start New Season
-              </button>
-
-              <p
-                style={{ marginBottom: 0, color: "#9a3412", fontSize: "13px" }}
-              >
-                ล้าง Teams, Schedule, Draft, Match Roster และ Stats แต่เก็บ
-                Players / Season History ไว้
-              </p>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid #fecaca",
-                borderRadius: "12px",
-                padding: "14px",
-                background: "#fef2f2",
-              }}
-            >
-              <h3 style={{ marginTop: 0, color: "#b91c1c" }}>⚠️ Danger Zone</h3>
-              <p style={{ color: "#7f1d1d", fontSize: "14px" }}>
-                ใช้เมื่อต้องการล้างข้อมูลทั้งหมดในเครื่องเพื่อเริ่มระบบใหม่ ควร
-                Export Backup ก่อนทุกครั้ง
-              </p>
-
-              <button
-                onClick={resetAllSystem}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  background: "#7f1d1d",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                🔴 Delete All League Data
-              </button>
-
-              <p
-                style={{ marginBottom: 0, color: "#991b1b", fontSize: "13px" }}
-              >
-                ลบ Players, Teams, Schedule, Stats, Season History และ
-                LocalStorage แต่ไม่ลบ Source Code
-              </p>
-            </div>
+            <DangerZoneTools resetAllSystem={resetAllSystem} />
           </div>
         </div>
       </details>
