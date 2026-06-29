@@ -58,6 +58,7 @@ TABLE OF CONTENTS
 25. Season History Manual Ordering
 26. Awards System V2
 27. Season History Editor V1
+28. Player Career Engine V1
 
 HIGH-RISK AREAS
 - Draft Engine: affects team generation balance.
@@ -3974,6 +3975,270 @@ function Players() {
         {items.map((item) => (
           <li key={item.name} style={{ marginBottom: "6px" }}>
             <strong>{item.name}</strong> x{item.count}
+          </li>
+        ))}
+      </ol>
+    );
+  };
+
+  // ======================================================
+  // 28. PLAYER CAREER ENGINE V1
+  // NOTE: BAM changes teams every year, so Career is player-first.
+  // Franchise History and Coach Career are intentionally excluded.
+  // Season History remains the source of truth; Career is rebuilt from it.
+  // ======================================================
+
+  const isValidAwardValue = (value) => {
+    const text = String(value || "").trim();
+    return text && text !== "-" && text.toLowerCase() !== "unknown";
+  };
+
+  const getCareerPlayerKey = (name) =>
+    String(name || "")
+      .trim()
+      .toLowerCase();
+
+  const getOrCreateCareerPlayer = (careerMap, playerName) => {
+    const name = String(playerName || "").trim();
+    if (!isValidAwardValue(name)) return null;
+
+    const key = getCareerPlayerKey(name);
+    if (!careerMap[key]) {
+      careerMap[key] = {
+        key,
+        playerName: name,
+        seasons: [],
+        awards: {
+          champion: { total: 0, "3X3": 0, "5X5": 0 },
+          regularSeasonMvp: { total: 0, "3X3": 0, "5X5": 0 },
+          finalsMvp: { total: 0, "3X3": 0, "5X5": 0 },
+          topScorer: { total: 0, "3X3": 0, "5X5": 0 },
+          reboundLeader: { total: 0, "3X3": 0, "5X5": 0 },
+          assistLeader: { total: 0, "3X3": 0, "5X5": 0 },
+        },
+        stats: {
+          games: 0,
+          appearances: 0,
+          pts: 0,
+          reb: 0,
+          ast: 0,
+          stl: 0,
+          blk: 0,
+        },
+        legacyScore: 0,
+      };
+    }
+
+    return careerMap[key];
+  };
+
+  const addCareerAward = (careerMap, playerName, awardKey, seasonRecord) => {
+    const player = getOrCreateCareerPlayer(careerMap, playerName);
+    if (!player || !player.awards[awardKey]) return;
+
+    const type = seasonRecord.competitionType === "3X3" ? "3X3" : "5X5";
+    const seasonTitle = getSeasonHistoryTitle(seasonRecord);
+
+    player.awards[awardKey].total += 1;
+    player.awards[awardKey][type] += 1;
+    player.seasons.push({
+      seasonId: seasonRecord.id,
+      seasonTitle,
+      competitionType: type,
+      season: seasonRecord.season || 1,
+      award: awardKey,
+    });
+  };
+
+  const addCareerStats = (careerMap, statRow, seasonRecord) => {
+    const playerName = statRow.playerName || statRow.name;
+    const player = getOrCreateCareerPlayer(careerMap, playerName);
+    if (!player) return;
+
+    player.stats.games += Number(statRow.games || 0);
+    player.stats.appearances += Number(statRow.appearances || 0);
+    player.stats.pts += Number(statRow.pts || 0);
+    player.stats.reb += Number(statRow.reb || 0);
+    player.stats.ast += Number(statRow.ast || 0);
+    player.stats.stl += Number(statRow.stl || 0);
+    player.stats.blk += Number(statRow.blk || 0);
+
+    const seasonTitle = getSeasonHistoryTitle(seasonRecord);
+    const type = seasonRecord.competitionType === "3X3" ? "3X3" : "5X5";
+    const alreadyLoggedStats = player.seasons.some(
+      (item) => item.seasonId === seasonRecord.id && item.award === "played"
+    );
+
+    if (!alreadyLoggedStats) {
+      player.seasons.push({
+        seasonId: seasonRecord.id,
+        seasonTitle,
+        competitionType: type,
+        season: seasonRecord.season || 1,
+        award: "played",
+      });
+    }
+  };
+
+  const buildPlayerCareerData = () => {
+    const filteredHistory =
+      hallOfFameFilter === "ALL"
+        ? seasonHistory
+        : seasonHistory.filter(
+            (season) => (season.competitionType || "5X5") === hallOfFameFilter
+          );
+
+    const careerMap = {};
+
+    filteredHistory.forEach((seasonRecord) => {
+      const regularSeasonMvp =
+        seasonRecord.regularSeasonMvp || seasonRecord.mvp;
+      const championTeam = seasonRecord.champion;
+      const archivedTeams = seasonRecord.archivedData?.teams || [];
+      const championRoster =
+        archivedTeams.find((team) => team.name === championTeam)?.players || [];
+      const archivedStats = Object.values(
+        seasonRecord.archivedData?.playerStats || {}
+      );
+
+      championRoster.forEach((player) => {
+        addCareerAward(careerMap, player.name, "champion", seasonRecord);
+      });
+
+      if (isValidAwardValue(regularSeasonMvp)) {
+        addCareerAward(
+          careerMap,
+          regularSeasonMvp,
+          "regularSeasonMvp",
+          seasonRecord
+        );
+      }
+
+      if (isValidAwardValue(seasonRecord.finalsMvp)) {
+        addCareerAward(
+          careerMap,
+          seasonRecord.finalsMvp,
+          "finalsMvp",
+          seasonRecord
+        );
+      }
+
+      if (isValidAwardValue(seasonRecord.topScorer)) {
+        addCareerAward(
+          careerMap,
+          seasonRecord.topScorer,
+          "topScorer",
+          seasonRecord
+        );
+      }
+
+      if (isValidAwardValue(seasonRecord.reboundLeader)) {
+        addCareerAward(
+          careerMap,
+          seasonRecord.reboundLeader,
+          "reboundLeader",
+          seasonRecord
+        );
+      }
+
+      if (isValidAwardValue(seasonRecord.assistLeader)) {
+        addCareerAward(
+          careerMap,
+          seasonRecord.assistLeader,
+          "assistLeader",
+          seasonRecord
+        );
+      }
+
+      archivedStats.forEach((statRow) => {
+        addCareerStats(careerMap, statRow, seasonRecord);
+      });
+    });
+
+    return Object.values(careerMap)
+      .map((career) => {
+        const awardScore =
+          career.awards.champion.total * 10 +
+          career.awards.regularSeasonMvp.total * 8 +
+          career.awards.finalsMvp.total * 8 +
+          career.awards.topScorer.total * 5 +
+          career.awards.reboundLeader.total * 3 +
+          career.awards.assistLeader.total * 3;
+        const statScore =
+          Number(career.stats.pts || 0) / 50 +
+          Number(career.stats.reb || 0) / 75 +
+          Number(career.stats.ast || 0) / 75 +
+          Number(career.stats.appearances || 0) * 0.4;
+        const ppg =
+          Number(career.stats.appearances || 0) > 0
+            ? (
+                Number(career.stats.pts || 0) / Number(career.stats.appearances)
+              ).toFixed(1)
+            : "0.0";
+
+        return {
+          ...career,
+          ppg,
+          totalAwards:
+            career.awards.champion.total +
+            career.awards.regularSeasonMvp.total +
+            career.awards.finalsMvp.total +
+            career.awards.topScorer.total +
+            career.awards.reboundLeader.total +
+            career.awards.assistLeader.total,
+          legacyScore: Number((awardScore + statScore).toFixed(1)),
+          seasonCount: new Set(career.seasons.map((item) => item.seasonId))
+            .size,
+        };
+      })
+      .sort((a, b) => {
+        if (b.legacyScore !== a.legacyScore)
+          return b.legacyScore - a.legacyScore;
+        if (b.totalAwards !== a.totalAwards)
+          return b.totalAwards - a.totalAwards;
+        return a.playerName.localeCompare(b.playerName);
+      });
+  };
+
+  const getCareerLeaderRows = (careerRows, field, limit = 5) =>
+    [...careerRows]
+      .sort((a, b) => {
+        const aValue = Number(a.stats?.[field] || 0);
+        const bValue = Number(b.stats?.[field] || 0);
+        if (bValue !== aValue) return bValue - aValue;
+        return b.legacyScore - a.legacyScore;
+      })
+      .filter((row) => Number(row.stats?.[field] || 0) > 0)
+      .slice(0, limit);
+
+  const renderCareerBadge = (icon, label, count) => (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        border: "1px solid #e2e8f0",
+        borderRadius: "999px",
+        padding: "4px 8px",
+        background: "#f8fafc",
+        fontSize: "12px",
+      }}
+    >
+      {icon} {label} x{count || 0}
+    </span>
+  );
+
+  const renderCareerLeaderList = (rows, field, suffix = "") => {
+    if (!rows || rows.length === 0) {
+      return <p style={{ color: "#777" }}>ยังไม่มีข้อมูลสะสม</p>;
+    }
+
+    return (
+      <ol style={{ margin: 0, paddingLeft: "20px" }}>
+        {rows.map((career) => (
+          <li key={`${field}-${career.key}`} style={{ marginBottom: "6px" }}>
+            <strong>{career.playerName}</strong> — {career.stats[field] || 0}
+            {suffix}
           </li>
         ))}
       </ol>
@@ -8816,6 +9081,157 @@ function Players() {
               <option value="5X5">5X5</option>
             </select>
           </div>
+
+          {seasonHistory.length > 0 &&
+            (() => {
+              const careerRows = buildPlayerCareerData();
+              const pointLeaders = getCareerLeaderRows(careerRows, "pts", 5);
+              const reboundLeaders = getCareerLeaderRows(careerRows, "reb", 5);
+              const assistLeaders = getCareerLeaderRows(careerRows, "ast", 5);
+
+              return (
+                <div
+                  style={{
+                    border: "2px solid #111827",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#ffffff",
+                    marginBottom: "18px",
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>🐐 Player Career Engine</h3>
+                  <p style={{ color: "#555", marginTop: 0 }}>
+                    ระบบนี้ยึด Player เป็นศูนย์กลาง เพราะ BAM
+                    มีการเปลี่ยนทีมทุกปี จึงตัด Franchise History และ Coach
+                    Career ออก แล้วใช้ Season History เป็น Source of Truth
+                    เพื่อสร้าง Career / Legacy / All-Time Leaders ใหม่อัตโนมัติ
+                  </p>
+
+                  {careerRows.length === 0 ? (
+                    <p>ยังไม่มีข้อมูล Career จาก Season History</p>
+                  ) : (
+                    <>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(240px, 1fr))",
+                          gap: "12px",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        {careerRows.slice(0, 6).map((career, index) => (
+                          <div
+                            key={`career-card-${career.key}`}
+                            style={{
+                              border: "1px solid #e5e7eb",
+                              borderRadius: "14px",
+                              padding: "12px",
+                              background: index === 0 ? "#fff7ed" : "#f8fafc",
+                            }}
+                          >
+                            <div style={{ fontSize: "12px", color: "#64748b" }}>
+                              GOAT Rank #{index + 1}
+                            </div>
+                            <h4 style={{ margin: "4px 0" }}>
+                              {index === 0 ? "👑 " : "🏀 "}
+                              {career.playerName}
+                            </h4>
+                            <div
+                              style={{
+                                fontSize: "24px",
+                                fontWeight: "800",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              Legacy {career.legacyScore}
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "6px",
+                                flexWrap: "wrap",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              {renderCareerBadge(
+                                "🏆",
+                                "Champion",
+                                career.awards.champion.total
+                              )}
+                              {renderCareerBadge(
+                                "👑",
+                                "Reg MVP",
+                                career.awards.regularSeasonMvp.total
+                              )}
+                              {renderCareerBadge(
+                                "🏅",
+                                "Finals MVP",
+                                career.awards.finalsMvp.total
+                              )}
+                              {renderCareerBadge(
+                                "🎯",
+                                "Top Scorer",
+                                career.awards.topScorer.total
+                              )}
+                            </div>
+                            <div style={{ color: "#475569", fontSize: "13px" }}>
+                              Seasons: {career.seasonCount} | Games:{" "}
+                              {career.stats.games} | PTS: {career.stats.pts} |
+                              PPG: {career.ppg}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(220px, 1fr))",
+                          gap: "12px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            border: "1px solid #e5e7eb",
+                            borderRadius: "12px",
+                            padding: "12px",
+                          }}
+                        >
+                          <h4>🔥 All-Time Points</h4>
+                          {renderCareerLeaderList(pointLeaders, "pts", " PTS")}
+                        </div>
+                        <div
+                          style={{
+                            border: "1px solid #e5e7eb",
+                            borderRadius: "12px",
+                            padding: "12px",
+                          }}
+                        >
+                          <h4>💪 All-Time Rebounds</h4>
+                          {renderCareerLeaderList(
+                            reboundLeaders,
+                            "reb",
+                            " REB"
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            border: "1px solid #e5e7eb",
+                            borderRadius: "12px",
+                            padding: "12px",
+                          }}
+                        >
+                          <h4>🎯 All-Time Assists</h4>
+                          {renderCareerLeaderList(assistLeaders, "ast", " AST")}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
           {seasonHistory.length === 0 ? (
             <p>ยังไม่มี Season History สำหรับสร้าง Hall Of Fame</p>
