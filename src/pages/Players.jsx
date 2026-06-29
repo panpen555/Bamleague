@@ -16,9 +16,67 @@ import {
   clearLeagueBackup,
 } from "../services/cloud/backupService";
 
+/*
+======================================================
+BAM LEAGUE SYSTEM - PLAYERS PAGE
+======================================================
+
+V1 FINAL REFACTOR NOTES
+- This file is intentionally kept as a single main page while CodeSandbox
+  limits creating many new files/folders.
+- UI widgets already extracted: CloudTools, BackupRestoreTools,
+  SeasonManagementTools, DangerZoneTools, PlayerImportExport.
+- Business logic is organized into numbered regions so future features
+  can be added safely without hunting across the whole file.
+- Do not change multiple high-risk systems in one update.
+
+TABLE OF CONTENTS
+01. Core Constants / Base Config
+02. State: League Setup
+03. State: Player Form / Player Management
+04. State: Match Roster / Match Stats
+05. State: Team Logos / Lock Groups
+06. State: Season / Dashboard / UI Mode
+07. Local Storage Sync
+08. League Setup Handlers
+09. Player Rating / Tier Helpers
+10. Media / Image Helpers
+11. Player CRUD Handlers
+12. CSV Import / Export Helpers
+13. Draft Engine Helpers
+14. Draft Actions
+15. Team Roster Management
+16. Draft Save / Load / Export
+17. Schedule / Match Results
+18. Match Roster Helpers
+19. Player Stats Engine
+20. Season Management
+21. Local Backup / Restore
+22. Cloud Backup / Restore
+23. Render: Public Dashboard
+24. Main Page Render
+25. Season History Manual Ordering
+26. Awards System V2
+27. Season History Editor V1
+
+HIGH-RISK AREAS
+- Draft Engine: affects team generation balance.
+- Match Roster: affects who plays and loan logic.
+- Player Stats Engine: affects season records and awards.
+- Season Management: affects historical data.
+
+SAFE FEATURE STRATEGY
+1. Export backup first.
+2. Change one area only.
+3. Run npm run build.
+4. Test the affected UI.
+5. Commit before moving on.
+======================================================
+*/
+
 function Players() {
   // ======================================================
-  // CORE CONSTANTS / BASE CONFIG
+  // 01. CORE CONSTANTS / BASE CONFIG
   // ======================================================
   const validTiers = ["SSS+", "S+", "S-", "A+", "A-", "B+", "B-", "C"];
   const validPositions = ["PG", "SG", "SF", "PF", "C"];
@@ -30,7 +88,7 @@ function Players() {
     );
 
   // ======================================================
-  // STATE: LEAGUE SETUP
+  // 02. STATE: LEAGUE SETUP
   // ======================================================
 
   const [teamCount, setTeamCount] = useState(() => {
@@ -71,7 +129,7 @@ function Players() {
   });
 
   // ======================================================
-  // STATE: PLAYER FORM / PLAYER MANAGEMENT
+  // 03. STATE: PLAYER FORM / PLAYER MANAGEMENT
   // ======================================================
 
   const [editingId, setEditingId] = useState(null);
@@ -109,7 +167,7 @@ function Players() {
   });
 
   // ======================================================
-  // STATE: MATCH ROSTER / MATCH STATS
+  // 04. STATE: MATCH ROSTER / MATCH STATS
   // ======================================================
 
   const [matchRosters, setMatchRosters] = useState(() => {
@@ -138,7 +196,7 @@ function Players() {
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState("");
 
   // ======================================================
-  // STATE: TEAM LOGOS / LOCK GROUPS
+  // 05. STATE: TEAM LOGOS / LOCK GROUPS
   // ======================================================
 
   const [teamLogos, setTeamLogos] = useState(() => {
@@ -155,7 +213,7 @@ function Players() {
   const [selectedLockPlayerIds, setSelectedLockPlayerIds] = useState([]);
 
   // ======================================================
-  // STATE: SEASON / DASHBOARD / UI MODE
+  // 06. STATE: SEASON / DASHBOARD / UI MODE
   // ======================================================
 
   const [seasonByType, setSeasonByType] = useState(() => {
@@ -211,9 +269,29 @@ function Players() {
   const [cloudStatus, setCloudStatus] = useState("Saved");
   const [activeAdminMenu, setActiveAdminMenu] = useState("players");
   const [expandedTeamDashboard, setExpandedTeamDashboard] = useState("");
+  const [selectedFinalsMvpId, setSelectedFinalsMvpId] = useState("");
+  const [editingSeasonHistoryId, setEditingSeasonHistoryId] = useState(null);
+  const [seasonHistoryEditForm, setSeasonHistoryEditForm] = useState({
+    projectName: "",
+    competitionType: "5X5",
+    season: 1,
+    closedAtText: "",
+    champion: "",
+    runnerUp: "",
+    thirdPlace: "",
+    regularSeasonMvp: "",
+    finalsMvp: "",
+    topScorer: "",
+    topScorerPts: 0,
+    reboundLeader: "",
+    reboundLeaderReb: 0,
+    assistLeader: "",
+    assistLeaderAst: 0,
+    notes: "",
+  });
 
   // ======================================================
-  // LOCAL STORAGE SYNC
+  // 07. LOCAL STORAGE SYNC
   // ======================================================
 
   useEffect(() => {
@@ -301,7 +379,7 @@ function Players() {
   }, []);
 
   // ======================================================
-  // LEAGUE SETUP HANDLERS
+  // 08. LEAGUE SETUP HANDLERS
   // ======================================================
 
   const handleTeamCountChange = (value) => {
@@ -341,6 +419,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
+    setSelectedFinalsMvpId("");
     setPlayers((prevPlayers) =>
       prevPlayers.map((player) => ({ ...player, teamName: "" }))
     );
@@ -380,6 +459,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
+    setSelectedFinalsMvpId("");
     setPlayers((prevPlayers) =>
       prevPlayers.map((player) => ({ ...player, teamName: "" }))
     );
@@ -442,7 +522,7 @@ function Players() {
   };
 
   // ======================================================
-  // PLAYER RATING / TIER HELPERS
+  // 09. PLAYER RATING / TIER HELPERS
   // ======================================================
 
   const clampSkill = (value) => Math.min(5, Math.max(1, Number(value || 3)));
@@ -484,7 +564,7 @@ function Players() {
     Number(player.rating || calculateRatingFromSkills(player));
 
   // ======================================================
-  // MEDIA / IMAGE HELPERS
+  // 10. MEDIA / IMAGE HELPERS
   // ======================================================
 
   const readImageAsDataUrl = (file, callback) => {
@@ -732,7 +812,7 @@ function Players() {
   );
 
   // ======================================================
-  // PLAYER CRUD HANDLERS
+  // 11. PLAYER CRUD HANDLERS
   // ======================================================
 
   const resetForm = () => {
@@ -874,7 +954,7 @@ function Players() {
   };
 
   // ======================================================
-  // CSV IMPORT / EXPORT HELPERS
+  // 12. CSV IMPORT / EXPORT HELPERS
   // NOTE: Keep this internal while CodeSandbox limits file creation.
   // Later migrate this region to src/services/csv/playerCsvService.js.
   // ======================================================
@@ -1014,7 +1094,7 @@ function Players() {
   };
 
   // ======================================================
-  // DRAFT ENGINE HELPERS
+  // 13. DRAFT ENGINE HELPERS
   // NOTE: Later migrate this region to src/services/draft/draftService.js.
   // ======================================================
 
@@ -1238,10 +1318,16 @@ function Players() {
   };
 
   // ======================================================
-  // DRAFT ACTIONS
+  // 14. DRAFT ACTIONS
   // ======================================================
 
   const generateTeams = () => {
+    // Draft Flow:
+    // 1) Filter available players and validate minimums.
+    // 2) Reset team names to neutral Team A/B/C... before drafting.
+    // 3) Place valid lock groups first.
+    // 4) Draft remaining players with rating, position, and elite-tier balance.
+    // 5) Build final team summaries and sync player teamName values.
     const availablePlayers = players.filter((p) => p.available);
 
     if (availablePlayers.length < teamCount) {
@@ -1372,7 +1458,7 @@ function Players() {
   };
 
   // ======================================================
-  // TEAM ROSTER MANAGEMENT
+  // 15. TEAM ROSTER MANAGEMENT
   // ======================================================
 
   const addExistingPlayerToTeam = () => {
@@ -1580,7 +1666,7 @@ function Players() {
   };
 
   // ======================================================
-  // DRAFT SAVE / LOAD / EXPORT
+  // 16. DRAFT SAVE / LOAD / EXPORT
   // ======================================================
 
   const getBalancePercent = () => {
@@ -1696,11 +1782,16 @@ function Players() {
   };
 
   // ======================================================
-  // SCHEDULE / MATCH RESULTS
+  // 17. SCHEDULE / MATCH RESULTS
   // NOTE: Later migrate this region to src/services/schedule/scheduleService.js.
   // ======================================================
 
   const createSchedule = () => {
+    // Schedule Flow:
+    // 1) Validate enough generated teams.
+    // 2) Build a round-robin league schedule.
+    // 3) Append playoff placeholders based on team count.
+    // 4) Reset selected roster/stat match to avoid stale selections.
     if (teams.length < 3) {
       alert("กรุณา Generate Teams อย่างน้อย 3 ทีมก่อน");
       return;
@@ -1903,7 +1994,7 @@ function Players() {
   };
 
   // ======================================================
-  // MATCH ROSTER HELPERS
+  // 18. MATCH ROSTER HELPERS
   // ======================================================
 
   const getTeamPlayers = (teamName) => {
@@ -2192,11 +2283,16 @@ function Players() {
   };
 
   // ======================================================
-  // PLAYER STATS ENGINE
+  // 19. PLAYER STATS ENGINE
   // NOTE: Later migrate this region to src/services/stats/playerStatsService.js.
   // ======================================================
 
   const saveMatchStats = (match) => {
+    // Stats Flow:
+    // 1) Build all eligible stat rows from match roster.
+    // 2) Count a game for every rostered team player.
+    // 3) Count appearances and box score only for regular players.
+    // 4) Loan players help the team but do not count personal stats.
     const rows = getAllStatRowsForMatch(match);
 
     if (rows.length === 0) {
@@ -2415,6 +2511,62 @@ function Players() {
       });
   };
 
+  const getRegularSeasonMvp = () => getMVPRanking()[0] || null;
+
+  const getFinalsMvpOptions = () => {
+    const statRows = getPlayerStatRows();
+    const statsByPlayerId = new Map(
+      statRows.map((stat) => [String(stat.playerId), stat])
+    );
+
+    const playerOptions = players.map((player) => {
+      const stat = statsByPlayerId.get(String(player.id));
+      return {
+        playerId: player.id,
+        playerName: player.name,
+        teamName: player.teamName || stat?.teamName || "",
+        mvpScore: Number(stat?.mvpScore || 0),
+        pts: Number(stat?.pts || 0),
+      };
+    });
+
+    const missingStatOptions = statRows
+      .filter(
+        (stat) =>
+          !playerOptions.some(
+            (player) => String(player.playerId) === String(stat.playerId)
+          )
+      )
+      .map((stat) => ({
+        playerId: stat.playerId,
+        playerName: stat.playerName,
+        teamName: stat.teamName || "",
+        mvpScore: Number(stat.mvpScore || 0),
+        pts: Number(stat.pts || 0),
+      }));
+
+    return [...playerOptions, ...missingStatOptions]
+      .filter((player) => player.playerName)
+      .sort((a, b) => {
+        const teamCompare = String(a.teamName || "").localeCompare(
+          String(b.teamName || "")
+        );
+        if (teamCompare !== 0) return teamCompare;
+        return String(a.playerName || "").localeCompare(
+          String(b.playerName || "")
+        );
+      });
+  };
+
+  const getSelectedFinalsMvp = () => {
+    if (!selectedFinalsMvpId) return null;
+    return (
+      getFinalsMvpOptions().find(
+        (player) => String(player.playerId) === String(selectedFinalsMvpId)
+      ) || null
+    );
+  };
+
   const getSelectedPlayerProfile = () => {
     if (!selectedProfilePlayerId) return null;
     return getPlayerStatRows().find(
@@ -2560,7 +2712,7 @@ function Players() {
   };
 
   // ======================================================
-  // SEASON MANAGEMENT
+  // 20. SEASON MANAGEMENT
   // NOTE: Later migrate this region to src/services/season/seasonService.js.
   // ======================================================
 
@@ -2598,9 +2750,25 @@ function Players() {
       thirdPlace: awards.thirdPlace || "-",
       finalScore: awards.finalScore || "-",
       thirdPlaceScore: awards.thirdPlaceScore || "-",
-      mvp: awards.mvp?.playerName || "-",
-      mvpTeam: awards.mvp?.teamName || "-",
-      mvpScore: Number(awards.mvp?.mvpScore || 0),
+      regularSeasonMvp: awards.regularSeasonMvp?.playerName || "-",
+      regularSeasonMvpTeam: awards.regularSeasonMvp?.teamName || "-",
+      regularSeasonMvpScore: Number(awards.regularSeasonMvp?.mvpScore || 0),
+      finalsMvp: awards.finalsMvp?.playerName || "-",
+      finalsMvpTeam: awards.finalsMvp?.teamName || "-",
+      finalsMvpPlayerId: awards.finalsMvp?.playerId || "",
+      finalsMvpAward: awards.finalsMvp
+        ? {
+            playerId: awards.finalsMvp.playerId,
+            playerName: awards.finalsMvp.playerName,
+            teamName: awards.finalsMvp.teamName || "",
+            season: currentSeason,
+            competitionType,
+          }
+        : null,
+      // Backward compatible fields. MVP now means Regular Season MVP.
+      mvp: awards.regularSeasonMvp?.playerName || "-",
+      mvpTeam: awards.regularSeasonMvp?.teamName || "-",
+      mvpScore: Number(awards.regularSeasonMvp?.mvpScore || 0),
       topScorer: awards.topScorer?.playerName || "-",
       topScorerTeam: awards.topScorer?.teamName || "-",
       topScorerPts: Number(awards.topScorer?.pts || 0),
@@ -2632,7 +2800,8 @@ function Players() {
       `ต้องการปิด ${projectName} ใช่ไหม?\n\n` +
         `Type/Season: ${competitionType} Season ${currentSeason}\n` +
         `Champion: ${seasonRecord.champion}\n` +
-        `MVP: ${seasonRecord.mvp}\n` +
+        `Regular Season MVP: ${seasonRecord.regularSeasonMvp}\n` +
+        `Finals MVP: ${seasonRecord.finalsMvp}\n` +
         `Top Scorer: ${seasonRecord.topScorer}\n\n` +
         "ระบบจะบันทึก Season History และล้างทีม/ตาราง/สถิติเพื่อเริ่ม Season ใหม่ โดยไม่ลบรายชื่อผู้เล่น รูปผู้เล่น และโลโก้ทีม"
     );
@@ -2658,6 +2827,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
+    setSelectedFinalsMvpId("");
     setPlayers((prevPlayers) =>
       prevPlayers.map((player) => ({ ...player, teamName: "" }))
     );
@@ -2698,6 +2868,237 @@ function Players() {
           ? { ...season, projectName: newName.trim() }
           : season
       )
+    );
+  };
+
+  const getSeasonHistoryTitle = (seasonRecord) =>
+    seasonRecord?.projectName ||
+    `${seasonRecord?.competitionType || "5X5"} Season ${
+      seasonRecord?.season || 1
+    }`;
+
+  const getSeasonHistoryEditDefault = (seasonRecord, key, fallback = "") => {
+    if (!seasonRecord) return fallback;
+
+    if (seasonRecord[key] !== undefined && seasonRecord[key] !== null) {
+      return seasonRecord[key];
+    }
+
+    return fallback;
+  };
+
+  const startEditSeasonHistoryItem = (seasonRecord) => {
+    if (!seasonRecord) return;
+
+    setEditingSeasonHistoryId(seasonRecord.id);
+    setSeasonHistoryEditForm({
+      projectName: getSeasonHistoryTitle(seasonRecord),
+      competitionType: seasonRecord.competitionType || "5X5",
+      season: Number(seasonRecord.season || 1),
+      closedAtText: getSeasonHistoryEditDefault(
+        seasonRecord,
+        "closedAtText",
+        ""
+      ),
+      champion: getSeasonHistoryEditDefault(seasonRecord, "champion", ""),
+      runnerUp: getSeasonHistoryEditDefault(seasonRecord, "runnerUp", ""),
+      thirdPlace: getSeasonHistoryEditDefault(seasonRecord, "thirdPlace", ""),
+      regularSeasonMvp: getSeasonHistoryEditDefault(
+        seasonRecord,
+        "regularSeasonMvp",
+        seasonRecord.mvp || ""
+      ),
+      finalsMvp: getSeasonHistoryEditDefault(seasonRecord, "finalsMvp", ""),
+      topScorer: getSeasonHistoryEditDefault(seasonRecord, "topScorer", ""),
+      topScorerPts: Number(seasonRecord.topScorerPts || 0),
+      reboundLeader: getSeasonHistoryEditDefault(
+        seasonRecord,
+        "reboundLeader",
+        ""
+      ),
+      reboundLeaderReb: Number(seasonRecord.reboundLeaderReb || 0),
+      assistLeader: getSeasonHistoryEditDefault(
+        seasonRecord,
+        "assistLeader",
+        ""
+      ),
+      assistLeaderAst: Number(seasonRecord.assistLeaderAst || 0),
+      notes: getSeasonHistoryEditDefault(seasonRecord, "notes", ""),
+    });
+  };
+
+  const cancelEditSeasonHistoryItem = () => {
+    setEditingSeasonHistoryId(null);
+    setSeasonHistoryEditForm({
+      projectName: "",
+      competitionType: "5X5",
+      season: 1,
+      closedAtText: "",
+      champion: "",
+      runnerUp: "",
+      thirdPlace: "",
+      regularSeasonMvp: "",
+      finalsMvp: "",
+      topScorer: "",
+      topScorerPts: 0,
+      reboundLeader: "",
+      reboundLeaderReb: 0,
+      assistLeader: "",
+      assistLeaderAst: 0,
+      notes: "",
+    });
+  };
+
+  const updateSeasonHistoryEditForm = (field, value) => {
+    setSeasonHistoryEditForm((prevForm) => ({
+      ...prevForm,
+      [field]: value,
+    }));
+  };
+
+  const saveSeasonHistoryEditForm = () => {
+    if (!editingSeasonHistoryId) return;
+
+    const projectName = seasonHistoryEditForm.projectName.trim();
+    const competitionType =
+      seasonHistoryEditForm.competitionType === "3X3" ? "3X3" : "5X5";
+    const seasonNumber = Number(seasonHistoryEditForm.season || 1);
+
+    if (!projectName) {
+      alert("กรุณากรอกชื่อ Season / Project");
+      return;
+    }
+
+    if (!Number.isFinite(seasonNumber) || seasonNumber < 1) {
+      alert("Season number ต้องเป็นตัวเลขตั้งแต่ 1 ขึ้นไป");
+      return;
+    }
+
+    setSeasonHistory((prevHistory) =>
+      prevHistory.map((seasonRecord) => {
+        if (seasonRecord.id !== editingSeasonHistoryId) return seasonRecord;
+
+        const regularSeasonMvp =
+          seasonHistoryEditForm.regularSeasonMvp.trim() || "-";
+        const finalsMvp = seasonHistoryEditForm.finalsMvp.trim() || "-";
+        const topScorer = seasonHistoryEditForm.topScorer.trim() || "-";
+
+        return {
+          ...seasonRecord,
+          projectName,
+          competitionType,
+          season: seasonNumber,
+          closedAtText: seasonHistoryEditForm.closedAtText.trim(),
+          champion: seasonHistoryEditForm.champion.trim() || "-",
+          runnerUp: seasonHistoryEditForm.runnerUp.trim() || "-",
+          thirdPlace: seasonHistoryEditForm.thirdPlace.trim() || "-",
+          regularSeasonMvp,
+          finalsMvp,
+          topScorer,
+          topScorerPts: Number(seasonHistoryEditForm.topScorerPts || 0),
+          reboundLeader: seasonHistoryEditForm.reboundLeader.trim() || "-",
+          reboundLeaderReb: Number(seasonHistoryEditForm.reboundLeaderReb || 0),
+          assistLeader: seasonHistoryEditForm.assistLeader.trim() || "-",
+          assistLeaderAst: Number(seasonHistoryEditForm.assistLeaderAst || 0),
+          notes: seasonHistoryEditForm.notes.trim(),
+          editedAt: new Date().toISOString(),
+          editedAtText: new Date().toLocaleString(),
+          // Backward compatible fields used by existing Hall of Fame widgets.
+          mvp: regularSeasonMvp,
+          finalsMvpAward:
+            finalsMvp && finalsMvp !== "-"
+              ? {
+                  ...(seasonRecord.finalsMvpAward || {}),
+                  playerName: finalsMvp,
+                  teamName: seasonRecord.finalsMvpTeam || "",
+                  season: seasonNumber,
+                  competitionType,
+                }
+              : null,
+        };
+      })
+    );
+
+    cancelEditSeasonHistoryItem();
+  };
+
+  const moveSeasonHistoryItem = (seasonId, direction) => {
+    setSeasonHistory((prevHistory) => {
+      const currentIndex = prevHistory.findIndex(
+        (season) => season.id === seasonId
+      );
+
+      if (currentIndex === -1) return prevHistory;
+
+      const targetIndex = currentIndex + direction;
+      if (targetIndex < 0 || targetIndex >= prevHistory.length) {
+        return prevHistory;
+      }
+
+      const updatedHistory = [...prevHistory];
+      [updatedHistory[currentIndex], updatedHistory[targetIndex]] = [
+        updatedHistory[targetIndex],
+        updatedHistory[currentIndex],
+      ];
+
+      return updatedHistory;
+    });
+  };
+
+  const moveSeasonHistoryToTop = (seasonId) => {
+    setSeasonHistory((prevHistory) => {
+      const currentIndex = prevHistory.findIndex(
+        (season) => season.id === seasonId
+      );
+
+      if (currentIndex <= 0) return prevHistory;
+
+      const updatedHistory = [...prevHistory];
+      const [selectedSeason] = updatedHistory.splice(currentIndex, 1);
+      return [selectedSeason, ...updatedHistory];
+    });
+  };
+
+  const moveSeasonHistoryToBottom = (seasonId) => {
+    setSeasonHistory((prevHistory) => {
+      const currentIndex = prevHistory.findIndex(
+        (season) => season.id === seasonId
+      );
+
+      if (currentIndex === -1 || currentIndex === prevHistory.length - 1) {
+        return prevHistory;
+      }
+
+      const updatedHistory = [...prevHistory];
+      const [selectedSeason] = updatedHistory.splice(currentIndex, 1);
+      return [...updatedHistory, selectedSeason];
+    });
+  };
+
+  const sortSeasonHistoryByCompetitionAndSeason = () => {
+    if (seasonHistory.length <= 1) return;
+
+    const confirmSort = window.confirm(
+      "ต้องการเรียง Season History ตามประเภทการแข่งขันและเลข Season ใช่ไหม?\n\n" +
+        "ลำดับปัจจุบันจะถูกเปลี่ยน แต่ยังสามารถเลื่อนรายการเองได้หลังจากนี้"
+    );
+
+    if (!confirmSort) return;
+
+    setSeasonHistory((prevHistory) =>
+      [...prevHistory].sort((a, b) => {
+        const typeA = a.competitionType || "5X5";
+        const typeB = b.competitionType || "5X5";
+
+        if (typeA !== typeB) return typeA.localeCompare(typeB);
+
+        const seasonA = Number(a.season || 0);
+        const seasonB = Number(b.season || 0);
+
+        if (seasonA !== seasonB) return seasonA - seasonB;
+
+        return String(a.closedAt || "").localeCompare(String(b.closedAt || ""));
+      })
     );
   };
 
@@ -2785,9 +3186,24 @@ function Players() {
       thirdPlace: sourceRecord?.thirdPlace || "-",
       finalScore: sourceRecord?.finalScore || "-",
       thirdPlaceScore: sourceRecord?.thirdPlaceScore || "-",
-      mvp: sourceRecord?.mvp || "-",
-      mvpTeam: sourceRecord?.mvpTeam || "-",
-      mvpScore: Number(sourceRecord?.mvpScore || 0),
+      regularSeasonMvp:
+        sourceRecord?.regularSeasonMvp || sourceRecord?.mvp || "-",
+      regularSeasonMvpTeam:
+        sourceRecord?.regularSeasonMvpTeam || sourceRecord?.mvpTeam || "-",
+      regularSeasonMvpScore: Number(
+        sourceRecord?.regularSeasonMvpScore || sourceRecord?.mvpScore || 0
+      ),
+      finalsMvp: sourceRecord?.finalsMvp || "-",
+      finalsMvpTeam: sourceRecord?.finalsMvpTeam || "-",
+      finalsMvpPlayerId: sourceRecord?.finalsMvpPlayerId || "",
+      finalsMvpAward: sourceRecord?.finalsMvpAward || null,
+      // Backward compatible fields. MVP means Regular Season MVP.
+      mvp: sourceRecord?.regularSeasonMvp || sourceRecord?.mvp || "-",
+      mvpTeam:
+        sourceRecord?.regularSeasonMvpTeam || sourceRecord?.mvpTeam || "-",
+      mvpScore: Number(
+        sourceRecord?.regularSeasonMvpScore || sourceRecord?.mvpScore || 0
+      ),
       topScorer: sourceRecord?.topScorer || "-",
       topScorerTeam: sourceRecord?.topScorerTeam || "-",
       topScorerPts: Number(sourceRecord?.topScorerPts || 0),
@@ -2971,7 +3387,7 @@ function Players() {
   };
 
   // ======================================================
-  // LOCAL BACKUP / RESTORE
+  // 21. LOCAL BACKUP / RESTORE
   // ======================================================
 
   const exportLeagueBackup = () => {
@@ -3129,7 +3545,7 @@ function Players() {
   };
 
   // ======================================================
-  // CLOUD BACKUP / RESTORE
+  // 22. CLOUD BACKUP / RESTORE
   // ======================================================
 
   const getAllBackupData = () => ({
@@ -3481,7 +3897,8 @@ function Players() {
   };
 
   const getSeasonAwards = () => {
-    const mvp = getMVPRanking()[0];
+    const regularSeasonMvp = getRegularSeasonMvp();
+    const finalsMvp = getSelectedFinalsMvp();
     const topScorer = getStatLeaders("pts")[0];
     const reboundLeader = getStatLeaders("reb")[0];
     const assistLeader = getStatLeaders("ast")[0];
@@ -3491,7 +3908,10 @@ function Players() {
 
     return {
       ...teamAwards,
-      mvp,
+      regularSeasonMvp,
+      finalsMvp,
+      // Backward compatible alias for old MVP displays/exports.
+      mvp: regularSeasonMvp,
       topScorer,
       reboundLeader,
       assistLeader,
@@ -3513,11 +3933,12 @@ function Players() {
             (season) => (season.competitionType || "5X5") === hallOfFameFilter
           );
 
-    const countMap = (field) => {
+    const countMap = (field, fallbackField = "") => {
       const result = {};
 
       filteredHistory.forEach((season) => {
-        const value = season[field];
+        const value =
+          season[field] || (fallbackField ? season[fallbackField] : "");
         if (!isValidValue(value)) return;
         result[value] = (result[value] || 0) + 1;
       });
@@ -3534,7 +3955,9 @@ function Players() {
       champions: countMap("champion"),
       runnerUps: countMap("runnerUp"),
       thirdPlaces: countMap("thirdPlace"),
-      mvps: countMap("mvp"),
+      regularSeasonMvps: countMap("regularSeasonMvp", "mvp"),
+      finalsMvps: countMap("finalsMvp"),
+      mvps: countMap("regularSeasonMvp", "mvp"),
       topScorers: countMap("topScorer"),
       reboundLeaders: countMap("reboundLeader"),
       assistLeaders: countMap("assistLeader"),
@@ -3647,7 +4070,7 @@ function Players() {
   );
 
   // ======================================================
-  // RENDER: PUBLIC DASHBOARD
+  // 23. RENDER: PUBLIC DASHBOARD
   // ======================================================
 
   const renderPublicDashboard = () => {
@@ -3799,6 +4222,8 @@ function Players() {
     const getDashboardPlayerCareerAwards = (playerName) => {
       const result = {
         champion: { "3X3": 0, "5X5": 0 },
+        regularSeasonMvp: { "3X3": 0, "5X5": 0 },
+        finalsMvp: { "3X3": 0, "5X5": 0 },
         mvp: { "3X3": 0, "5X5": 0 },
         topScorer: { "3X3": 0, "5X5": 0 },
       };
@@ -3806,8 +4231,13 @@ function Players() {
       seasonHistory.forEach((season) => {
         const type = season.competitionType === "3X3" ? "3X3" : "5X5";
 
-        if (season.mvp === playerName) {
+        if ((season.regularSeasonMvp || season.mvp) === playerName) {
+          result.regularSeasonMvp[type] += 1;
           result.mvp[type] += 1;
+        }
+
+        if (season.finalsMvp === playerName) {
+          result.finalsMvp[type] += 1;
         }
 
         if (season.topScorer === playerName) {
@@ -3923,7 +4353,15 @@ function Players() {
           champion: selectedHistorySeason?.champion || "-",
           runnerUp: selectedHistorySeason?.runnerUp || "-",
           thirdPlace: selectedHistorySeason?.thirdPlace || "-",
-          mvp: selectedHistorySeason?.mvp || "-",
+          regularSeasonMvp:
+            selectedHistorySeason?.regularSeasonMvp ||
+            selectedHistorySeason?.mvp ||
+            "-",
+          finalsMvp: selectedHistorySeason?.finalsMvp || "-",
+          mvp:
+            selectedHistorySeason?.regularSeasonMvp ||
+            selectedHistorySeason?.mvp ||
+            "-",
           topScorer: selectedHistorySeason?.topScorer || "-",
           reboundLeader: dashboardReboundLeader?.playerName || "-",
           assistLeader: dashboardAssistLeader?.playerName || "-",
@@ -3936,7 +4374,9 @@ function Players() {
           champion: currentAwards.champion || "-",
           runnerUp: currentAwards.runnerUp || "-",
           thirdPlace: currentAwards.thirdPlace || "-",
-          mvp: currentAwards.mvp?.playerName || "-",
+          regularSeasonMvp: currentAwards.regularSeasonMvp?.playerName || "-",
+          finalsMvp: currentAwards.finalsMvp?.playerName || "-",
+          mvp: currentAwards.regularSeasonMvp?.playerName || "-",
           topScorer: currentAwards.topScorer?.playerName || "-",
           reboundLeader: currentAwards.reboundLeader?.playerName || "-",
           assistLeader: currentAwards.assistLeader?.playerName || "-",
@@ -3950,7 +4390,8 @@ function Players() {
       ["🏆", "Champion", dashboardAwards.champion],
       ["🥈", "Runner Up", dashboardAwards.runnerUp],
       ["🥉", "3rd Place", dashboardAwards.thirdPlace],
-      ["👑", "MVP", dashboardAwards.mvp],
+      ["👑", "Regular Season MVP", dashboardAwards.regularSeasonMvp],
+      ["🏅", "Finals MVP", dashboardAwards.finalsMvp],
       ["🎯", "Top Scorer", dashboardAwards.topScorer],
       [
         "💪",
@@ -3989,12 +4430,8 @@ function Players() {
       },
       ...seasonHistory.map((season) => ({
         id: String(season.id),
-        label:
-          season.projectName ||
-          `${season.competitionType || "5X5"} Season ${season.season || 1}`,
-        projectName:
-          season.projectName ||
-          `${season.competitionType || "5X5"} Season ${season.season || 1}`,
+        label: getSeasonHistoryTitle(season),
+        projectName: getSeasonHistoryTitle(season),
         competitionType: season.competitionType || "5X5",
         season: season.season || 1,
         champion: season.champion || "-",
@@ -5301,7 +5738,16 @@ function Players() {
                         "Champion",
                         careerAwards.champion
                       )}
-                      {renderSplitAwardCard("👑", "MVP", careerAwards.mvp)}
+                      {renderSplitAwardCard(
+                        "👑",
+                        "Regular MVP",
+                        careerAwards.regularSeasonMvp || careerAwards.mvp
+                      )}
+                      {renderSplitAwardCard(
+                        "🏅",
+                        "Finals MVP",
+                        careerAwards.finalsMvp
+                      )}
                       {renderSplitAwardCard(
                         "🎯",
                         "Top Scorer",
@@ -5438,46 +5884,176 @@ function Players() {
   };
 
   const adminTabs = [
-    { key: "systemTools", label: "⚙️ System Tools" },
-    { key: "leagueSettings", label: "⚙️ League Settings" },
-    { key: "players", label: "👤 Players" },
-    { key: "teams", label: "🏀 Teams" },
-    { key: "leagueManagement", label: "🏀 League" },
-    { key: "schedule", label: "📅 Schedule" },
-    { key: "stats", label: "📊 Stats" },
-    { key: "seasonAwards", label: "🏆 Awards / HOF" },
-    { key: "seasonHistory", label: "🏛️ History" },
-    { key: "draftHistory", label: "🗂️ Drafts" },
+    {
+      key: "systemTools",
+      label: "⚙️ System Tools",
+      shortLabel: "System",
+      description: "Backup, Cloud, Season และ Danger Zone สำหรับผู้ดูแลระบบ",
+    },
+    {
+      key: "leagueSettings",
+      label: "⚙️ League Settings",
+      shortLabel: "Settings",
+      description:
+        "ตั้งค่าประเภทการแข่งขัน จำนวนทีม ชื่อทีม โลโก้ และ Lock Group",
+    },
+    {
+      key: "players",
+      label: "👤 Players",
+      shortLabel: "Players",
+      description: "จัดการฐานข้อมูลผู้เล่น เพิ่ม แก้ไข ลบ Import และ Export",
+    },
+    {
+      key: "teams",
+      label: "🏀 Teams",
+      shortLabel: "Teams",
+      description: "Generate Teams, จัดการรายชื่อทีม และย้ายผู้เล่นระหว่างทีม",
+    },
+    {
+      key: "leagueManagement",
+      label: "🏀 League",
+      shortLabel: "League",
+      description: "สร้างลีก จัดตาราง Playoff และบันทึกผลการแข่งขัน",
+    },
+    {
+      key: "schedule",
+      label: "📅 Schedule",
+      shortLabel: "Schedule",
+      description: "ดูโปรแกรมแข่ง จัดการ Match Roster และบันทึกสถิติรายแมตช์",
+    },
+    {
+      key: "stats",
+      label: "📊 Stats",
+      shortLabel: "Stats",
+      description: "สถิติผู้เล่น ตารางคะแนน MVP Score และผู้นำสถิติ",
+    },
+    {
+      key: "seasonAwards",
+      label: "🏆 Awards / HOF",
+      shortLabel: "Awards",
+      description: "รางวัลประจำซีซัน Hall of Fame และสรุปผู้เล่นเด่น",
+    },
+    {
+      key: "seasonHistory",
+      label: "🏛️ History",
+      shortLabel: "History",
+      description: "ดูประวัติซีซันเก่าและข้อมูลที่ปิดซีซันไปแล้ว",
+    },
+    {
+      key: "draftHistory",
+      label: "🗂️ Drafts",
+      shortLabel: "Drafts",
+      description: "บันทึก โหลด เปลี่ยนชื่อ และลบ Draft ที่เคยสุ่มไว้",
+    },
   ];
+
+  const activeAdminTab =
+    adminTabs.find((tab) => tab.key === activeAdminMenu) || adminTabs[0];
+
+  const finishedMatchesCount = schedule.filter(
+    (match) => match.status === "Finished"
+  ).length;
+
+  const adminPageShellStyle = {
+    minHeight: "100vh",
+    padding: "24px",
+    fontFamily: "Arial",
+    background: "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)",
+  };
+
+  const adminHeroStyle = {
+    border: "1px solid #e5e7eb",
+    borderRadius: "22px",
+    padding: "22px",
+    marginBottom: "18px",
+    background:
+      "linear-gradient(135deg, #111827 0%, #1f2937 55%, #0f172a 100%)",
+    color: "white",
+    boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
+  };
+
+  const adminHeroTopStyle = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "18px",
+    flexWrap: "wrap",
+  };
+
+  const adminStatusPillStyle = {
+    padding: "8px 12px",
+    borderRadius: "999px",
+    background: "rgba(255,255,255,0.12)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    color: "white",
+    display: "inline-block",
+    fontWeight: "bold",
+    fontSize: "13px",
+  };
+
+  const adminHeroActionStyle = {
+    background: "white",
+    color: "#111827",
+    border: "none",
+    borderRadius: "10px",
+    padding: "11px 14px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    boxShadow: "0 8px 18px rgba(0,0,0,0.18)",
+  };
+
+  const adminKpiGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: "10px",
+    marginTop: "18px",
+  };
+
+  const adminKpiCardStyle = {
+    padding: "12px",
+    borderRadius: "14px",
+    background: "rgba(255,255,255,0.10)",
+    border: "1px solid rgba(255,255,255,0.14)",
+  };
 
   const adminTabBarStyle = {
     position: "sticky",
     top: 0,
     zIndex: 1000,
-    background: "rgba(255,255,255,0.96)",
-    backdropFilter: "blur(8px)",
+    background: "rgba(255,255,255,0.97)",
+    backdropFilter: "blur(10px)",
     border: "1px solid #e5e7eb",
-    borderRadius: "16px",
+    borderRadius: "18px",
     padding: "10px",
     margin: "0 0 18px",
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
     gap: "8px",
-    overflowX: "auto",
-    boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+    boxShadow: "0 10px 28px rgba(15,23,42,0.10)",
   };
 
   const adminTabButtonStyle = (key) => ({
-    flex: "0 0 auto",
-    border: "1px solid " + (activeAdminMenu === key ? "#111" : "#e5e7eb"),
-    borderRadius: "999px",
-    padding: "10px 14px",
-    background: activeAdminMenu === key ? "#111" : "#f9fafb",
-    color: activeAdminMenu === key ? "white" : "#111",
+    border: "1px solid " + (activeAdminMenu === key ? "#111827" : "#e5e7eb"),
+    borderRadius: "14px",
+    padding: "11px 12px",
+    background: activeAdminMenu === key ? "#111827" : "#f9fafb",
+    color: activeAdminMenu === key ? "white" : "#111827",
     fontWeight: "bold",
     cursor: "pointer",
     whiteSpace: "nowrap",
-    boxShadow: activeAdminMenu === key ? "0 4px 12px rgba(0,0,0,0.18)" : "none",
+    textAlign: "left",
+    boxShadow:
+      activeAdminMenu === key ? "0 8px 18px rgba(17,24,39,0.22)" : "none",
   });
+
+  const adminSectionIntroStyle = {
+    border: "1px solid #e5e7eb",
+    borderRadius: "18px",
+    padding: "16px",
+    marginBottom: "14px",
+    background: "white",
+    boxShadow: "0 8px 22px rgba(15,23,42,0.06)",
+  };
 
   if (viewMode === "PUBLIC") {
     return (
@@ -5501,48 +6077,87 @@ function Players() {
   }
 
   // ======================================================
-  // MAIN PAGE RENDER
+  // 24. MAIN PAGE RENDER
   // ======================================================
 
   return (
-    <div style={{ padding: "24px", fontFamily: "Arial" }}>
-      <h1>BAM Team Generator</h1>
+    <div style={adminPageShellStyle}>
+      <div style={adminHeroStyle}>
+        <div style={adminHeroTopStyle}>
+          <div>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: "bold",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#cbd5e1",
+                marginBottom: "8px",
+              }}
+            >
+              Admin Portal
+            </div>
+            <h1 style={{ margin: 0, fontSize: "34px" }}>
+              🏀 BAM League Manager
+            </h1>
+            <p style={{ margin: "8px 0 0", color: "#cbd5e1" }}>
+              {getCurrentSeasonTitle()} · {competitionType} Season{" "}
+              {currentSeason}
+            </p>
+          </div>
 
-      <div
-        style={{
-          padding: "6px 12px",
-          borderRadius: "8px",
-          background: "#222",
-          color: "#fff",
-          display: "inline-block",
-          marginBottom: "10px",
-        }}
-      >
-        ☁️ Cloud: {cloudStatus}
+          <div style={{ textAlign: "right" }}>
+            <div style={adminStatusPillStyle}>☁️ Cloud: {cloudStatus}</div>
+            <br />
+            <button
+              type="button"
+              onClick={() => setViewMode("PUBLIC")}
+              style={{ ...adminHeroActionStyle, marginTop: "12px" }}
+            >
+              👀 Open League Portal
+            </button>
+          </div>
+        </div>
+
+        <div style={adminKpiGridStyle}>
+          <div style={adminKpiCardStyle}>
+            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Teams</div>
+            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
+              {teams.length}
+            </div>
+            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
+              {teamCount} team setting
+            </div>
+          </div>
+          <div style={adminKpiCardStyle}>
+            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Players</div>
+            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
+              {players.length}
+            </div>
+            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
+              {players.filter((player) => player.available).length} available
+            </div>
+          </div>
+          <div style={adminKpiCardStyle}>
+            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Matches</div>
+            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
+              {finishedMatchesCount}/{schedule.length}
+            </div>
+            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
+              Finished / Total
+            </div>
+          </div>
+          <div style={adminKpiCardStyle}>
+            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Drafts</div>
+            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
+              {drafts.length}
+            </div>
+            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
+              Saved versions
+            </div>
+          </div>
+        </div>
       </div>
-
-      <h2 style={{ marginTop: 0 }}>
-        {competitionType} Season {currentSeason}
-      </h2>
-      <p style={{ marginTop: "-8px", color: "#555" }}>
-        {competitionType} Season {currentSeason}
-      </p>
-
-      <button
-        onClick={() => setViewMode("PUBLIC")}
-        style={{
-          marginBottom: "16px",
-          background: "#111",
-          color: "white",
-          border: "none",
-          borderRadius: "8px",
-          padding: "10px 14px",
-          cursor: "pointer",
-          fontWeight: "bold",
-        }}
-      >
-        👀 Open Public Dashboard
-      </button>
 
       <div style={adminTabBarStyle}>
         {adminTabs.map((tab) => (
@@ -5551,10 +6166,21 @@ function Players() {
             type="button"
             onClick={() => setActiveAdminMenu(tab.key)}
             style={adminTabButtonStyle(tab.key)}
+            title={tab.description}
           >
             {tab.label}
           </button>
         ))}
+      </div>
+
+      <div style={adminSectionIntroStyle}>
+        <div style={{ fontSize: "13px", color: "#64748b", fontWeight: "bold" }}>
+          Current Module
+        </div>
+        <h2 style={{ margin: "4px 0" }}>{activeAdminTab.label}</h2>
+        <p style={{ margin: 0, color: "#475569" }}>
+          {activeAdminTab.description}
+        </p>
       </div>
 
       <details
@@ -7463,19 +8089,60 @@ function Players() {
               และสถิติผู้เล่น
             </p>
 
+            <div
+              style={{
+                border: "1px solid #facc15",
+                borderRadius: "12px",
+                padding: "12px",
+                marginBottom: "14px",
+                background: "#fffbeb",
+              }}
+            >
+              <h3 style={{ marginTop: 0 }}>🏅 Finals MVP</h3>
+              <p style={{ marginTop: 0, color: "#555" }}>
+                Regular Season MVP ใช้ Logic MVP Score เดิม ส่วน Finals MVP ให้
+                Admin เลือกเองเพื่อสะท้อน Impact ในเกม Final
+              </p>
+              <select
+                value={selectedFinalsMvpId}
+                onChange={(event) => setSelectedFinalsMvpId(event.target.value)}
+                style={{ width: "100%", maxWidth: "420px", padding: "8px" }}
+              >
+                <option value="">-- เลือก Finals MVP --</option>
+                {getFinalsMvpOptions().map((player) => (
+                  <option
+                    key={`finals-mvp-option-${player.playerId}`}
+                    value={player.playerId}
+                  >
+                    {player.playerName}
+                    {player.teamName ? ` (${player.teamName})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {(() => {
               const awards = getSeasonAwards();
 
               const awardCards = [
                 {
-                  title: "MVP",
-                  icon: "🏆",
+                  title: "Regular Season MVP",
+                  icon: "👑",
                   content: renderAwardPlayer(
-                    awards.mvp,
-                    "MVP",
-                    awards.mvp
-                      ? Number(awards.mvp.mvpScore || 0).toFixed(1)
+                    awards.regularSeasonMvp,
+                    "MVP Score",
+                    awards.regularSeasonMvp
+                      ? Number(awards.regularSeasonMvp.mvpScore || 0).toFixed(1)
                       : "-"
+                  ),
+                },
+                {
+                  title: "Finals MVP",
+                  icon: "🏅",
+                  content: awards.finalsMvp ? (
+                    renderAwardPlayer(awards.finalsMvp, "Manual", "Selected")
+                  ) : (
+                    <span>ยังไม่ได้เลือก</span>
                   ),
                 },
                 {
@@ -7644,21 +8311,45 @@ function Players() {
         >
           <h2>🏛️ Season History</h2>
           <p>
-            ประวัติ Champion / MVP / Top Scorer ที่บันทึกจากการกด Close Season
+            ประวัติ Champion / Regular MVP / Finals MVP / Top Scorer
+            ที่บันทึกจากการกด Close Season
           </p>
 
           {seasonHistory.length === 0 ? (
             <p>ยังไม่มี Season History</p>
           ) : (
             <>
-              <button
-                onClick={clearSeasonHistory}
-                style={{ marginBottom: "12px", color: "#d32f2f" }}
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  marginBottom: "12px",
+                }}
               >
-                Clear Season History
-              </button>
+                <button
+                  onClick={sortSeasonHistoryByCompetitionAndSeason}
+                  style={{ color: "#1d4ed8" }}
+                >
+                  Sort by Type / Season
+                </button>
 
-              {seasonHistory.map((season) => (
+                <button
+                  onClick={clearSeasonHistory}
+                  style={{ color: "#d32f2f" }}
+                >
+                  Clear Season History
+                </button>
+              </div>
+
+              <p style={{ color: "#555", fontSize: "13px", marginTop: 0 }}>
+                จัดลำดับ Season ได้เองด้วยปุ่ม Top / Up / Down / Bottom
+                ลำดับนี้จะถูกใช้ทั้งใน Admin, Public Dashboard และรายการเลือก
+                Season
+              </p>
+
+              {seasonHistory.map((season, index) => (
                 <div
                   key={season.id}
                   style={{
@@ -7669,11 +8360,28 @@ function Players() {
                     background: "white",
                   }}
                 >
-                  <h3>
-                    {season.projectName ||
-                      `${season.competitionType || "5X5"} Season ${
-                        season.season
-                      }`}
+                  <h3
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span>{getSeasonHistoryTitle(season)}</span>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: "#555",
+                        background: "#f1f5f9",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "999px",
+                        padding: "4px 8px",
+                      }}
+                    >
+                      Order #{index + 1}
+                    </span>
                   </h3>
                   <p style={{ marginTop: 0 }}>
                     Type: {season.competitionType || "5X5"} | Season{" "}
@@ -7699,7 +8407,13 @@ function Players() {
                       <strong>{season.thirdPlace || "-"}</strong>
                     </div>
                     <div>
-                      👑 MVP: <strong>{season.mvp || "-"}</strong>
+                      👑 Regular MVP:{" "}
+                      <strong>
+                        {season.regularSeasonMvp || season.mvp || "-"}
+                      </strong>
+                    </div>
+                    <div>
+                      🏅 Finals MVP: <strong>{season.finalsMvp || "-"}</strong>
                     </div>
                     <div>
                       🔥 Top Scorer: <strong>{season.topScorer || "-"}</strong>{" "}
@@ -7725,6 +8439,42 @@ function Players() {
                       flexWrap: "wrap",
                     }}
                   >
+                    <button
+                      onClick={() => moveSeasonHistoryToTop(season.id)}
+                      disabled={index === 0}
+                      title="ย้ายขึ้นบนสุด"
+                    >
+                      ⬆ Top
+                    </button>
+
+                    <button
+                      onClick={() => moveSeasonHistoryItem(season.id, -1)}
+                      disabled={index === 0}
+                      title="เลื่อนขึ้น 1 ลำดับ"
+                    >
+                      ↑ Up
+                    </button>
+
+                    <button
+                      onClick={() => moveSeasonHistoryItem(season.id, 1)}
+                      disabled={index === seasonHistory.length - 1}
+                      title="เลื่อนลง 1 ลำดับ"
+                    >
+                      ↓ Down
+                    </button>
+
+                    <button
+                      onClick={() => moveSeasonHistoryToBottom(season.id)}
+                      disabled={index === seasonHistory.length - 1}
+                      title="ย้ายลงล่างสุด"
+                    >
+                      ⬇ Bottom
+                    </button>
+
+                    <button onClick={() => startEditSeasonHistoryItem(season)}>
+                      ✏ Edit History
+                    </button>
+
                     <button onClick={() => renameSeasonHistoryItem(season.id)}>
                       Rename Project
                     </button>
@@ -7740,6 +8490,286 @@ function Players() {
                       Delete Season Record
                     </button>
                   </div>
+
+                  {editingSeasonHistoryId === season.id && (
+                    <div
+                      style={{
+                        marginTop: "14px",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "10px",
+                        padding: "12px",
+                        background: "#eff6ff",
+                      }}
+                    >
+                      <h4 style={{ marginTop: 0 }}>✏ Edit Season History</h4>
+                      <p style={{ marginTop: 0, color: "#475569" }}>
+                        แก้ไขข้อมูลย้อนหลังของ Season นี้ได้โดยไม่แตะ Match
+                        Stats ดิบ เหมาะสำหรับเติมรางวัลหรือแก้ข้อมูลจาก Season
+                        เก่า
+                      </p>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(220px, 1fr))",
+                          gap: "10px",
+                        }}
+                      >
+                        <label>
+                          Project / Season Name
+                          <input
+                            value={seasonHistoryEditForm.projectName}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "projectName",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Competition Type
+                          <select
+                            value={seasonHistoryEditForm.competitionType}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "competitionType",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          >
+                            <option value="3X3">3X3</option>
+                            <option value="5X5">5X5</option>
+                          </select>
+                        </label>
+
+                        <label>
+                          Season Number
+                          <input
+                            type="number"
+                            min="1"
+                            value={seasonHistoryEditForm.season}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "season",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Closed At
+                          <input
+                            value={seasonHistoryEditForm.closedAtText}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "closedAtText",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Champion
+                          <input
+                            value={seasonHistoryEditForm.champion}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "champion",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Runner Up
+                          <input
+                            value={seasonHistoryEditForm.runnerUp}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "runnerUp",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Third Place
+                          <input
+                            value={seasonHistoryEditForm.thirdPlace}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "thirdPlace",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Regular Season MVP
+                          <input
+                            value={seasonHistoryEditForm.regularSeasonMvp}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "regularSeasonMvp",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Finals MVP
+                          <input
+                            value={seasonHistoryEditForm.finalsMvp}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "finalsMvp",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Top Scorer
+                          <input
+                            value={seasonHistoryEditForm.topScorer}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "topScorer",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Top Scorer PTS
+                          <input
+                            type="number"
+                            min="0"
+                            value={seasonHistoryEditForm.topScorerPts}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "topScorerPts",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Rebound Leader
+                          <input
+                            value={seasonHistoryEditForm.reboundLeader}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "reboundLeader",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Rebound Leader REB
+                          <input
+                            type="number"
+                            min="0"
+                            value={seasonHistoryEditForm.reboundLeaderReb}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "reboundLeaderReb",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Assist Leader
+                          <input
+                            value={seasonHistoryEditForm.assistLeader}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "assistLeader",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+
+                        <label>
+                          Assist Leader AST
+                          <input
+                            type="number"
+                            min="0"
+                            value={seasonHistoryEditForm.assistLeaderAst}
+                            onChange={(event) =>
+                              updateSeasonHistoryEditForm(
+                                "assistLeaderAst",
+                                event.target.value
+                              )
+                            }
+                            style={{ width: "100%", marginTop: "4px" }}
+                          />
+                        </label>
+                      </div>
+
+                      <label style={{ display: "block", marginTop: "10px" }}>
+                        Season Notes
+                        <textarea
+                          value={seasonHistoryEditForm.notes}
+                          onChange={(event) =>
+                            updateSeasonHistoryEditForm(
+                              "notes",
+                              event.target.value
+                            )
+                          }
+                          rows={3}
+                          style={{ width: "100%", marginTop: "4px" }}
+                        />
+                      </label>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "8px",
+                          flexWrap: "wrap",
+                          marginTop: "10px",
+                        }}
+                      >
+                        <button onClick={saveSeasonHistoryEditForm}>
+                          💾 Save History Edit
+                        </button>
+                        <button onClick={cancelEditSeasonHistoryItem}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </>
@@ -7841,8 +8871,22 @@ function Players() {
                   background: "white",
                 }}
               >
-                <h3>👑 MVP</h3>
-                {renderHallOfFameList(hallOfFame.mvps)}
+                <h3>👑 Regular MVP</h3>
+                {renderHallOfFameList(
+                  hallOfFame.regularSeasonMvps || hallOfFame.mvps
+                )}
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid #e1bee7",
+                  borderRadius: "10px",
+                  padding: "12px",
+                  background: "white",
+                }}
+              >
+                <h3>🏅 Finals MVP</h3>
+                {renderHallOfFameList(hallOfFame.finalsMvps)}
               </div>
 
               <div
