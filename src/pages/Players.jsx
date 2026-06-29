@@ -3,6 +3,7 @@ import CloudTools from "../components/cloud/CloudTools";
 import BackupRestoreTools from "../components/cloud/BackupRestoreTools";
 import SeasonManagementTools from "../components/season/SeasonManagementTools";
 import DangerZoneTools from "../components/system/DangerZoneTools";
+import PlayerImportExport from "../components/players/PlayerImportExport";
 
 import {
   uploadPlayerPhoto,
@@ -16,6 +17,9 @@ import {
 } from "../services/cloud/backupService";
 
 function Players() {
+  // ======================================================
+  // CORE CONSTANTS / BASE CONFIG
+  // ======================================================
   const validTiers = ["SSS+", "S+", "S-", "A+", "A-", "B+", "B-", "C"];
   const validPositions = ["PG", "SG", "SF", "PF", "C"];
   const defaultTeamCount = 4;
@@ -24,6 +28,10 @@ function Players() {
       { length: count },
       (_, index) => `Team ${String.fromCharCode(65 + index)}`
     );
+
+  // ======================================================
+  // STATE: LEAGUE SETUP
+  // ======================================================
 
   const [teamCount, setTeamCount] = useState(() => {
     const saved = localStorage.getItem("teamCount");
@@ -62,6 +70,10 @@ function Players() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // ======================================================
+  // STATE: PLAYER FORM / PLAYER MANAGEMENT
+  // ======================================================
+
   const [editingId, setEditingId] = useState(null);
 
   const [form, setForm] = useState({
@@ -96,6 +108,10 @@ function Players() {
     photoUrl: "",
   });
 
+  // ======================================================
+  // STATE: MATCH ROSTER / MATCH STATS
+  // ======================================================
+
   const [matchRosters, setMatchRosters] = useState(() => {
     const saved = localStorage.getItem("matchRosters");
     return saved ? JSON.parse(saved) : {};
@@ -121,6 +137,10 @@ function Players() {
   const [selectedStatsMatchId, setSelectedStatsMatchId] = useState("");
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState("");
 
+  // ======================================================
+  // STATE: TEAM LOGOS / LOCK GROUPS
+  // ======================================================
+
   const [teamLogos, setTeamLogos] = useState(() => {
     const saved = localStorage.getItem("teamLogos");
     return saved ? JSON.parse(saved) : {};
@@ -133,6 +153,10 @@ function Players() {
 
   const [lockGroupName, setLockGroupName] = useState("");
   const [selectedLockPlayerIds, setSelectedLockPlayerIds] = useState([]);
+
+  // ======================================================
+  // STATE: SEASON / DASHBOARD / UI MODE
+  // ======================================================
 
   const [seasonByType, setSeasonByType] = useState(() => {
     const saved = localStorage.getItem("seasonByType");
@@ -187,6 +211,10 @@ function Players() {
   const [cloudStatus, setCloudStatus] = useState("Saved");
   const [activeAdminMenu, setActiveAdminMenu] = useState("players");
   const [expandedTeamDashboard, setExpandedTeamDashboard] = useState("");
+
+  // ======================================================
+  // LOCAL STORAGE SYNC
+  // ======================================================
 
   useEffect(() => {
     localStorage.setItem("players", JSON.stringify(players));
@@ -271,6 +299,10 @@ function Players() {
       }))
     );
   }, []);
+
+  // ======================================================
+  // LEAGUE SETUP HANDLERS
+  // ======================================================
 
   const handleTeamCountChange = (value) => {
     const nextCount = Number(value);
@@ -409,6 +441,10 @@ function Players() {
     });
   };
 
+  // ======================================================
+  // PLAYER RATING / TIER HELPERS
+  // ======================================================
+
   const clampSkill = (value) => Math.min(5, Math.max(1, Number(value || 3)));
 
   const calculateRatingFromSkills = (player) => {
@@ -446,6 +482,10 @@ function Players() {
 
   const getPlayerScore = (player) =>
     Number(player.rating || calculateRatingFromSkills(player));
+
+  // ======================================================
+  // MEDIA / IMAGE HELPERS
+  // ======================================================
 
   const readImageAsDataUrl = (file, callback) => {
     if (!file) return;
@@ -691,6 +731,10 @@ function Players() {
     </span>
   );
 
+  // ======================================================
+  // PLAYER CRUD HANDLERS
+  // ======================================================
+
   const resetForm = () => {
     setForm({
       name: "",
@@ -829,6 +873,12 @@ function Players() {
     localStorage.removeItem("seasonProjectName");
   };
 
+  // ======================================================
+  // CSV IMPORT / EXPORT HELPERS
+  // NOTE: Keep this internal while CodeSandbox limits file creation.
+  // Later migrate this region to src/services/csv/playerCsvService.js.
+  // ======================================================
+
   const downloadCSV = (filename, rows) => {
     const csv = rows.map((r) => r.join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], {
@@ -962,6 +1012,11 @@ function Players() {
     alert(`Import สำเร็จ ${imported.length} คน`);
     event.target.value = "";
   };
+
+  // ======================================================
+  // DRAFT ENGINE HELPERS
+  // NOTE: Later migrate this region to src/services/draft/draftService.js.
+  // ======================================================
 
   const hasEliteConflict = (teamPlayers, newPlayer) => {
     const hasSSS = teamPlayers.some((p) => p.tier === "SSS+");
@@ -1182,6 +1237,10 @@ function Players() {
     );
   };
 
+  // ======================================================
+  // DRAFT ACTIONS
+  // ======================================================
+
   const generateTeams = () => {
     const availablePlayers = players.filter((p) => p.available);
 
@@ -1311,6 +1370,10 @@ function Players() {
       )
     );
   };
+
+  // ======================================================
+  // TEAM ROSTER MANAGEMENT
+  // ======================================================
 
   const addExistingPlayerToTeam = () => {
     if (teams.length === 0) {
@@ -1516,6 +1579,10 @@ function Players() {
     });
   };
 
+  // ======================================================
+  // DRAFT SAVE / LOAD / EXPORT
+  // ======================================================
+
   const getBalancePercent = () => {
     if (teams.length === 0) return 0;
     const scores = teams.map((t) => t.totalScore);
@@ -1627,6 +1694,11 @@ function Players() {
 
     downloadCSV("bam_generated_teams.csv", rows);
   };
+
+  // ======================================================
+  // SCHEDULE / MATCH RESULTS
+  // NOTE: Later migrate this region to src/services/schedule/scheduleService.js.
+  // ======================================================
 
   const createSchedule = () => {
     if (teams.length < 3) {
@@ -1829,6 +1901,10 @@ function Players() {
         return b.pf - a.pf;
       });
   };
+
+  // ======================================================
+  // MATCH ROSTER HELPERS
+  // ======================================================
 
   const getTeamPlayers = (teamName) => {
     const team = teams.find((item) => item.name === teamName);
@@ -2114,6 +2190,11 @@ function Players() {
       },
     }));
   };
+
+  // ======================================================
+  // PLAYER STATS ENGINE
+  // NOTE: Later migrate this region to src/services/stats/playerStatsService.js.
+  // ======================================================
 
   const saveMatchStats = (match) => {
     const rows = getAllStatRowsForMatch(match);
@@ -2477,6 +2558,11 @@ function Players() {
     setSelectedRosterMatchId("");
     localStorage.removeItem("schedule");
   };
+
+  // ======================================================
+  // SEASON MANAGEMENT
+  // NOTE: Later migrate this region to src/services/season/seasonService.js.
+  // ======================================================
 
   const closeSeason = () => {
     const standingsRows = calculateStandings();
@@ -2884,6 +2970,10 @@ function Players() {
     localStorage.removeItem("seasonHistory");
   };
 
+  // ======================================================
+  // LOCAL BACKUP / RESTORE
+  // ======================================================
+
   const exportLeagueBackup = () => {
     const backupData = {
       competitionType,
@@ -3037,6 +3127,10 @@ function Players() {
 
     event.target.value = "";
   };
+
+  // ======================================================
+  // CLOUD BACKUP / RESTORE
+  // ======================================================
 
   const getAllBackupData = () => ({
     competitionType,
@@ -3551,6 +3645,10 @@ function Players() {
       <strong>{valueText}</strong>
     </div>
   );
+
+  // ======================================================
+  // RENDER: PUBLIC DASHBOARD
+  // ======================================================
 
   const renderPublicDashboard = () => {
     const selectedHistorySeason =
@@ -5402,6 +5500,10 @@ function Players() {
     );
   }
 
+  // ======================================================
+  // MAIN PAGE RENDER
+  // ======================================================
+
   return (
     <div style={{ padding: "24px", fontFamily: "Arial" }}>
       <h1>BAM Team Generator</h1>
@@ -5931,48 +6033,11 @@ function Players() {
             </div>
           </div>
 
-          <div
-            style={{
-              border: "1px solid #d9e2ef",
-              borderRadius: "10px",
-              padding: "14px",
-              background: "#f7fbff",
-              marginBottom: "14px",
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>📄 Player Import / Export</h3>
-            <button
-              type="button"
-              onClick={downloadTemplate}
-              style={{ marginRight: "8px", marginBottom: "8px" }}
-            >
-              Download CSV Template
-            </button>
-
-            <label
-              style={{
-                marginRight: "8px",
-                marginBottom: "8px",
-                display: "inline-block",
-              }}
-            >
-              Import CSV
-              <input
-                type="file"
-                accept=".csv"
-                onChange={importCSV}
-                style={{ display: "block", marginTop: "4px" }}
-              />
-            </label>
-
-            <button
-              type="button"
-              onClick={exportCSV}
-              style={{ marginRight: "8px", marginBottom: "8px" }}
-            >
-              Export CSV
-            </button>
-          </div>
+          <PlayerImportExport
+            downloadTemplate={downloadTemplate}
+            importCSV={importCSV}
+            exportCSV={exportCSV}
+          />
 
           <div
             style={{
