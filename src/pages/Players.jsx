@@ -316,6 +316,31 @@ function Players() {
     return { version: "legacy", lastMigrationAt: "" };
   });
 
+  const [publishMeta, setPublishMeta] = useState(() => {
+    const saved = localStorage.getItem("bamPublishMeta");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (error) {
+        return {
+          lastValidatedAt: "",
+          lastPublishedAt: "",
+          validationPassed: false,
+          validationScore: 0,
+          issues: [],
+        };
+      }
+    }
+
+    return {
+      lastValidatedAt: "",
+      lastPublishedAt: "",
+      validationPassed: false,
+      validationScore: 0,
+      issues: [],
+    };
+  });
+
   // ======================================================
   // 07. LOCAL STORAGE SYNC
   // ======================================================
@@ -383,6 +408,10 @@ function Players() {
   useEffect(() => {
     localStorage.setItem("bamDatabaseMeta", JSON.stringify(databaseMeta));
   }, [databaseMeta]);
+
+  useEffect(() => {
+    localStorage.setItem("bamPublishMeta", JSON.stringify(publishMeta));
+  }, [publishMeta]);
 
   useEffect(() => {
     const hasLegacyLocks =
@@ -3002,6 +3031,108 @@ function Players() {
     return "THE RISING PLAYER";
   };
 
+  const animatedMangaCardStyles = `
+    @keyframes bamModalFadeIn {
+      from { opacity: 0; backdrop-filter: blur(0px); }
+      to { opacity: 1; backdrop-filter: blur(9px); }
+    }
+    @keyframes bamCardEnter {
+      0% { opacity: 0; transform: translateY(36px) scale(0.84) rotateX(10deg); filter: saturate(0.7); }
+      65% { opacity: 1; transform: translateY(-6px) scale(1.015) rotateX(0deg); filter: saturate(1.18); }
+      100% { opacity: 1; transform: translateY(0) scale(1) rotateX(0deg); filter: saturate(1); }
+    }
+    @keyframes bamMangaLines {
+      from { background-position: 0 0, 0 0, 0 0; }
+      to { background-position: 110px 0, -90px 70px, 0 140px; }
+    }
+    @keyframes bamFoilSweep {
+      0% { transform: translateX(-135%) skewX(-18deg); opacity: 0; }
+      18% { opacity: .55; }
+      45% { opacity: .15; }
+      100% { transform: translateX(145%) skewX(-18deg); opacity: 0; }
+    }
+    @keyframes bamAvatarFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-10px) scale(1.015); }
+    }
+    @keyframes bamGradePulse {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 7px rgba(250,204,21,.75)); }
+      50% { transform: scale(1.07); filter: drop-shadow(0 0 18px rgba(250,204,21,.95)); }
+    }
+    @keyframes bamBadgePop {
+      0% { opacity: 0; transform: translateY(18px) scale(.72) rotate(-4deg); }
+      72% { opacity: 1; transform: translateY(-4px) scale(1.05) rotate(1deg); }
+      100% { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+    }
+    @keyframes bamStatRise {
+      0% { opacity: 0; transform: translateY(14px) scale(.9); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes bamRadarDraw {
+      0% { opacity: 0; transform: scale(.08); }
+      68% { opacity: 1; transform: scale(1.06); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes bamRadarGlow {
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(17,24,39,.25)); }
+      50% { filter: drop-shadow(0 0 14px rgba(250,204,21,.55)); }
+    }
+    @keyframes bamSkillBarLoad {
+      from { width: 0%; }
+      to { width: var(--bam-skill-width); }
+    }
+    .bam-profile-modal-animated { animation: bamModalFadeIn .28s ease-out both; }
+    .bam-athlete-card {
+      animation: bamCardEnter .58s cubic-bezier(.2,.9,.2,1.1) both;
+      transform-style: preserve-3d;
+      will-change: transform, filter;
+      transition: transform .25s ease, box-shadow .25s ease;
+    }
+    .bam-athlete-card:hover { transform: translateY(-4px) rotateX(1.5deg) rotateY(-1.5deg); }
+    .bam-athlete-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(32deg, rgba(255,255,255,.16) 0 2px, transparent 2px 10px),
+        radial-gradient(circle at 22% 18%, rgba(255,255,255,.55), transparent 24%),
+        radial-gradient(circle at 82% 22%, rgba(250,204,21,.22), transparent 18%);
+      mix-blend-mode: overlay;
+      pointer-events: none;
+      animation: bamMangaLines 7s linear infinite;
+      opacity: .72;
+    }
+    .bam-athlete-card::after {
+      content: "";
+      position: absolute;
+      top: -18%;
+      bottom: -18%;
+      width: 34%;
+      left: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+      pointer-events: none;
+      animation: bamFoilSweep 3.4s ease-in-out infinite;
+    }
+    .bam-tier-SSS, .bam-tier-S { box-shadow: 0 0 0 5px #111, 0 0 34px rgba(250,204,21,.45), 14px 14px 0 #111 !important; }
+    .bam-tier-A { box-shadow: 0 0 0 5px #111, 0 0 28px rgba(168,85,247,.32), 14px 14px 0 #111 !important; }
+    .bam-tier-B { box-shadow: 0 0 0 5px #111, 0 0 22px rgba(34,197,94,.28), 14px 14px 0 #111 !important; }
+    .bam-tier-C { box-shadow: 0 0 0 5px #111, 0 0 18px rgba(148,163,184,.28), 14px 14px 0 #111 !important; }
+    .bam-radar-card { animation: bamStatRise .45s ease-out .12s both; }
+    .bam-radar-polygon { transform-origin: 150px 150px; animation: bamRadarDraw .72s ease-out .24s both, bamRadarGlow 2.4s ease-in-out 1s infinite; }
+    .bam-avatar-frame { position: relative; animation: bamAvatarFloat 3.2s ease-in-out infinite; overflow: hidden; }
+    .bam-avatar-frame::after { content: ""; position: absolute; inset: -30%; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.5) 48%, transparent 62%); animation: bamFoilSweep 3s ease-in-out infinite; pointer-events: none; }
+    .bam-grade-badge { animation: bamGradePulse 1.9s ease-in-out infinite; }
+    .bam-stat-tile { animation: bamStatRise .48s ease-out both; }
+    .bam-award-badge { animation: bamBadgePop .5s cubic-bezier(.2,1.2,.2,1) both; transition: transform .18s ease, box-shadow .18s ease; }
+    .bam-award-badge:hover { transform: translateY(-5px) scale(1.03); box-shadow: 7px 7px 0 #111 !important; }
+    .bam-skill-row { display: grid; grid-template-columns: 96px 1fr 32px; gap: 8px; align-items: center; margin: 8px 0; font-size: 12px; font-weight: 900; }
+    .bam-skill-track { height: 10px; border: 2px solid #111; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+    .bam-skill-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #111827, #facc15); animation: bamSkillBarLoad .9s ease-out both; }
+    @media (max-width: 860px) {
+      .bam-athlete-card-grid { grid-template-columns: 1fr !important; }
+    }
+  `;
+
   const renderMangaSkillRadar = (profile) => {
     const skills = [
       {
@@ -3052,6 +3183,7 @@ function Players() {
 
     return (
       <div
+        className="bam-radar-card"
         style={{
           background: "#f8fafc",
           border: "3px solid #111",
@@ -3173,6 +3305,7 @@ function Players() {
           })}
 
           <polygon
+            className="bam-radar-polygon"
             points={points}
             fill="rgba(17, 24, 39, 0.24)"
             stroke="#111"
@@ -3263,16 +3396,41 @@ function Players() {
       },
     ];
 
+    const tierClass = tier?.startsWith("SSS")
+      ? "bam-tier-SSS"
+      : tier?.startsWith("S")
+      ? "bam-tier-S"
+      : tier?.startsWith("A")
+      ? "bam-tier-A"
+      : tier?.startsWith("B")
+      ? "bam-tier-B"
+      : "bam-tier-C";
+
+    const skillBars = [
+      ["การเลี้ยง", profile.dribbling],
+      ["วงใน", profile.insideScoring],
+      ["ยิง", profile.shooting],
+      ["ป้องกัน", profile.defense],
+      ["จ่ายบอล", profile.passing],
+    ];
+
     return (
       <div
         id="player-profile-card"
+        className={`bam-athlete-card ${tierClass}`}
         style={{
           width: "min(1180px, 100%)",
           border: "5px solid #111",
           borderRadius: "26px",
           padding: "18px",
           background:
-            "radial-gradient(circle at 25% 15%, #ffffff 0, #ffffff 25%, #f1f5f9 55%, #e5e7eb 100%)",
+            tier?.startsWith("SSS") || tier?.startsWith("S")
+              ? "radial-gradient(circle at 18% 12%, #fff7cc 0, #ffffff 26%, #f8fafc 55%, #111827 140%)"
+              : tier?.startsWith("A")
+              ? "radial-gradient(circle at 18% 12%, #f3e8ff 0, #ffffff 28%, #f8fafc 60%, #312e81 145%)"
+              : tier?.startsWith("B")
+              ? "radial-gradient(circle at 18% 12%, #dcfce7 0, #ffffff 28%, #f8fafc 60%, #064e3b 145%)"
+              : "radial-gradient(circle at 25% 15%, #ffffff 0, #ffffff 25%, #f1f5f9 55%, #e5e7eb 100%)",
           boxShadow: "12px 12px 0 #111",
           color: "#111",
           overflow: "hidden",
@@ -3291,6 +3449,7 @@ function Players() {
 
         <div style={{ position: "relative", zIndex: 1 }}>
           <div
+            className="bam-athlete-card-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(280px, 420px) 1fr",
@@ -3316,6 +3475,42 @@ function Players() {
               </div>
 
               {renderMangaSkillRadar(profile)}
+
+              <div
+                style={{
+                  marginTop: "14px",
+                  border: "4px solid #111",
+                  borderRadius: "18px",
+                  background: "rgba(255,255,255,.92)",
+                  padding: "12px",
+                  boxShadow: "6px 6px 0 #111",
+                }}
+              >
+                <div style={{ fontWeight: "1000", marginBottom: "6px" }}>
+                  ⚡ SKILL OUTPUT
+                </div>
+                {skillBars.map(([label, value], index) => {
+                  const percent = Math.max(
+                    0,
+                    Math.min(100, Number(value || 0) * 20)
+                  );
+                  return (
+                    <div className="bam-skill-row" key={`skill-bar-${label}`}>
+                      <span>{label}</span>
+                      <div className="bam-skill-track">
+                        <div
+                          className="bam-skill-fill"
+                          style={{
+                            "--bam-skill-width": `${percent}%`,
+                            animationDelay: `${0.18 + index * 0.08}s`,
+                          }}
+                        />
+                      </div>
+                      <span>{Number(value || 0)}/5</span>
+                    </div>
+                  );
+                })}
+              </div>
 
               <div
                 style={{
@@ -3425,6 +3620,7 @@ function Players() {
                 </div>
 
                 <div
+                  className="bam-avatar-frame"
                   style={{
                     border: "4px solid #111",
                     borderRadius: "18px",
@@ -3468,10 +3664,12 @@ function Players() {
                   ["REB", profile.reb || careerStats.reb || 0],
                   ["AST", profile.ast || careerStats.ast || 0],
                   ["MVP", Number(profile.mvpScore || 0).toFixed(1)],
-                ].map(([label, value]) => (
+                ].map(([label, value], index) => (
                   <div
                     key={`manga-stat-${label}`}
+                    className="bam-stat-tile"
                     style={{
+                      animationDelay: `${0.08 + index * 0.06}s`,
                       border: "3px solid #111",
                       borderRadius: "14px",
                       background: "white",
@@ -3504,10 +3702,12 @@ function Players() {
                   marginTop: "18px",
                 }}
               >
-                {badgeList.map((badge) => (
+                {badgeList.map((badge, index) => (
                   <div
                     key={`manga-badge-${badge.label}`}
+                    className="bam-award-badge"
                     style={{
+                      animationDelay: `${0.16 + index * 0.08}s`,
                       border: "3px solid #111",
                       borderRadius: "14px",
                       background: "white",
@@ -3625,11 +3825,13 @@ function Players() {
 
     return (
       <div
+        className="bam-profile-modal-animated"
         onClick={() => setSelectedProfilePlayerId("")}
         style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(0,0,0,0.72)",
+          background:
+            "radial-gradient(circle at center, rgba(15,23,42,.68), rgba(0,0,0,.86))",
           zIndex: 99999,
           display: "flex",
           alignItems: "center",
@@ -3637,6 +3839,7 @@ function Players() {
           padding: "24px",
         }}
       >
+        <style>{animatedMangaCardStyles}</style>
         <div
           onClick={(event) => event.stopPropagation()}
           style={{
@@ -4483,6 +4686,7 @@ function Players() {
       currentSeason,
       seasonProjectName,
       seasonHistory,
+      publishMeta,
       databaseMeta: {
         ...databaseMeta,
         version: CORE_DATABASE_VERSION,
@@ -4580,6 +4784,16 @@ function Players() {
     setSeasonHistory(
       Array.isArray(data.seasonHistory) ? data.seasonHistory : []
     );
+    if (data.publishMeta && typeof data.publishMeta === "object") {
+      setPublishMeta(data.publishMeta);
+    }
+
+    if (data.databaseMeta && typeof data.databaseMeta === "object") {
+      setDatabaseMeta({
+        ...data.databaseMeta,
+        version: data.databaseMeta.version || CORE_DATABASE_VERSION,
+      });
+    }
     setSelectedLockPlayerIds([]);
     setLockGroupName("");
     setSelectedRosterMatchId("");
@@ -4624,6 +4838,326 @@ function Players() {
   };
 
   // ======================================================
+  // 21.5 SAFE CLOUD PUBLISH / VALIDATION
+  // ======================================================
+
+  const getLocalDraftValidationReport = () => {
+    const issues = [];
+    const warnings = [];
+
+    const duplicateBamIds = players
+      .map((player) => player.bamPlayerId)
+      .filter(Boolean)
+      .filter((id, index, list) => list.indexOf(id) !== index);
+
+    if (players.length === 0) {
+      issues.push("ยังไม่มีผู้เล่นในระบบ");
+    }
+
+    if (players.some((player) => !player.bamPlayerId)) {
+      issues.push("มีผู้เล่นที่ยังไม่มี BAM ID");
+    }
+
+    if (duplicateBamIds.length > 0) {
+      issues.push(`พบ BAM ID ซ้ำ: ${[...new Set(duplicateBamIds)].join(", ")}`);
+    }
+
+    if (teams.length > 0) {
+      const teamPlayerIds = new Set();
+      teams.forEach((team) => {
+        (team.players || []).forEach((player) =>
+          teamPlayerIds.add(String(player.id))
+        );
+      });
+
+      const missingTeamNames = teams.filter(
+        (team) => !String(team.name || "").trim()
+      );
+      if (missingTeamNames.length > 0) {
+        issues.push("มีทีมที่ยังไม่มีชื่อทีม");
+      }
+
+      const duplicateTeamNames = teams
+        .map((team) => team.name)
+        .filter(Boolean)
+        .filter((name, index, list) => list.indexOf(name) !== index);
+      if (duplicateTeamNames.length > 0) {
+        issues.push(
+          `พบชื่อทีมซ้ำ: ${[...new Set(duplicateTeamNames)].join(", ")}`
+        );
+      }
+    }
+
+    const finishedMatches = schedule.filter(
+      (match) => match.status === "Finished"
+    );
+    const finishedWithoutScore = finishedMatches.filter(
+      (match) => match.scoreA === "" || match.scoreB === ""
+    );
+    if (finishedWithoutScore.length > 0) {
+      issues.push(
+        `มีแมตช์ Finished แต่ยังไม่มีคะแนนครบ ${finishedWithoutScore.length} รายการ`
+      );
+    }
+
+    const invalidMatchTeams = schedule.filter(
+      (match) =>
+        match.label === "League" &&
+        (!teams.some((team) => team.name === match.teamA) ||
+          !teams.some((team) => team.name === match.teamB))
+    );
+    if (invalidMatchTeams.length > 0) {
+      warnings.push(
+        `มีแมตช์ที่ชื่อทีมไม่ตรงกับทีมปัจจุบัน ${invalidMatchTeams.length} รายการ`
+      );
+    }
+
+    if (seasonHistory.length === 0) {
+      warnings.push("ยังไม่มี Season History");
+    }
+
+    const missingPhotos = players.filter((player) => !player.photoUrl).length;
+    if (missingPhotos > 0) {
+      warnings.push(`ผู้เล่นยังไม่มีรูป ${missingPhotos} คน`);
+    }
+
+    const checks = [
+      { label: "Players", ok: players.length > 0 },
+      { label: "BAM ID", ok: players.every((player) => player.bamPlayerId) },
+      { label: "Duplicate ID", ok: duplicateBamIds.length === 0 },
+      { label: "Finished Scores", ok: finishedWithoutScore.length === 0 },
+      {
+        label: "Database Version",
+        ok: databaseMeta.version === CORE_DATABASE_VERSION,
+      },
+    ];
+
+    const passed = checks.filter((check) => check.ok).length;
+    const score = Math.round((passed / checks.length) * 100);
+
+    return {
+      passed: issues.length === 0,
+      score,
+      checks,
+      issues,
+      warnings,
+      checkedAt: new Date().toISOString(),
+      checkedAtText: new Date().toLocaleString(),
+      summary: {
+        players: players.length,
+        teams: teams.length,
+        schedule: schedule.length,
+        finishedMatches: finishedMatches.length,
+        seasonHistory: seasonHistory.length,
+      },
+    };
+  };
+
+  const validateLocalDraft = () => {
+    const report = getLocalDraftValidationReport();
+
+    setPublishMeta((prevMeta) => ({
+      ...prevMeta,
+      lastValidatedAt: report.checkedAt,
+      lastValidatedText: report.checkedAtText,
+      validationPassed: report.passed,
+      validationScore: report.score,
+      issues: report.issues,
+      warnings: report.warnings,
+      summary: report.summary,
+    }));
+
+    if (report.passed) {
+      alert(
+        `Validate Local Draft ผ่านแล้ว (${report.score}%) พร้อม Publish to Cloud`
+      );
+    } else {
+      alert(
+        `Validate Local Draft ยังไม่ผ่าน\n\n- ${report.issues.join("\n- ")}`
+      );
+    }
+
+    return report;
+  };
+
+  const safePublishToCloud = async () => {
+    const report = getLocalDraftValidationReport();
+
+    setPublishMeta((prevMeta) => ({
+      ...prevMeta,
+      lastValidatedAt: report.checkedAt,
+      lastValidatedText: report.checkedAtText,
+      validationPassed: report.passed,
+      validationScore: report.score,
+      issues: report.issues,
+      warnings: report.warnings,
+      summary: report.summary,
+    }));
+
+    if (!report.passed) {
+      alert(
+        `ยัง Publish ไม่ได้ เพราะ Validate ไม่ผ่าน\n\n- ${report.issues.join(
+          "\n- "
+        )}`
+      );
+      return;
+    }
+
+    const confirmPublish = window.confirm(
+      `Validate ผ่านแล้ว (${report.score}%)\n\nต้องการ Publish Local Draft ขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ`
+    );
+
+    if (!confirmPublish) return;
+
+    try {
+      setCloudStatus("Publishing.");
+      await uploadLeagueBackup({
+        ...getAllBackupData(),
+        publishMeta: {
+          ...publishMeta,
+          lastValidatedAt: report.checkedAt,
+          lastValidatedText: report.checkedAtText,
+          validationPassed: report.passed,
+          validationScore: report.score,
+          issues: report.issues,
+          warnings: report.warnings,
+          summary: report.summary,
+          lastPublishedAt: new Date().toISOString(),
+          lastPublishedText: new Date().toLocaleString(),
+        },
+      });
+
+      setPublishMeta((prevMeta) => ({
+        ...prevMeta,
+        lastValidatedAt: report.checkedAt,
+        lastValidatedText: report.checkedAtText,
+        validationPassed: report.passed,
+        validationScore: report.score,
+        issues: report.issues,
+        warnings: report.warnings,
+        summary: report.summary,
+        lastPublishedAt: new Date().toISOString(),
+        lastPublishedText: new Date().toLocaleString(),
+      }));
+
+      setCloudStatus("Cloud Published");
+      alert("Safe Publish to Cloud สำเร็จ");
+    } catch (error) {
+      console.error("Safe Publish Error:", error);
+      setCloudStatus("Publish Error");
+      alert("Safe Publish ไม่สำเร็จ");
+    }
+  };
+
+  const renderSafeCloudPublishCard = () => {
+    const isValidated = publishMeta.validationPassed;
+    const statusColor = isValidated ? "#15803d" : "#b45309";
+
+    return (
+      <div
+        style={{
+          border: "1px solid #fed7aa",
+          borderRadius: "14px",
+          padding: "14px",
+          background: "#fff7ed",
+        }}
+      >
+        <h3 style={{ marginTop: 0, color: "#c2410c" }}>
+          🛡️ Safe Cloud Publish
+        </h3>
+        <p style={{ marginTop: 0, color: "#7c2d12", fontSize: "13px" }}>
+          ใช้ระบบ Local Draft → Validate → Publish
+          เพื่อป้องกันข้อมูลผิดซิงค์ขึ้น Cloud ทันที
+        </p>
+
+        <div
+          style={{
+            fontWeight: "bold",
+            color: statusColor,
+            marginBottom: "8px",
+          }}
+        >
+          Validation: {isValidated ? "Passed" : "Not Passed / Not Checked"}
+          {publishMeta.validationScore
+            ? ` (${publishMeta.validationScore}%)`
+            : ""}
+        </div>
+
+        <div
+          style={{ fontSize: "12px", color: "#7c2d12", marginBottom: "10px" }}
+        >
+          Last Validated: {publishMeta.lastValidatedText || "-"}
+          <br />
+          Last Published: {publishMeta.lastPublishedText || "-"}
+        </div>
+
+        {Array.isArray(publishMeta.issues) && publishMeta.issues.length > 0 ? (
+          <div
+            style={{ marginBottom: "10px", color: "#991b1b", fontSize: "12px" }}
+          >
+            <strong>Issues</strong>
+            <ul style={{ margin: "4px 0 0", paddingLeft: "18px" }}>
+              {publishMeta.issues.map((issue, index) => (
+                <li key={`${issue}-${index}`}>{issue}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {Array.isArray(publishMeta.warnings) &&
+        publishMeta.warnings.length > 0 ? (
+          <div
+            style={{ marginBottom: "10px", color: "#92400e", fontSize: "12px" }}
+          >
+            <strong>Warnings</strong>
+            <ul style={{ margin: "4px 0 0", paddingLeft: "18px" }}>
+              {publishMeta.warnings.map((warning, index) => (
+                <li key={`${warning}-${index}`}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={validateLocalDraft}
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "none",
+            borderRadius: "8px",
+            background: "#f97316",
+            color: "white",
+            fontWeight: "bold",
+            cursor: "pointer",
+            marginBottom: "8px",
+          }}
+        >
+          ✅ Validate Local Draft
+        </button>
+
+        <button
+          type="button"
+          onClick={safePublishToCloud}
+          disabled={!isValidated}
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "none",
+            borderRadius: "8px",
+            background: isValidated ? "#15803d" : "#94a3b8",
+            color: "white",
+            fontWeight: "bold",
+            cursor: isValidated ? "pointer" : "not-allowed",
+          }}
+        >
+          🚀 Publish Validated Draft To Cloud
+        </button>
+      </div>
+    );
+  };
+
+  // ======================================================
   // 22. CLOUD BACKUP / RESTORE
   // ======================================================
 
@@ -4644,6 +5178,11 @@ function Players() {
     currentSeason,
     seasonProjectName,
     seasonHistory,
+    publishMeta,
+    databaseMeta: {
+      ...databaseMeta,
+      version: CORE_DATABASE_VERSION,
+    },
   });
 
   const uploadToCloud = async () => {
@@ -7458,6 +7997,10 @@ function Players() {
               🧠 DB: {databaseMeta.version}
             </div>
             <br />
+            <div style={{ ...adminStatusPillStyle, marginTop: "8px" }}>
+              🛡️ Publish: {publishMeta.validationPassed ? "Validated" : "Draft"}
+            </div>
+            <br />
             <button
               type="button"
               onClick={() => setViewMode("PUBLIC")}
@@ -7573,6 +8116,8 @@ function Players() {
               exportAllData={exportLeagueBackup}
               importLeagueBackup={importLeagueBackup}
             />
+
+            {renderSafeCloudPublishCard()}
 
             <CloudTools
               cloudStatus={cloudStatus}
