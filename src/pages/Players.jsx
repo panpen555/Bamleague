@@ -60,7 +60,6 @@ TABLE OF CONTENTS
 27. Season History Editor V1
 28. Player Career Engine V1
 29. Core Database Engine V4
-30. Safe Cloud Publish System V1
 
 HIGH-RISK AREAS
 - Draft Engine: affects team generation balance.
@@ -281,32 +280,6 @@ function Players() {
   const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
   const [selectedPublicMatch, setSelectedPublicMatch] = useState(null);
   const [cloudStatus, setCloudStatus] = useState("Saved");
-  const [cloudPublishMeta, setCloudPublishMeta] = useState(() => {
-    const saved = localStorage.getItem("bamCloudPublishMeta");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (error) {
-        return {
-          lastPublishedAt: "",
-          lastPublishedText: "",
-          lastPublishedHash: "",
-          lastValidationAt: "",
-          lastValidationText: "",
-          lastValidationPassed: false,
-        };
-      }
-    }
-
-    return {
-      lastPublishedAt: "",
-      lastPublishedText: "",
-      lastPublishedHash: "",
-      lastValidationAt: "",
-      lastValidationText: "",
-      lastValidationPassed: false,
-    };
-  });
   const [activeAdminMenu, setActiveAdminMenu] = useState("players");
   const [expandedTeamDashboard, setExpandedTeamDashboard] = useState("");
   const [selectedFinalsMvpId, setSelectedFinalsMvpId] = useState("");
@@ -410,13 +383,6 @@ function Players() {
   useEffect(() => {
     localStorage.setItem("bamDatabaseMeta", JSON.stringify(databaseMeta));
   }, [databaseMeta]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "bamCloudPublishMeta",
-      JSON.stringify(cloudPublishMeta)
-    );
-  }, [cloudPublishMeta]);
 
   useEffect(() => {
     const hasLegacyLocks =
@@ -4678,299 +4644,25 @@ function Players() {
     currentSeason,
     seasonProjectName,
     seasonHistory,
-    databaseMeta: {
-      ...databaseMeta,
-      version: CORE_DATABASE_VERSION,
-    },
-    publishMeta: {
-      lastPublishedAt: cloudPublishMeta.lastPublishedAt || "",
-      lastPublishedText: cloudPublishMeta.lastPublishedText || "",
-    },
   });
 
-  const createStableJson = (value) => {
-    if (Array.isArray(value)) {
-      return `[${value.map(createStableJson).join(",")}]`;
-    }
-
-    if (value && typeof value === "object") {
-      return `{${Object.keys(value)
-        .sort()
-        .map((key) => `${JSON.stringify(key)}:${createStableJson(value[key])}`)
-        .join(",")}}`;
-    }
-
-    return JSON.stringify(value);
-  };
-
-  const createDataHash = (value) => {
-    const source = createStableJson(value);
-    let hash = 0;
-
-    for (let index = 0; index < source.length; index += 1) {
-      hash = (hash << 5) - hash + source.charCodeAt(index);
-      hash |= 0;
-    }
-
-    return `BAM-${Math.abs(hash).toString(16).toUpperCase()}`;
-  };
-
-  const getCurrentLocalHash = () => createDataHash(getAllBackupData());
-
-  const validatePublishData = () => {
-    const missingBamIds = players.filter((player) => !player.bamPlayerId);
-    const duplicateBamIds = players
-      .map((player) => player.bamPlayerId)
-      .filter(Boolean)
-      .filter((id, index, list) => list.indexOf(id) !== index);
-    const invalidTeams = teams.filter(
-      (team) => !team.name || !Array.isArray(team.players)
-    );
-    const invalidMatches = schedule.filter(
-      (match) => !match.id || !match.teamA || !match.teamB || !match.label
-    );
-    const finishedMatchesWithoutScore = schedule.filter(
-      (match) =>
-        match.status === "Finished" &&
-        (match.scoreA === "" || match.scoreB === "")
-    );
-    const seasonWithoutName = seasonHistory.filter(
-      (season) => !season.projectName && !season.name
-    );
-
-    const checks = [
-      {
-        label: "ผู้เล่นทุกคนต้องมี BAM ID",
-        ok: missingBamIds.length === 0,
-        detail: missingBamIds.length
-          ? `${missingBamIds.length} คนยังไม่มี BAM ID`
-          : "ผ่าน",
-      },
-      {
-        label: "BAM ID ต้องไม่ซ้ำ",
-        ok: duplicateBamIds.length === 0,
-        detail: duplicateBamIds.length ? duplicateBamIds.join(", ") : "ผ่าน",
-      },
-      {
-        label: "โครงสร้างทีมต้องถูกต้อง",
-        ok: invalidTeams.length === 0,
-        detail: invalidTeams.length
-          ? `${invalidTeams.length} ทีมมีข้อมูลไม่สมบูรณ์`
-          : "ผ่าน",
-      },
-      {
-        label: "โครงสร้างตารางแข่งต้องถูกต้อง",
-        ok: invalidMatches.length === 0,
-        detail: invalidMatches.length
-          ? `${invalidMatches.length} แมตช์มีข้อมูลไม่สมบูรณ์`
-          : "ผ่าน",
-      },
-      {
-        label: "แมตช์ที่จบแล้วต้องมีคะแนน",
-        ok: finishedMatchesWithoutScore.length === 0,
-        detail: finishedMatchesWithoutScore.length
-          ? `${finishedMatchesWithoutScore.length} แมตช์ยังไม่มีคะแนนครบ`
-          : "ผ่าน",
-      },
-      {
-        label: "Season History ต้องมีชื่อซีซัน",
-        ok: seasonWithoutName.length === 0,
-        detail: seasonWithoutName.length
-          ? `${seasonWithoutName.length} รายการยังไม่มีชื่อซีซัน`
-          : "ผ่าน",
-      },
-    ];
-
-    const passed = checks.filter((check) => check.ok).length;
-
-    return {
-      checks,
-      passed,
-      total: checks.length,
-      ok: checks.every((check) => check.ok),
-      score: Math.round((passed / checks.length) * 100),
-    };
-  };
-
-  const runPublishValidation = () => {
-    const report = validatePublishData();
-    const now = new Date();
-
-    setCloudPublishMeta((prevMeta) => ({
-      ...prevMeta,
-      lastValidationAt: now.toISOString(),
-      lastValidationText: now.toLocaleString(),
-      lastValidationPassed: report.ok,
-      lastValidationScore: report.score,
-    }));
-
-    alert(
-      `Publish Validation: ${report.score}%\n\n${report.checks
-        .map(
-          (check) => `${check.ok ? "✅" : "⚠️"} ${check.label}: ${check.detail}`
-        )
-        .join("\n")}`
-    );
-
-    return report;
-  };
-
   const uploadToCloud = async () => {
-    const validation = validatePublishData();
-
-    if (!validation.ok) {
-      alert(
-        `ยัง Publish ไม่ได้ เพราะ Validation ไม่ผ่าน (${
-          validation.score
-        }%)\n\n${validation.checks
-          .filter((check) => !check.ok)
-          .map((check) => `⚠️ ${check.label}: ${check.detail}`)
-          .join(
-            "\n"
-          )}\n\nให้แก้ข้อมูลก่อน หรือกด Validate เพื่อดูรายละเอียดทั้งหมด`
-      );
-      setCloudPublishMeta((prevMeta) => ({
-        ...prevMeta,
-        lastValidationAt: new Date().toISOString(),
-        lastValidationText: new Date().toLocaleString(),
-        lastValidationPassed: false,
-        lastValidationScore: validation.score,
-      }));
-      return;
-    }
-
-    const currentHash = getCurrentLocalHash();
     const confirmUpload = window.confirm(
-      "ต้องการ Publish ข้อมูลที่ตรวจสอบแล้วขึ้น Cloud ใช่ไหม?\n\n" +
-        "Public Dashboard จะใช้ข้อมูลชุดนี้แทนข้อมูล Cloud เดิม\n\n" +
-        `Local Version: ${currentHash}\n` +
-        `Last Published: ${
-          cloudPublishMeta.lastPublishedText || "ยังไม่เคย Publish"
-        }`
+      "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ"
     );
 
     if (!confirmUpload) return;
 
-    const secondConfirm = window.confirm(
-      "ยืนยันอีกครั้ง: ข้อมูลบน Cloud เดิมจะถูกเขียนทับด้วย Local Draft ปัจจุบัน ต้องการ Publish ต่อไหม?"
-    );
-
-    if (!secondConfirm) return;
-
     try {
-      setCloudStatus("Publishing...");
-      const publishTime = new Date();
-      const payload = {
-        ...getAllBackupData(),
-        cloudPublishedAt: publishTime.toISOString(),
-        cloudPublishedText: publishTime.toLocaleString(),
-        cloudPublishedHash: currentHash,
-      };
-
-      await uploadLeagueBackup(payload);
-      setCloudPublishMeta((prevMeta) => ({
-        ...prevMeta,
-        lastPublishedAt: publishTime.toISOString(),
-        lastPublishedText: publishTime.toLocaleString(),
-        lastPublishedHash: currentHash,
-        lastValidationAt: publishTime.toISOString(),
-        lastValidationText: publishTime.toLocaleString(),
-        lastValidationPassed: true,
-        lastValidationScore: validation.score,
-      }));
-      setCloudStatus("Cloud Published");
-      alert("Publish To Cloud สำเร็จ: Public Dashboard ใช้ข้อมูลชุดล่าสุดแล้ว");
+      setCloudStatus("Uploading.");
+      await uploadLeagueBackup(getAllBackupData());
+      setCloudStatus("Cloud Uploaded");
+      alert("Upload To Cloud สำเร็จ");
     } catch (error) {
-      console.error("Publish To Cloud Error:", error);
+      console.error("Upload To Cloud Error:", error);
       setCloudStatus("Cloud Error");
-      alert("Publish To Cloud ไม่สำเร็จ");
+      alert("Upload To Cloud ไม่สำเร็จ");
     }
-  };
-
-  const renderSafeCloudPublishCard = () => {
-    const validation = validatePublishData();
-    const currentHash = getCurrentLocalHash();
-    const hasUnpublishedChanges =
-      !cloudPublishMeta.lastPublishedHash ||
-      cloudPublishMeta.lastPublishedHash !== currentHash;
-    const statusLabel = hasUnpublishedChanges
-      ? "Local Draft มีข้อมูลที่ยังไม่ Publish"
-      : "Cloud Published ตรงกับ Local Draft";
-    const statusColor = hasUnpublishedChanges ? "#b45309" : "#15803d";
-
-    return (
-      <div
-        style={{
-          border: "1px solid #fde68a",
-          borderRadius: "14px",
-          padding: "14px",
-          background: "#fffbeb",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>🚦 Safe Cloud Publish</h3>
-        <div
-          style={{
-            fontSize: "20px",
-            fontWeight: "bold",
-            color: statusColor,
-            marginBottom: "6px",
-          }}
-        >
-          {statusLabel}
-        </div>
-        <p style={{ marginTop: 0, color: "#92400e" }}>
-          Workflow: Local Draft → Validate → Publish to Cloud → Public Dashboard
-        </p>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: "8px",
-            marginBottom: "10px",
-          }}
-        >
-          <div>
-            Validation: <strong>{validation.score}%</strong>
-          </div>
-          <div>
-            Players: <strong>{players.length}</strong>
-          </div>
-          <div>
-            Seasons: <strong>{seasonHistory.length}</strong>
-          </div>
-          <div>
-            Local Hash: <strong>{currentHash}</strong>
-          </div>
-        </div>
-        <ul style={{ margin: "0 0 12px", paddingLeft: "20px" }}>
-          {validation.checks.map((check) => (
-            <li key={check.label} style={{ marginBottom: "4px" }}>
-              {check.ok ? "✅" : "⚠️"} {check.label}
-            </li>
-          ))}
-        </ul>
-        <button
-          type="button"
-          onClick={runPublishValidation}
-          style={{ marginRight: "8px" }}
-        >
-          Validate Local Draft
-        </button>
-        <button
-          type="button"
-          onClick={uploadToCloud}
-          disabled={!validation.ok}
-          style={{ marginRight: "8px" }}
-        >
-          Publish to Cloud
-        </button>
-        <p style={{ marginBottom: 0, color: "#92400e", fontSize: "12px" }}>
-          Last Published: {cloudPublishMeta.lastPublishedText || "-"}
-          <br />
-          Last Validation: {cloudPublishMeta.lastValidationText || "-"}
-        </p>
-      </div>
-    );
   };
 
   const downloadFromCloud = async () => {
@@ -7724,6 +7416,7 @@ function Players() {
           🔧 Back to Admin Mode
         </button>
         {renderPublicDashboard()}
+        {renderPlayerProfileModal()}
       </div>
     );
   }
@@ -7880,8 +7573,6 @@ function Players() {
               exportAllData={exportLeagueBackup}
               importLeagueBackup={importLeagueBackup}
             />
-
-            {renderSafeCloudPublishCard()}
 
             <CloudTools
               cloudStatus={cloudStatus}
