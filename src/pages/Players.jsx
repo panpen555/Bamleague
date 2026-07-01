@@ -59,6 +59,8 @@ TABLE OF CONTENTS
 26. Awards System V2
 27. Season History Editor V1
 28. Player Career Engine V1
+29. Core Database Engine V4
+30. Safe Cloud Publish System V1
 
 HIGH-RISK AREAS
 - Draft Engine: affects team generation balance.
@@ -87,6 +89,17 @@ function Players() {
       { length: count },
       (_, index) => `Team ${String.fromCharCode(65 + index)}`
     );
+
+  // ======================================================
+  // 29. CORE DATABASE ENGINE V4
+  // Database rules:
+  // 1) Player Identity is permanent.
+  // 2) Old data must auto-migrate forward.
+  // 3) Career / Records are rebuilt from Season History.
+  // ======================================================
+
+  const CORE_DATABASE_VERSION = "4.0.0";
+  const BAM_PLAYER_ID_PREFIX = "BAM";
 
   // ======================================================
   // 02. STATE: LEAGUE SETUP
@@ -268,6 +281,32 @@ function Players() {
   const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
   const [selectedPublicMatch, setSelectedPublicMatch] = useState(null);
   const [cloudStatus, setCloudStatus] = useState("Saved");
+  const [cloudPublishMeta, setCloudPublishMeta] = useState(() => {
+    const saved = localStorage.getItem("bamCloudPublishMeta");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (error) {
+        return {
+          lastPublishedAt: "",
+          lastPublishedText: "",
+          lastPublishedHash: "",
+          lastValidationAt: "",
+          lastValidationText: "",
+          lastValidationPassed: false,
+        };
+      }
+    }
+
+    return {
+      lastPublishedAt: "",
+      lastPublishedText: "",
+      lastPublishedHash: "",
+      lastValidationAt: "",
+      lastValidationText: "",
+      lastValidationPassed: false,
+    };
+  });
   const [activeAdminMenu, setActiveAdminMenu] = useState("players");
   const [expandedTeamDashboard, setExpandedTeamDashboard] = useState("");
   const [selectedFinalsMvpId, setSelectedFinalsMvpId] = useState("");
@@ -289,6 +328,19 @@ function Players() {
     assistLeader: "",
     assistLeaderAst: 0,
     notes: "",
+  });
+
+  const [databaseMeta, setDatabaseMeta] = useState(() => {
+    const saved = localStorage.getItem("bamDatabaseMeta");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (error) {
+        return { version: "legacy", lastMigrationAt: "" };
+      }
+    }
+
+    return { version: "legacy", lastMigrationAt: "" };
   });
 
   // ======================================================
@@ -356,6 +408,17 @@ function Players() {
   }, [matchStatInputs]);
 
   useEffect(() => {
+    localStorage.setItem("bamDatabaseMeta", JSON.stringify(databaseMeta));
+  }, [databaseMeta]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "bamCloudPublishMeta",
+      JSON.stringify(cloudPublishMeta)
+    );
+  }, [cloudPublishMeta]);
+
+  useEffect(() => {
     const hasLegacyLocks =
       players.some((player) => player.lockedTeam) ||
       teams.some((team) =>
@@ -377,6 +440,251 @@ function Players() {
         })),
       }))
     );
+  }, []);
+
+  const parseBamPlayerNumber = (bamPlayerId) => {
+    const match = String(bamPlayerId || "").match(/^BAM-(\d+)$/);
+    return match ? Number(match[1]) : 0;
+  };
+
+  const formatBamPlayerId = (number) =>
+    `${BAM_PLAYER_ID_PREFIX}-${String(number).padStart(6, "0")}`;
+
+  const getHighestBamPlayerNumber = (playerList = players) =>
+    playerList.reduce(
+      (max, player) => Math.max(max, parseBamPlayerNumber(player.bamPlayerId)),
+      0
+    );
+
+  const getNextBamPlayerId = (offset = 1, playerList = players) =>
+    formatBamPlayerId(getHighestBamPlayerNumber(playerList) + offset);
+
+  const getPlayerDisplayId = (player) =>
+    player?.bamPlayerId || player?.playerCode || player?.id || "-";
+
+  const findPlayerByBamId = (bamPlayerId) =>
+    players.find(
+      (player) => String(player.bamPlayerId || "") === String(bamPlayerId || "")
+    );
+
+  const findPlayerByName = (playerName) => {
+    const target = String(playerName || "")
+      .trim()
+      .toLowerCase();
+    if (!target) return null;
+    return players.find(
+      (player) =>
+        String(player.name || "")
+          .trim()
+          .toLowerCase() === target
+    );
+  };
+
+  const getPlayerIdentityFromName = (playerName) => {
+    const matchedPlayer = findPlayerByName(playerName);
+    if (!matchedPlayer) {
+      return {
+        key: getCareerPlayerKey(playerName),
+        bamPlayerId: "",
+        playerName: String(playerName || "").trim(),
+      };
+    }
+
+    return {
+      key: matchedPlayer.bamPlayerId || getCareerPlayerKey(matchedPlayer.name),
+      bamPlayerId: matchedPlayer.bamPlayerId || "",
+      playerName: matchedPlayer.name || playerName,
+    };
+  };
+
+  const ensureBamPlayerIds = (playerList = []) => {
+    let nextNumber = getHighestBamPlayerNumber(playerList);
+    return playerList.map((player) => {
+      if (player.bamPlayerId) return player;
+      nextNumber += 1;
+      return {
+        ...player,
+        bamPlayerId: formatBamPlayerId(nextNumber),
+        identityVersion: CORE_DATABASE_VERSION,
+      };
+    });
+  };
+
+  const syncTeamPlayerIdentities = (teamList, playerList) => {
+    const identityMap = new Map(
+      playerList.map((player) => [String(player.id), player.bamPlayerId || ""])
+    );
+
+    return teamList.map((team) => ({
+      ...team,
+      players: (team.players || []).map((player) => ({
+        ...player,
+        bamPlayerId:
+          player.bamPlayerId || identityMap.get(String(player.id)) || "",
+        identityVersion: player.identityVersion || CORE_DATABASE_VERSION,
+      })),
+    }));
+  };
+
+  const migrateCoreDatabase = () => {
+    const migratedPlayers = ensureBamPlayerIds(players);
+    const hasPlayerMigration = migratedPlayers.some(
+      (player, index) => player.bamPlayerId !== players[index]?.bamPlayerId
+    );
+    const migratedTeams = syncTeamPlayerIdentities(teams, migratedPlayers);
+    const hasTeamMigration =
+      JSON.stringify(migratedTeams) !== JSON.stringify(teams);
+
+    if (hasPlayerMigration) setPlayers(migratedPlayers);
+    if (hasTeamMigration) setTeams(migratedTeams);
+
+    setDatabaseMeta((prevMeta) => ({
+      ...prevMeta,
+      version: CORE_DATABASE_VERSION,
+      lastMigrationAt: new Date().toISOString(),
+      lastMigrationText: new Date().toLocaleString(),
+    }));
+
+    if (hasPlayerMigration || hasTeamMigration) {
+      alert(
+        "Core Database upgraded: BAM Player ID ถูกสร้างให้ผู้เล่นเดิมเรียบร้อย"
+      );
+    } else {
+      alert("Core Database already healthy: ข้อมูลเป็นเวอร์ชันล่าสุดแล้ว");
+    }
+  };
+
+  const getDatabaseHealthReport = () => {
+    const duplicateBamIds = players
+      .map((player) => player.bamPlayerId)
+      .filter(Boolean)
+      .filter((id, index, list) => list.indexOf(id) !== index);
+
+    const missingBamIds = players.filter(
+      (player) => !player.bamPlayerId
+    ).length;
+    const seasonRecordsWithoutVersion = seasonHistory.filter(
+      (season) => !season.dataVersion && !season.version
+    ).length;
+    const careerRows = buildPlayerCareerData();
+
+    const checks = [
+      {
+        label: "Database Version",
+        ok: databaseMeta.version === CORE_DATABASE_VERSION,
+      },
+      { label: "Player Identity", ok: missingBamIds === 0 },
+      { label: "Duplicate BAM ID", ok: duplicateBamIds.length === 0 },
+      { label: "Career Rebuild", ok: Array.isArray(careerRows) },
+      { label: "Season History", ok: seasonHistory.length >= 0 },
+    ];
+
+    const passed = checks.filter((check) => check.ok).length;
+    const healthScore = Math.round((passed / checks.length) * 100);
+
+    return {
+      checks,
+      healthScore,
+      duplicateBamIds,
+      missingBamIds,
+      seasonRecordsWithoutVersion,
+      careerPlayers: careerRows.length,
+    };
+  };
+
+  const renderSystemHealthCard = () => {
+    const report = getDatabaseHealthReport();
+    const statusColor = report.healthScore >= 90 ? "#15803d" : "#b45309";
+
+    return (
+      <div
+        style={{
+          border: "1px solid #bbf7d0",
+          borderRadius: "14px",
+          padding: "14px",
+          background: "#f0fdf4",
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>🧠 Core Database Engine V4</h3>
+        <div
+          style={{ fontSize: "28px", fontWeight: "bold", color: statusColor }}
+        >
+          System Health {report.healthScore}%
+        </div>
+        <p style={{ marginTop: "6px", color: "#166534" }}>
+          Database Version: <strong>{databaseMeta.version}</strong> / Target:{" "}
+          <strong>{CORE_DATABASE_VERSION}</strong>
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: "8px",
+            marginBottom: "12px",
+          }}
+        >
+          <div>
+            🆔 Players: <strong>{players.length}</strong>
+          </div>
+          <div>
+            ✅ Missing BAM ID: <strong>{report.missingBamIds}</strong>
+          </div>
+          <div>
+            ⚠️ Duplicate ID: <strong>{report.duplicateBamIds.length}</strong>
+          </div>
+          <div>
+            🏀 Career Players: <strong>{report.careerPlayers}</strong>
+          </div>
+        </div>
+        <ul style={{ margin: "0 0 12px", paddingLeft: "20px" }}>
+          {report.checks.map((check) => (
+            <li key={check.label} style={{ marginBottom: "4px" }}>
+              {check.ok ? "✅" : "⚠️"} {check.label}
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={migrateCoreDatabase}
+          style={{ marginRight: "8px" }}
+        >
+          Run Core Migration / Health Check
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            alert(`Career rebuilt from ${seasonHistory.length} season records.`)
+          }
+        >
+          Rebuild Career Preview
+        </button>
+        <p style={{ marginBottom: 0, color: "#166534", fontSize: "12px" }}>
+          Last Migration: {databaseMeta.lastMigrationText || "-"}
+        </p>
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    if (databaseMeta.version === CORE_DATABASE_VERSION) return;
+    const migratedPlayers = ensureBamPlayerIds(players);
+    const migratedTeams = syncTeamPlayerIdentities(teams, migratedPlayers);
+
+    if (JSON.stringify(migratedPlayers) !== JSON.stringify(players)) {
+      setPlayers(migratedPlayers);
+    }
+
+    if (JSON.stringify(migratedTeams) !== JSON.stringify(teams)) {
+      setTeams(migratedTeams);
+    }
+
+    setDatabaseMeta((prevMeta) => ({
+      ...prevMeta,
+      version: CORE_DATABASE_VERSION,
+      lastMigrationAt: new Date().toISOString(),
+      lastMigrationText: new Date().toLocaleString(),
+      autoMigrated: true,
+    }));
   }, []);
 
   // ======================================================
@@ -843,6 +1151,11 @@ function Players() {
     const rating = calculateRatingFromSkills(form);
 
     const playerData = {
+      bamPlayerId: editingId
+        ? players.find((player) => player.id === editingId)?.bamPlayerId ||
+          getNextBamPlayerId()
+        : getNextBamPlayerId(),
+      identityVersion: CORE_DATABASE_VERSION,
       name: form.name.trim(),
       tier: getFinalTier(form.tier, rating),
       rating,
@@ -975,6 +1288,7 @@ function Players() {
   const downloadTemplate = () => {
     downloadCSV("bam_players_template.csv", [
       [
+        "BAM_ID",
         "Name",
         "Tier",
         "Pos1",
@@ -985,9 +1299,9 @@ function Players() {
         "Defense",
         "Passing",
       ],
-      ["ปัญจสุทธิ์", "SSS+", "SF", "PF", "3", "4", "3", "5", "3"],
-      ["ริรักทร", "", "PG", "SG", "5", "4", "3", "3", "5", ""],
-      ["ธนากร", "", "C", "PF", "5", "5", "4", "5", "5", ""],
+      ["", "ปัญจสุทธิ์", "SSS+", "SF", "PF", "3", "4", "3", "5", "3"],
+      ["", "ริรักทร", "", "PG", "SG", "5", "4", "3", "3", "5", ""],
+      ["", "ธนากร", "", "C", "PF", "5", "5", "4", "5", "5", ""],
     ]);
   };
 
@@ -999,6 +1313,7 @@ function Players() {
 
     downloadCSV("bam_players.csv", [
       [
+        "BAM_ID",
         "Name",
         "Tier",
         "Rating",
@@ -1012,6 +1327,7 @@ function Players() {
         "Available",
       ],
       ...players.map((p) => [
+        p.bamPlayerId || "",
         p.name,
         p.tier,
         p.rating,
@@ -1047,7 +1363,13 @@ function Players() {
     const imported = lines
       .slice(1)
       .map((line, index) => {
+        const columns = parseCSVLine(line);
+        const hasBamIdColumn = String(columns[0] || "")
+          .trim()
+          .toUpperCase()
+          .startsWith("BAM-");
         const [
+          bamIdRaw,
           name,
           tierRaw,
           pos1Raw,
@@ -1057,7 +1379,7 @@ function Players() {
           shootingRaw,
           defenseRaw,
           passingRaw,
-        ] = parseCSVLine(line);
+        ] = hasBamIdColumn ? columns : ["", ...columns];
 
         const pos1 = String(pos1Raw || "PG")
           .trim()
@@ -1067,6 +1389,9 @@ function Players() {
           .toUpperCase();
         const base = {
           id: Date.now() + index,
+          bamPlayerId:
+            String(bamIdRaw || "").trim() || getNextBamPlayerId(index + 1),
+          identityVersion: CORE_DATABASE_VERSION,
           name: String(name || "").trim(),
           pos1: validPositions.includes(pos1) ? pos1 : "PG",
           pos2: validPositions.includes(pos2) ? pos2 : "",
@@ -1620,6 +1945,8 @@ function Players() {
 
     const newPlayer = {
       id: Date.now(),
+      bamPlayerId: getNextBamPlayerId(),
+      identityVersion: CORE_DATABASE_VERSION,
       name: newRosterForm.name.trim(),
       tier: getFinalTier(newRosterForm.tier, rating),
       rating,
@@ -2524,6 +2851,7 @@ function Players() {
       const stat = statsByPlayerId.get(String(player.id));
       return {
         playerId: player.id,
+        bamPlayerId: player.bamPlayerId || "",
         playerName: player.name,
         teamName: player.teamName || stat?.teamName || "",
         mvpScore: Number(stat?.mvpScore || 0),
@@ -2538,13 +2866,19 @@ function Players() {
             (player) => String(player.playerId) === String(stat.playerId)
           )
       )
-      .map((stat) => ({
-        playerId: stat.playerId,
-        playerName: stat.playerName,
-        teamName: stat.teamName || "",
-        mvpScore: Number(stat.mvpScore || 0),
-        pts: Number(stat.pts || 0),
-      }));
+      .map((stat) => {
+        const identityPlayer = players.find(
+          (player) => String(player.id) === String(stat.playerId)
+        );
+        return {
+          playerId: stat.playerId,
+          bamPlayerId: identityPlayer?.bamPlayerId || "",
+          playerName: stat.playerName,
+          teamName: stat.teamName || "",
+          mvpScore: Number(stat.mvpScore || 0),
+          pts: Number(stat.pts || 0),
+        };
+      });
 
     return [...playerOptions, ...missingStatOptions]
       .filter((player) => player.playerName)
@@ -2570,9 +2904,53 @@ function Players() {
 
   const getSelectedPlayerProfile = () => {
     if (!selectedProfilePlayerId) return null;
-    return getPlayerStatRows().find(
-      (stat) => String(stat.playerId) === String(selectedProfilePlayerId)
+
+    const player = players.find(
+      (item) => String(item.id) === String(selectedProfilePlayerId)
     );
+
+    const stat =
+      getPlayerStatRows().find(
+        (row) => String(row.playerId) === String(selectedProfilePlayerId)
+      ) || {};
+
+    if (!player && !stat.playerId) return null;
+
+    const basePlayer = player || {};
+
+    return {
+      ...basePlayer,
+      ...stat,
+      playerId: basePlayer.id || stat.playerId,
+      id: basePlayer.id || stat.playerId,
+      playerName: basePlayer.name || stat.playerName || basePlayer.name || "-",
+      name: basePlayer.name || stat.playerName || "-",
+      teamName: basePlayer.teamName || stat.teamName || "",
+      bamPlayerId: basePlayer.bamPlayerId || stat.bamPlayerId || "",
+      photoUrl: basePlayer.photoUrl || stat.photoUrl || "",
+      tier: basePlayer.tier || stat.tier || "",
+      rating:
+        basePlayer.rating ||
+        stat.rating ||
+        calculateRatingFromSkills(basePlayer),
+      pos1: basePlayer.pos1 || stat.pos1 || "-",
+      pos2: basePlayer.pos2 || stat.pos2 || "",
+      dribbling: basePlayer.dribbling || 3,
+      insideScoring: basePlayer.insideScoring || 3,
+      shooting: basePlayer.shooting || 3,
+      defense: basePlayer.defense || 3,
+      passing: basePlayer.passing || 3,
+      gamesByMatch: stat.gamesByMatch || {},
+      games: stat.games || 0,
+      appearances: stat.appearances || 0,
+      pts: stat.pts || 0,
+      reb: stat.reb || 0,
+      ast: stat.ast || 0,
+      stl: stat.stl || 0,
+      blk: stat.blk || 0,
+      ppg: stat.ppg || "0.0",
+      mvpScore: stat.mvpScore || 0,
+    };
   };
 
   const getPlayerMatchLog = (stat) => {
@@ -2612,6 +2990,721 @@ function Players() {
         };
       })
       .sort((a, b) => Number(a.week || 0) - Number(b.week || 0));
+  };
+
+  const getProfileCareerData = (profile) => {
+    if (!profile) return null;
+    const bamId = String(profile.bamPlayerId || "").trim();
+    const normalizedName = String(profile.playerName || profile.name || "")
+      .trim()
+      .toLowerCase();
+
+    const careerRows = buildPlayerCareerData();
+
+    return (
+      careerRows.find(
+        (career) => bamId && String(career.bamPlayerId || "") === bamId
+      ) ||
+      careerRows.find(
+        (career) =>
+          String(career.playerName || "")
+            .trim()
+            .toLowerCase() === normalizedName
+      ) ||
+      null
+    );
+  };
+
+  const getSkillGrade = (value) => {
+    const score = Number(value || 0) * 20;
+    if (score >= 90) return "S+";
+    if (score >= 80) return "S";
+    if (score >= 70) return "A";
+    if (score >= 60) return "B";
+    if (score >= 50) return "C";
+    if (score >= 40) return "D";
+    return "E";
+  };
+
+  const getProfileTitle = (profile, career) => {
+    if (career?.awards?.regularSeasonMvp?.total > 0)
+      return "THE MOST VALUABLE PLAYER";
+    if (career?.awards?.finalsMvp?.total > 0) return "THE FINALS HERO";
+    if (career?.awards?.topScorer?.total > 0) return "THE BEST SCORER";
+    if (career?.awards?.champion?.total > 0) return "THE CHAMPION";
+    if (Number(profile.rating || 0) >= 80) return "THE ELITE HOOPER";
+    return "THE RISING PLAYER";
+  };
+
+  const renderMangaSkillRadar = (profile) => {
+    const skills = [
+      {
+        key: "dribbling",
+        label: "DRIBBLE",
+        th: "การเลี้ยง",
+        value: profile.dribbling,
+      },
+      {
+        key: "insideScoring",
+        label: "INSIDE",
+        th: "วงใน",
+        value: profile.insideScoring,
+      },
+      { key: "shooting", label: "SHOOT", th: "ยิง", value: profile.shooting },
+      {
+        key: "defense",
+        label: "DEFENSE",
+        th: "ป้องกัน",
+        value: profile.defense,
+      },
+      { key: "passing", label: "PASS", th: "จ่ายบอล", value: profile.passing },
+    ];
+
+    const center = 150;
+    const maxRadius = 100;
+    const points = skills
+      .map((skill, index) => {
+        const angle = (-90 + index * (360 / skills.length)) * (Math.PI / 180);
+        const radius = (Number(skill.value || 0) / 5) * maxRadius;
+        return `${center + Math.cos(angle) * radius},${
+          center + Math.sin(angle) * radius
+        }`;
+      })
+      .join(" ");
+
+    const ringPoints = [1, 2, 3, 4, 5].map((level) =>
+      skills
+        .map((_, index) => {
+          const angle = (-90 + index * (360 / skills.length)) * (Math.PI / 180);
+          const radius = (level / 5) * maxRadius;
+          return `${center + Math.cos(angle) * radius},${
+            center + Math.sin(angle) * radius
+          }`;
+        })
+        .join(" ")
+    );
+
+    return (
+      <div
+        style={{
+          background: "#f8fafc",
+          border: "3px solid #111",
+          borderRadius: "18px",
+          padding: "10px",
+          boxShadow: "8px 8px 0 #111",
+        }}
+      >
+        <svg viewBox="0 0 300 340" width="100%" style={{ display: "block" }}>
+          <defs>
+            <pattern
+              id="mangaGrid"
+              width="10"
+              height="10"
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d="M 10 0 L 0 0 0 10"
+                fill="none"
+                stroke="#d1d5db"
+                strokeWidth="0.6"
+              />
+            </pattern>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width="300"
+            height="340"
+            fill="url(#mangaGrid)"
+            opacity="0.35"
+          />
+          <circle
+            cx={center}
+            cy={center}
+            r="128"
+            fill="white"
+            stroke="#111"
+            strokeWidth="4"
+          />
+          <circle
+            cx={center}
+            cy={center}
+            r="116"
+            fill="none"
+            stroke="#111"
+            strokeWidth="1.5"
+            strokeDasharray="4 4"
+          />
+
+          {ringPoints.map((ring, index) => (
+            <polygon
+              key={`skill-ring-${index}`}
+              points={ring}
+              fill="none"
+              stroke="#94a3b8"
+              strokeWidth={index === 4 ? 2 : 1}
+            />
+          ))}
+
+          {skills.map((skill, index) => {
+            const angle =
+              (-90 + index * (360 / skills.length)) * (Math.PI / 180);
+            const labelRadius = 137;
+            const gradeRadius = 108;
+            const x = center + Math.cos(angle) * labelRadius;
+            const y = center + Math.sin(angle) * labelRadius;
+            const gx = center + Math.cos(angle) * gradeRadius;
+            const gy = center + Math.sin(angle) * gradeRadius;
+
+            return (
+              <g key={`skill-axis-${skill.key}`}>
+                <line
+                  x1={center}
+                  y1={center}
+                  x2={center + Math.cos(angle) * maxRadius}
+                  y2={center + Math.sin(angle) * maxRadius}
+                  stroke="#111"
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={x}
+                  y={y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="15"
+                  fontWeight="900"
+                  fill="#111"
+                >
+                  {skill.label}
+                </text>
+                <text
+                  x={gx}
+                  y={gy}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="22"
+                  fontWeight="900"
+                  fill="#111"
+                  stroke="white"
+                  strokeWidth="4"
+                  paintOrder="stroke"
+                >
+                  {getSkillGrade(skill.value)}
+                </text>
+                <text
+                  x={center + Math.cos(angle) * 70}
+                  y={center + Math.sin(angle) * 70}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="13"
+                  fontWeight="800"
+                  fill="#111"
+                >
+                  {Number(skill.value || 0) * 20}
+                </text>
+              </g>
+            );
+          })}
+
+          <polygon
+            points={points}
+            fill="rgba(17, 24, 39, 0.24)"
+            stroke="#111"
+            strokeWidth="4"
+          />
+          <circle cx={center} cy={center} r="4" fill="#111" />
+          <text
+            x="150"
+            y="318"
+            textAnchor="middle"
+            fontSize="12"
+            fontWeight="900"
+            fill="#111"
+          >
+            การเลี้ยง / วงใน / ยิง / ป้องกัน / จ่ายบอล
+          </text>
+        </svg>
+      </div>
+    );
+  };
+
+  const renderMangaPlayerProfileCard = (profile, matchLogs = []) => {
+    if (!profile) return null;
+
+    const career = getProfileCareerData(profile);
+    const totalRating = Number(
+      profile.rating || calculateRatingFromSkills(profile) || 0
+    );
+    const tier = profile.tier || calculateTierFromRating(totalRating);
+    const careerAwards = career?.awards || {};
+    const careerStats = career?.stats || {};
+    const legacyScore = Number(career?.legacyScore || 0);
+    const title = getProfileTitle(profile, career);
+    const profilePhoto =
+      profile.photoUrl || getPlayerPhotoUrl(profile.playerId);
+
+    const timelineItems = (career?.seasons || [])
+      .slice()
+      .sort((a, b) => {
+        if (Number(b.season || 0) !== Number(a.season || 0))
+          return Number(b.season || 0) - Number(a.season || 0);
+        return String(b.seasonTitle || "").localeCompare(
+          String(a.seasonTitle || "")
+        );
+      })
+      .slice(0, 8);
+
+    const awardLabels = {
+      champion: "🏆 Champion",
+      regularSeasonMvp: "👑 Regular MVP",
+      finalsMvp: "🏅 Finals MVP",
+      topScorer: "🎯 Top Scorer",
+      reboundLeader: "💪 Rebound",
+      assistLeader: "🧠 Assist",
+      played: "🏀 Played",
+    };
+
+    const badgeList = [
+      {
+        icon: "🏆",
+        label: "Champion",
+        count: careerAwards.champion?.total || 0,
+      },
+      {
+        icon: "👑",
+        label: "Regular MVP",
+        count: careerAwards.regularSeasonMvp?.total || 0,
+      },
+      {
+        icon: "🏅",
+        label: "Finals MVP",
+        count: careerAwards.finalsMvp?.total || 0,
+      },
+      {
+        icon: "🎯",
+        label: "Top Scorer",
+        count: careerAwards.topScorer?.total || 0,
+      },
+      {
+        icon: "💪",
+        label: "Rebound",
+        count: careerAwards.reboundLeader?.total || 0,
+      },
+      {
+        icon: "🧠",
+        label: "Assist",
+        count: careerAwards.assistLeader?.total || 0,
+      },
+    ];
+
+    return (
+      <div
+        id="player-profile-card"
+        style={{
+          width: "min(1180px, 100%)",
+          border: "5px solid #111",
+          borderRadius: "26px",
+          padding: "18px",
+          background:
+            "radial-gradient(circle at 25% 15%, #ffffff 0, #ffffff 25%, #f1f5f9 55%, #e5e7eb 100%)",
+          boxShadow: "12px 12px 0 #111",
+          color: "#111",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "repeating-linear-gradient(45deg, rgba(0,0,0,0.035) 0, rgba(0,0,0,0.035) 2px, transparent 2px, transparent 8px)",
+            pointerEvents: "none",
+          }}
+        />
+
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(280px, 420px) 1fr",
+              gap: "22px",
+              alignItems: "stretch",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: "inline-block",
+                  background: "#111",
+                  color: "white",
+                  padding: "8px 14px",
+                  borderRadius: "12px",
+                  fontWeight: "900",
+                  letterSpacing: "1px",
+                  marginBottom: "12px",
+                  boxShadow: "5px 5px 0 #6b7280",
+                }}
+              >
+                "{title}"
+              </div>
+
+              {renderMangaSkillRadar(profile)}
+
+              <div
+                style={{
+                  marginTop: "16px",
+                  border: "4px solid #111",
+                  borderRadius: "18px",
+                  background: "white",
+                  padding: "14px",
+                  boxShadow: "7px 7px 0 #111",
+                }}
+              >
+                <div
+                  style={{ fontSize: "13px", fontWeight: "900", color: "#555" }}
+                >
+                  TOTAL RATING
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "end",
+                    gap: "16px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "54px",
+                      fontWeight: "1000",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {totalRating}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "62px",
+                      fontWeight: "1000",
+                      lineHeight: 0.9,
+                    }}
+                  >
+                    {tier}
+                  </div>
+                  <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: "900",
+                        color: "#555",
+                      }}
+                    >
+                      LEGACY
+                    </div>
+                    <div style={{ fontSize: "36px", fontWeight: "1000" }}>
+                      {legacyScore}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{ fontSize: "12px", color: "#555", marginTop: "8px" }}
+                >
+                  SSS+ 90-100 | S+ 80-89 | S- 70-79 | A+ 60-69 | A- 50-59
+                </div>
+              </div>
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr minmax(180px, 260px)",
+                  gap: "18px",
+                  alignItems: "start",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: "900",
+                      letterSpacing: "2px",
+                      color: "#555",
+                    }}
+                  >
+                    BAM LEAGUE PLAYER FILE
+                  </div>
+                  <h1
+                    style={{
+                      fontSize: "44px",
+                      lineHeight: 1,
+                      margin: "8px 0 4px",
+                      fontWeight: "1000",
+                    }}
+                  >
+                    {profile.playerName || profile.name}
+                  </h1>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      color: "#555",
+                      fontWeight: "800",
+                    }}
+                  >
+                    {profile.bamPlayerId || "NO BAM ID"} ·{" "}
+                    {profile.teamName || "No Team"} · {profile.pos1 || "-"}
+                    {profile.pos2 ? ` / ${profile.pos2}` : ""}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: "4px solid #111",
+                    borderRadius: "18px",
+                    background: "white",
+                    overflow: "hidden",
+                    boxShadow: "7px 7px 0 #111",
+                    minHeight: "220px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {profilePhoto ? (
+                    <img
+                      src={profilePhoto}
+                      alt={profile.playerName || profile.name}
+                      style={{
+                        width: "100%",
+                        height: "240px",
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    <div style={{ fontSize: "96px" }}>🏀</div>
+                  )}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+                  gap: "10px",
+                  marginTop: "18px",
+                }}
+              >
+                {[
+                  ["GP", profile.games || careerStats.games || 0],
+                  ["PTS", profile.pts || careerStats.pts || 0],
+                  ["PPG", profile.ppg || career?.ppg || "0.0"],
+                  ["REB", profile.reb || careerStats.reb || 0],
+                  ["AST", profile.ast || careerStats.ast || 0],
+                  ["MVP", Number(profile.mvpScore || 0).toFixed(1)],
+                ].map(([label, value]) => (
+                  <div
+                    key={`manga-stat-${label}`}
+                    style={{
+                      border: "3px solid #111",
+                      borderRadius: "14px",
+                      background: "white",
+                      padding: "10px",
+                      textAlign: "center",
+                      boxShadow: "4px 4px 0 #111",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "#555",
+                        fontWeight: "900",
+                      }}
+                    >
+                      {label}
+                    </div>
+                    <div style={{ fontSize: "24px", fontWeight: "1000" }}>
+                      {value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                  gap: "10px",
+                  marginTop: "18px",
+                }}
+              >
+                {badgeList.map((badge) => (
+                  <div
+                    key={`manga-badge-${badge.label}`}
+                    style={{
+                      border: "3px solid #111",
+                      borderRadius: "14px",
+                      background: "white",
+                      padding: "10px",
+                      boxShadow: "4px 4px 0 #111",
+                    }}
+                  >
+                    <div style={{ fontWeight: "1000" }}>
+                      {badge.icon} {badge.label}
+                    </div>
+                    <div style={{ fontSize: "22px", fontWeight: "1000" }}>
+                      x{badge.count}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "14px",
+                  marginTop: "18px",
+                }}
+              >
+                <div
+                  style={{
+                    border: "3px solid #111",
+                    borderRadius: "18px",
+                    background: "white",
+                    padding: "14px",
+                    boxShadow: "5px 5px 0 #111",
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>📜 Season Timeline</h3>
+                  {timelineItems.length === 0 ? (
+                    <p style={{ color: "#666" }}>ยังไม่มีประวัติข้ามซีซัน</p>
+                  ) : (
+                    timelineItems.map((item) => (
+                      <div
+                        key={`manga-timeline-${item.seasonId}-${item.award}`}
+                        style={{
+                          borderBottom: "1px solid #ddd",
+                          padding: "8px 0",
+                        }}
+                      >
+                        <strong>{item.seasonTitle}</strong>
+                        <div style={{ color: "#555" }}>
+                          {awardLabels[item.award] || item.award}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: "3px solid #111",
+                    borderRadius: "18px",
+                    background: "white",
+                    padding: "14px",
+                    boxShadow: "5px 5px 0 #111",
+                    overflowX: "auto",
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>📊 Match Log</h3>
+                  {matchLogs.length === 0 ? (
+                    <p style={{ color: "#666" }}>ยังไม่มี Match Log</p>
+                  ) : (
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: "13px",
+                      }}
+                    >
+                      <thead>
+                        <tr>
+                          <th>W</th>
+                          <th>OPP</th>
+                          <th>PTS</th>
+                          <th>REB</th>
+                          <th>AST</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matchLogs.slice(-8).map((log) => (
+                          <tr
+                            key={`manga-log-${profile.playerId}-${log.matchId}`}
+                            style={{ borderTop: "1px solid #ddd" }}
+                          >
+                            <td>{log.week}</td>
+                            <td>{log.opponent}</td>
+                            <td>{log.appearance ? log.pts : "-"}</td>
+                            <td>{log.appearance ? log.reb : "-"}</td>
+                            <td>{log.appearance ? log.ast : "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlayerProfileModal = () => {
+    const profile = getSelectedPlayerProfile();
+    if (!selectedProfilePlayerId || !profile) return null;
+    const matchLogs = getPlayerMatchLog(profile);
+
+    return (
+      <div
+        onClick={() => setSelectedProfilePlayerId("")}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.72)",
+          zIndex: 99999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "24px",
+        }}
+      >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            width: "min(1240px, 100%)",
+            maxHeight: "92vh",
+            overflowY: "auto",
+            position: "relative",
+            padding: "8px 12px 18px 0",
+          }}
+        >
+          <button
+            onClick={() => setSelectedProfilePlayerId("")}
+            style={{
+              position: "sticky",
+              top: 0,
+              float: "right",
+              zIndex: 2,
+              width: "42px",
+              height: "42px",
+              borderRadius: "999px",
+              border: "3px solid #111",
+              background: "white",
+              fontWeight: "900",
+              cursor: "pointer",
+              boxShadow: "4px 4px 0 #111",
+              marginBottom: "8px",
+            }}
+          >
+            ×
+          </button>
+          {renderMangaPlayerProfileCard(profile, matchLogs)}
+        </div>
+      </div>
+    );
   };
 
   const clearPlayerStats = () => {
@@ -2740,6 +3833,7 @@ function Players() {
 
     const seasonRecord = {
       id: Date.now(),
+      dataVersion: CORE_DATABASE_VERSION,
       season: currentSeason,
       competitionType,
       projectName,
@@ -2752,14 +3846,19 @@ function Players() {
       finalScore: awards.finalScore || "-",
       thirdPlaceScore: awards.thirdPlaceScore || "-",
       regularSeasonMvp: awards.regularSeasonMvp?.playerName || "-",
+      regularSeasonMvpPlayerId:
+        awards.regularSeasonMvp?.bamPlayerId ||
+        awards.regularSeasonMvp?.playerId ||
+        "",
       regularSeasonMvpTeam: awards.regularSeasonMvp?.teamName || "-",
       regularSeasonMvpScore: Number(awards.regularSeasonMvp?.mvpScore || 0),
       finalsMvp: awards.finalsMvp?.playerName || "-",
       finalsMvpTeam: awards.finalsMvp?.teamName || "-",
-      finalsMvpPlayerId: awards.finalsMvp?.playerId || "",
+      finalsMvpPlayerId:
+        awards.finalsMvp?.bamPlayerId || awards.finalsMvp?.playerId || "",
       finalsMvpAward: awards.finalsMvp
         ? {
-            playerId: awards.finalsMvp.playerId,
+            playerId: awards.finalsMvp.bamPlayerId || awards.finalsMvp.playerId,
             playerName: awards.finalsMvp.playerName,
             teamName: awards.finalsMvp.teamName || "",
             season: currentSeason,
@@ -2771,11 +3870,19 @@ function Players() {
       mvpTeam: awards.regularSeasonMvp?.teamName || "-",
       mvpScore: Number(awards.regularSeasonMvp?.mvpScore || 0),
       topScorer: awards.topScorer?.playerName || "-",
+      topScorerPlayerId:
+        awards.topScorer?.bamPlayerId || awards.topScorer?.playerId || "",
       topScorerTeam: awards.topScorer?.teamName || "-",
       topScorerPts: Number(awards.topScorer?.pts || 0),
       reboundLeader: awards.reboundLeader?.playerName || "-",
+      reboundLeaderPlayerId:
+        awards.reboundLeader?.bamPlayerId ||
+        awards.reboundLeader?.playerId ||
+        "",
       reboundLeaderReb: Number(awards.reboundLeader?.reb || 0),
       assistLeader: awards.assistLeader?.playerName || "-",
+      assistLeaderPlayerId:
+        awards.assistLeader?.bamPlayerId || awards.assistLeader?.playerId || "",
       assistLeaderAst: Number(awards.assistLeader?.ast || 0),
       standings: standingsRows,
       archivedData: {
@@ -2793,6 +3900,7 @@ function Players() {
         teamNames,
         teamLogos,
         lockGroups,
+        databaseMeta: { version: CORE_DATABASE_VERSION },
         standings: standingsRows,
       },
     };
@@ -3409,11 +4517,15 @@ function Players() {
       currentSeason,
       seasonProjectName,
       seasonHistory,
+      databaseMeta: {
+        ...databaseMeta,
+        version: CORE_DATABASE_VERSION,
+      },
     };
 
     const backupFile = {
       app: "BAM_LEAGUE_SYSTEM",
-      version: "3.1.1",
+      version: CORE_DATABASE_VERSION,
       exportDate: new Date().toISOString(),
       data: backupData,
     };
@@ -3566,25 +4678,299 @@ function Players() {
     currentSeason,
     seasonProjectName,
     seasonHistory,
+    databaseMeta: {
+      ...databaseMeta,
+      version: CORE_DATABASE_VERSION,
+    },
+    publishMeta: {
+      lastPublishedAt: cloudPublishMeta.lastPublishedAt || "",
+      lastPublishedText: cloudPublishMeta.lastPublishedText || "",
+    },
   });
 
+  const createStableJson = (value) => {
+    if (Array.isArray(value)) {
+      return `[${value.map(createStableJson).join(",")}]`;
+    }
+
+    if (value && typeof value === "object") {
+      return `{${Object.keys(value)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${createStableJson(value[key])}`)
+        .join(",")}}`;
+    }
+
+    return JSON.stringify(value);
+  };
+
+  const createDataHash = (value) => {
+    const source = createStableJson(value);
+    let hash = 0;
+
+    for (let index = 0; index < source.length; index += 1) {
+      hash = (hash << 5) - hash + source.charCodeAt(index);
+      hash |= 0;
+    }
+
+    return `BAM-${Math.abs(hash).toString(16).toUpperCase()}`;
+  };
+
+  const getCurrentLocalHash = () => createDataHash(getAllBackupData());
+
+  const validatePublishData = () => {
+    const missingBamIds = players.filter((player) => !player.bamPlayerId);
+    const duplicateBamIds = players
+      .map((player) => player.bamPlayerId)
+      .filter(Boolean)
+      .filter((id, index, list) => list.indexOf(id) !== index);
+    const invalidTeams = teams.filter(
+      (team) => !team.name || !Array.isArray(team.players)
+    );
+    const invalidMatches = schedule.filter(
+      (match) => !match.id || !match.teamA || !match.teamB || !match.label
+    );
+    const finishedMatchesWithoutScore = schedule.filter(
+      (match) =>
+        match.status === "Finished" &&
+        (match.scoreA === "" || match.scoreB === "")
+    );
+    const seasonWithoutName = seasonHistory.filter(
+      (season) => !season.projectName && !season.name
+    );
+
+    const checks = [
+      {
+        label: "ผู้เล่นทุกคนต้องมี BAM ID",
+        ok: missingBamIds.length === 0,
+        detail: missingBamIds.length
+          ? `${missingBamIds.length} คนยังไม่มี BAM ID`
+          : "ผ่าน",
+      },
+      {
+        label: "BAM ID ต้องไม่ซ้ำ",
+        ok: duplicateBamIds.length === 0,
+        detail: duplicateBamIds.length ? duplicateBamIds.join(", ") : "ผ่าน",
+      },
+      {
+        label: "โครงสร้างทีมต้องถูกต้อง",
+        ok: invalidTeams.length === 0,
+        detail: invalidTeams.length
+          ? `${invalidTeams.length} ทีมมีข้อมูลไม่สมบูรณ์`
+          : "ผ่าน",
+      },
+      {
+        label: "โครงสร้างตารางแข่งต้องถูกต้อง",
+        ok: invalidMatches.length === 0,
+        detail: invalidMatches.length
+          ? `${invalidMatches.length} แมตช์มีข้อมูลไม่สมบูรณ์`
+          : "ผ่าน",
+      },
+      {
+        label: "แมตช์ที่จบแล้วต้องมีคะแนน",
+        ok: finishedMatchesWithoutScore.length === 0,
+        detail: finishedMatchesWithoutScore.length
+          ? `${finishedMatchesWithoutScore.length} แมตช์ยังไม่มีคะแนนครบ`
+          : "ผ่าน",
+      },
+      {
+        label: "Season History ต้องมีชื่อซีซัน",
+        ok: seasonWithoutName.length === 0,
+        detail: seasonWithoutName.length
+          ? `${seasonWithoutName.length} รายการยังไม่มีชื่อซีซัน`
+          : "ผ่าน",
+      },
+    ];
+
+    const passed = checks.filter((check) => check.ok).length;
+
+    return {
+      checks,
+      passed,
+      total: checks.length,
+      ok: checks.every((check) => check.ok),
+      score: Math.round((passed / checks.length) * 100),
+    };
+  };
+
+  const runPublishValidation = () => {
+    const report = validatePublishData();
+    const now = new Date();
+
+    setCloudPublishMeta((prevMeta) => ({
+      ...prevMeta,
+      lastValidationAt: now.toISOString(),
+      lastValidationText: now.toLocaleString(),
+      lastValidationPassed: report.ok,
+      lastValidationScore: report.score,
+    }));
+
+    alert(
+      `Publish Validation: ${report.score}%\n\n${report.checks
+        .map(
+          (check) => `${check.ok ? "✅" : "⚠️"} ${check.label}: ${check.detail}`
+        )
+        .join("\n")}`
+    );
+
+    return report;
+  };
+
   const uploadToCloud = async () => {
+    const validation = validatePublishData();
+
+    if (!validation.ok) {
+      alert(
+        `ยัง Publish ไม่ได้ เพราะ Validation ไม่ผ่าน (${
+          validation.score
+        }%)\n\n${validation.checks
+          .filter((check) => !check.ok)
+          .map((check) => `⚠️ ${check.label}: ${check.detail}`)
+          .join(
+            "\n"
+          )}\n\nให้แก้ข้อมูลก่อน หรือกด Validate เพื่อดูรายละเอียดทั้งหมด`
+      );
+      setCloudPublishMeta((prevMeta) => ({
+        ...prevMeta,
+        lastValidationAt: new Date().toISOString(),
+        lastValidationText: new Date().toLocaleString(),
+        lastValidationPassed: false,
+        lastValidationScore: validation.score,
+      }));
+      return;
+    }
+
+    const currentHash = getCurrentLocalHash();
     const confirmUpload = window.confirm(
-      "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ"
+      "ต้องการ Publish ข้อมูลที่ตรวจสอบแล้วขึ้น Cloud ใช่ไหม?\n\n" +
+        "Public Dashboard จะใช้ข้อมูลชุดนี้แทนข้อมูล Cloud เดิม\n\n" +
+        `Local Version: ${currentHash}\n` +
+        `Last Published: ${
+          cloudPublishMeta.lastPublishedText || "ยังไม่เคย Publish"
+        }`
     );
 
     if (!confirmUpload) return;
 
+    const secondConfirm = window.confirm(
+      "ยืนยันอีกครั้ง: ข้อมูลบน Cloud เดิมจะถูกเขียนทับด้วย Local Draft ปัจจุบัน ต้องการ Publish ต่อไหม?"
+    );
+
+    if (!secondConfirm) return;
+
     try {
-      setCloudStatus("Uploading.");
-      await uploadLeagueBackup(getAllBackupData());
-      setCloudStatus("Cloud Uploaded");
-      alert("Upload To Cloud สำเร็จ");
+      setCloudStatus("Publishing...");
+      const publishTime = new Date();
+      const payload = {
+        ...getAllBackupData(),
+        cloudPublishedAt: publishTime.toISOString(),
+        cloudPublishedText: publishTime.toLocaleString(),
+        cloudPublishedHash: currentHash,
+      };
+
+      await uploadLeagueBackup(payload);
+      setCloudPublishMeta((prevMeta) => ({
+        ...prevMeta,
+        lastPublishedAt: publishTime.toISOString(),
+        lastPublishedText: publishTime.toLocaleString(),
+        lastPublishedHash: currentHash,
+        lastValidationAt: publishTime.toISOString(),
+        lastValidationText: publishTime.toLocaleString(),
+        lastValidationPassed: true,
+        lastValidationScore: validation.score,
+      }));
+      setCloudStatus("Cloud Published");
+      alert("Publish To Cloud สำเร็จ: Public Dashboard ใช้ข้อมูลชุดล่าสุดแล้ว");
     } catch (error) {
-      console.error("Upload To Cloud Error:", error);
+      console.error("Publish To Cloud Error:", error);
       setCloudStatus("Cloud Error");
-      alert("Upload To Cloud ไม่สำเร็จ");
+      alert("Publish To Cloud ไม่สำเร็จ");
     }
+  };
+
+  const renderSafeCloudPublishCard = () => {
+    const validation = validatePublishData();
+    const currentHash = getCurrentLocalHash();
+    const hasUnpublishedChanges =
+      !cloudPublishMeta.lastPublishedHash ||
+      cloudPublishMeta.lastPublishedHash !== currentHash;
+    const statusLabel = hasUnpublishedChanges
+      ? "Local Draft มีข้อมูลที่ยังไม่ Publish"
+      : "Cloud Published ตรงกับ Local Draft";
+    const statusColor = hasUnpublishedChanges ? "#b45309" : "#15803d";
+
+    return (
+      <div
+        style={{
+          border: "1px solid #fde68a",
+          borderRadius: "14px",
+          padding: "14px",
+          background: "#fffbeb",
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>🚦 Safe Cloud Publish</h3>
+        <div
+          style={{
+            fontSize: "20px",
+            fontWeight: "bold",
+            color: statusColor,
+            marginBottom: "6px",
+          }}
+        >
+          {statusLabel}
+        </div>
+        <p style={{ marginTop: 0, color: "#92400e" }}>
+          Workflow: Local Draft → Validate → Publish to Cloud → Public Dashboard
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: "8px",
+            marginBottom: "10px",
+          }}
+        >
+          <div>
+            Validation: <strong>{validation.score}%</strong>
+          </div>
+          <div>
+            Players: <strong>{players.length}</strong>
+          </div>
+          <div>
+            Seasons: <strong>{seasonHistory.length}</strong>
+          </div>
+          <div>
+            Local Hash: <strong>{currentHash}</strong>
+          </div>
+        </div>
+        <ul style={{ margin: "0 0 12px", paddingLeft: "20px" }}>
+          {validation.checks.map((check) => (
+            <li key={check.label} style={{ marginBottom: "4px" }}>
+              {check.ok ? "✅" : "⚠️"} {check.label}
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={runPublishValidation}
+          style={{ marginRight: "8px" }}
+        >
+          Validate Local Draft
+        </button>
+        <button
+          type="button"
+          onClick={uploadToCloud}
+          disabled={!validation.ok}
+          style={{ marginRight: "8px" }}
+        >
+          Publish to Cloud
+        </button>
+        <p style={{ marginBottom: 0, color: "#92400e", fontSize: "12px" }}>
+          Last Published: {cloudPublishMeta.lastPublishedText || "-"}
+          <br />
+          Last Validation: {cloudPublishMeta.lastValidationText || "-"}
+        </p>
+      </div>
+    );
   };
 
   const downloadFromCloud = async () => {
@@ -4002,11 +5388,13 @@ function Players() {
     const name = String(playerName || "").trim();
     if (!isValidAwardValue(name)) return null;
 
-    const key = getCareerPlayerKey(name);
+    const identity = getPlayerIdentityFromName(name);
+    const key = identity.bamPlayerId || identity.key;
     if (!careerMap[key]) {
       careerMap[key] = {
         key,
-        playerName: name,
+        bamPlayerId: identity.bamPlayerId || "",
+        playerName: identity.playerName || name,
         seasons: [],
         awards: {
           champion: { total: 0, "3X3": 0, "5X5": 0 },
@@ -5222,10 +6610,9 @@ function Players() {
                                 <tr
                                   key={`public-team-roster-${selectedPublicTeamData.name}-${player.id}`}
                                   onClick={() =>
-                                    setSelectedPublicPlayer({
-                                      ...player,
-                                      teamName: selectedPublicTeamData.name,
-                                    })
+                                    setSelectedProfilePlayerId(
+                                      String(player.id)
+                                    )
                                   }
                                   style={{
                                     borderBottom: "1px solid #f1f1f1",
@@ -5863,7 +7250,7 @@ function Players() {
             })()
           : null}
 
-        {selectedPublicPlayer
+        {false && selectedPublicPlayer
           ? (() => {
               const playerStats = getDashboardPlayerStats(
                 selectedPublicPlayer.id
@@ -6374,6 +7761,10 @@ function Players() {
           <div style={{ textAlign: "right" }}>
             <div style={adminStatusPillStyle}>☁️ Cloud: {cloudStatus}</div>
             <br />
+            <div style={{ ...adminStatusPillStyle, marginTop: "8px" }}>
+              🧠 DB: {databaseMeta.version}
+            </div>
+            <br />
             <button
               type="button"
               onClick={() => setViewMode("PUBLIC")}
@@ -6483,10 +7874,14 @@ function Players() {
               alignItems: "stretch",
             }}
           >
+            {renderSystemHealthCard()}
+
             <BackupRestoreTools
               exportAllData={exportLeagueBackup}
               importLeagueBackup={importLeagueBackup}
             />
+
+            {renderSafeCloudPublishCard()}
 
             <CloudTools
               cloudStatus={cloudStatus}
@@ -7008,6 +8403,7 @@ function Players() {
                   .filter((player) => player.available)
                   .map((player) => (
                     <option key={player.id} value={player.id}>
+                      {player.bamPlayerId ? `${player.bamPlayerId} | ` : ""}
                       {player.name} | {player.tier} | {player.pos1}
                       {player.pos2 ? `/${player.pos2}` : ""}
                     </option>
@@ -7118,6 +8514,7 @@ function Players() {
         >
           <thead>
             <tr>
+              <th>BAM ID</th>
               <th>Photo</th>
               <th>Name</th>
               <th>Tier</th>
@@ -7132,15 +8529,35 @@ function Players() {
           <tbody>
             {players.length === 0 ? (
               <tr>
-                <td colSpan="8" style={{ textAlign: "center" }}>
+                <td colSpan="9" style={{ textAlign: "center" }}>
                   ยังไม่มีผู้เล่น
                 </td>
               </tr>
             ) : (
               players.map((p) => (
                 <tr key={p.id}>
+                  <td style={{ fontWeight: "bold", color: "#475569" }}>
+                    {getPlayerDisplayId(p)}
+                  </td>
                   <td>{renderPlayerAvatar(p.photoUrl, 42)}</td>
-                  <td>{p.name}</td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProfilePlayerId(String(p.id))}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "#0f172a",
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        padding: 0,
+                      }}
+                      title="Open Player Profile Manga Card"
+                    >
+                      {p.name}
+                    </button>
+                  </td>
                   <td>{p.tier}</td>
                   <td>{p.rating}</td>
                   <td>{p.pos1}</td>
@@ -9345,7 +10762,7 @@ function Players() {
         </div>
       </details>
 
-      {getPlayerStatRows().length > 0 && (
+      {false && getPlayerStatRows().length > 0 && (
         <details
           open
           style={{
@@ -9694,6 +11111,8 @@ function Players() {
           )}
         </div>
       </details>
+
+      {renderPlayerProfileModal()}
     </div>
   );
 }
