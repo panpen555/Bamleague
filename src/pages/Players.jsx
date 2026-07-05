@@ -4,6 +4,8 @@ import BackupRestoreTools from "../components/cloud/BackupRestoreTools";
 import SeasonManagementTools from "../components/season/SeasonManagementTools";
 import DangerZoneTools from "../components/system/DangerZoneTools";
 import PlayerImportExport from "../components/players/PlayerImportExport";
+import AdminHeader from "../components/admin/AdminHeader";
+import AdminNavigation from "../components/admin/AdminNavigation";
 
 import {
   uploadPlayerPhoto,
@@ -86,7 +88,7 @@ function Players() {
   const createDefaultTeamNames = (count) =>
     Array.from(
       { length: count },
-      (_, index) => `Team ${String.fromCharCode(65 + index)}`
+      (_, index) => `Team ${String.fromCharCode(65 + index)}`,
     );
 
   // ======================================================
@@ -261,7 +263,7 @@ function Players() {
 
   const getDefaultSeasonProjectName = (
     type = competitionType,
-    season = currentSeason
+    season = currentSeason,
   ) => `${type} Season ${season}`;
 
   const getCurrentSeasonTitle = () =>
@@ -417,13 +419,13 @@ function Players() {
     const hasLegacyLocks =
       players.some((player) => player.lockedTeam) ||
       teams.some((team) =>
-        (team.players || []).some((player) => player.lockedTeam)
+        (team.players || []).some((player) => player.lockedTeam),
       );
 
     if (!hasLegacyLocks) return;
 
     setPlayers((prevPlayers) =>
-      prevPlayers.map((player) => ({ ...player, lockedTeam: "" }))
+      prevPlayers.map((player) => ({ ...player, lockedTeam: "" })),
     );
 
     setTeams((prevTeams) =>
@@ -433,7 +435,7 @@ function Players() {
           ...player,
           lockedTeam: "",
         })),
-      }))
+      })),
     );
   }, []);
 
@@ -448,7 +450,7 @@ function Players() {
   const getHighestBamPlayerNumber = (playerList = players) =>
     playerList.reduce(
       (max, player) => Math.max(max, parseBamPlayerNumber(player.bamPlayerId)),
-      0
+      0,
     );
 
   const getNextBamPlayerId = (offset = 1, playerList = players) =>
@@ -459,7 +461,8 @@ function Players() {
 
   const findPlayerByBamId = (bamPlayerId) =>
     players.find(
-      (player) => String(player.bamPlayerId || "") === String(bamPlayerId || "")
+      (player) =>
+        String(player.bamPlayerId || "") === String(bamPlayerId || ""),
     );
 
   const findPlayerByName = (playerName) => {
@@ -471,7 +474,7 @@ function Players() {
       (player) =>
         String(player.name || "")
           .trim()
-          .toLowerCase() === target
+          .toLowerCase() === target,
     );
   };
 
@@ -507,7 +510,7 @@ function Players() {
 
   const syncTeamPlayerIdentities = (teamList, playerList) => {
     const identityMap = new Map(
-      playerList.map((player) => [String(player.id), player.bamPlayerId || ""])
+      playerList.map((player) => [String(player.id), player.bamPlayerId || ""]),
     );
 
     return teamList.map((team) => ({
@@ -524,7 +527,7 @@ function Players() {
   const migrateCoreDatabase = () => {
     const migratedPlayers = ensureBamPlayerIds(players);
     const hasPlayerMigration = migratedPlayers.some(
-      (player, index) => player.bamPlayerId !== players[index]?.bamPlayerId
+      (player, index) => player.bamPlayerId !== players[index]?.bamPlayerId,
     );
     const migratedTeams = syncTeamPlayerIdentities(teams, migratedPlayers);
     const hasTeamMigration =
@@ -542,7 +545,7 @@ function Players() {
 
     if (hasPlayerMigration || hasTeamMigration) {
       alert(
-        "Core Database upgraded: BAM Player ID ถูกสร้างให้ผู้เล่นเดิมเรียบร้อย"
+        "Core Database upgraded: BAM Player ID ถูกสร้างให้ผู้เล่นเดิมเรียบร้อย",
       );
     } else {
       alert("Core Database already healthy: ข้อมูลเป็นเวอร์ชันล่าสุดแล้ว");
@@ -556,10 +559,10 @@ function Players() {
       .filter((id, index, list) => list.indexOf(id) !== index);
 
     const missingBamIds = players.filter(
-      (player) => !player.bamPlayerId
+      (player) => !player.bamPlayerId,
     ).length;
     const seasonRecordsWithoutVersion = seasonHistory.filter(
-      (season) => !season.dataVersion && !season.version
+      (season) => !season.dataVersion && !season.version,
     ).length;
     const careerRows = buildPlayerCareerData();
 
@@ -701,7 +704,7 @@ function Players() {
 
     if (hasLeagueData) {
       const confirmChange = window.confirm(
-        "การเปลี่ยนจำนวนทีมจะล้างทีม ตารางแข่ง Draft Match Roster และสถิติเดิม แต่จะไม่ลบรายชื่อผู้เล่น ต้องการดำเนินการต่อไหม?"
+        "การเปลี่ยนจำนวนทีมจะล้างทีม ตารางแข่ง Draft Match Roster และสถิติเดิม แต่จะไม่ลบรายชื่อผู้เล่น ต้องการดำเนินการต่อไหม?",
       );
 
       if (!confirmChange) return;
@@ -725,7 +728,7 @@ function Players() {
     setSelectedProfilePlayerId("");
     setSelectedFinalsMvpId("");
     setPlayers((prevPlayers) =>
-      prevPlayers.map((player) => ({ ...player, teamName: "" }))
+      prevPlayers.map((player) => ({ ...player, teamName: "" })),
     );
   };
 
@@ -744,7 +747,7 @@ function Players() {
 
     if (hasLeagueData) {
       const confirmChange = window.confirm(
-        "การเปลี่ยนประเภทการแข่งขันจะล้างทีม ตารางแข่ง Draft Match Roster และสถิติเดิม แต่จะไม่ลบรายชื่อผู้เล่น ต้องการดำเนินการต่อไหม?"
+        "การเปลี่ยนประเภทการแข่งขันจะล้างทีม ตารางแข่ง Draft Match Roster และสถิติเดิม แต่จะไม่ลบรายชื่อผู้เล่น ต้องการดำเนินการต่อไหม?",
       );
 
       if (!confirmChange) return;
@@ -765,7 +768,7 @@ function Players() {
     setSelectedProfilePlayerId("");
     setSelectedFinalsMvpId("");
     setPlayers((prevPlayers) =>
-      prevPlayers.map((player) => ({ ...player, teamName: "" }))
+      prevPlayers.map((player) => ({ ...player, teamName: "" })),
     );
   };
 
@@ -794,8 +797,8 @@ function Players() {
                 teamName: newName,
               })),
             }
-          : team
-      )
+          : team,
+      ),
     );
 
     setPlayers((prevPlayers) =>
@@ -805,8 +808,8 @@ function Players() {
               ...player,
               teamName: newName,
             }
-          : player
-      )
+          : player,
+      ),
     );
 
     setSchedule((prevSchedule) =>
@@ -814,7 +817,7 @@ function Players() {
         ...match,
         teamA: match.teamA === oldName ? newName : match.teamA,
         teamB: match.teamB === oldName ? newName : match.teamB,
-      }))
+      })),
     );
 
     setTeamLogos((prevLogos) => {
@@ -970,8 +973,8 @@ function Players() {
                 ...player,
                 photoUrl: imageUrl,
               }
-            : player
-        )
+            : player,
+        ),
       );
 
       setTeams((prevTeams) =>
@@ -984,10 +987,10 @@ function Players() {
                     ...player,
                     photoUrl: imageUrl,
                   }
-                : player
+                : player,
             ),
-          }))
-        )
+          })),
+        ),
       );
 
       setCloudStatus("Saved");
@@ -1010,8 +1013,8 @@ function Players() {
               ...player,
               photoUrl: "",
             }
-          : player
-      )
+          : player,
+      ),
     );
 
     setTeams((prevTeams) =>
@@ -1024,10 +1027,10 @@ function Players() {
                   ...player,
                   photoUrl: "",
                 }
-              : player
+              : player,
           ),
-        }))
-      )
+        })),
+      ),
     );
   };
 
@@ -1168,7 +1171,7 @@ function Players() {
 
     if (editingId) {
       setPlayers(
-        players.map((p) => (p.id === editingId ? { ...p, ...playerData } : p))
+        players.map((p) => (p.id === editingId ? { ...p, ...playerData } : p)),
       );
 
       setTeams((prevTeams) =>
@@ -1176,10 +1179,10 @@ function Players() {
           prevTeams.map((team) => ({
             ...team,
             players: (team.players || []).map((player) =>
-              player.id === editingId ? { ...player, ...playerData } : player
+              player.id === editingId ? { ...player, ...playerData } : player,
             ),
-          }))
-        )
+          })),
+        ),
       );
     } else {
       setPlayers([...players, { id: Date.now(), ...playerData }]);
@@ -1213,22 +1216,22 @@ function Players() {
 
   const toggleAvailable = (id) => {
     setPlayers(
-      players.map((p) => (p.id === id ? { ...p, available: !p.available } : p))
+      players.map((p) => (p.id === id ? { ...p, available: !p.available } : p)),
     );
   };
 
   const updateLockedTeam = (id) => {
     setPlayers((prevPlayers) =>
-      prevPlayers.map((p) => (p.id === id ? { ...p, lockedTeam: "" } : p))
+      prevPlayers.map((p) => (p.id === id ? { ...p, lockedTeam: "" } : p)),
     );
 
     setTeams((prevTeams) =>
       prevTeams.map((team) => ({
         ...team,
         players: team.players.map((p) =>
-          p.id === id ? { ...p, lockedTeam: "" } : p
+          p.id === id ? { ...p, lockedTeam: "" } : p,
         ),
-      }))
+      })),
     );
   };
 
@@ -1445,7 +1448,7 @@ function Players() {
 
     if (competitionType === "3X3") {
       const hasBlockedTier = teamPlayers.some((p) =>
-        ["SSS+", "S+", "S-", "A+"].includes(p.tier)
+        ["SSS+", "S+", "S-", "A+"].includes(p.tier),
       );
       return hasSSS && hasBlockedTier && teamPlayers.length > 1;
     }
@@ -1491,7 +1494,7 @@ function Players() {
           const diff = getPlayerScore(b) - getPlayerScore(a);
           if (Math.abs(diff) <= 5) return Math.random() - 0.5;
           return diff;
-        })
+        }),
       );
   };
 
@@ -1507,17 +1510,17 @@ function Players() {
     }
 
     const alreadyLockedIds = lockGroups.flatMap(
-      (group) => group.playerIds || []
+      (group) => group.playerIds || [],
     );
     const duplicatePlayers = selectedLockPlayerIds.filter((playerId) =>
-      alreadyLockedIds.map(String).includes(String(playerId))
+      alreadyLockedIds.map(String).includes(String(playerId)),
     );
 
     if (duplicatePlayers.length > 0) {
       alert(
         `ผู้เล่นต่อไปนี้อยู่ใน Lock Group แล้ว: ${duplicatePlayers
           .map(getPlayerNameById)
-          .join(", ")}`
+          .join(", ")}`,
       );
       return;
     }
@@ -1536,7 +1539,7 @@ function Players() {
   const deleteLockGroup = (groupId) => {
     if (!window.confirm("ต้องการลบ Lock Group นี้ใช่ไหม?")) return;
     setLockGroups((prevGroups) =>
-      prevGroups.filter((group) => group.id !== groupId)
+      prevGroups.filter((group) => group.id !== groupId),
     );
   };
 
@@ -1568,7 +1571,7 @@ function Players() {
     dribbling: teamPlayers.reduce((s, p) => s + Number(p.dribbling || 0), 0),
     insideScoring: teamPlayers.reduce(
       (s, p) => s + Number(p.insideScoring || 0),
-      0
+      0,
     ),
     shooting: teamPlayers.reduce((s, p) => s + Number(p.shooting || 0), 0),
     defense: teamPlayers.reduce((s, p) => s + Number(p.defense || 0), 0),
@@ -1634,7 +1637,7 @@ function Players() {
     const remainder = remainingPlayersCount % teamCountForDraft;
 
     return Array.from({ length: teamCountForDraft }, (_, index) =>
-      index < remainder ? base + 1 : base
+      index < remainder ? base + 1 : base,
     );
   };
 
@@ -1661,7 +1664,7 @@ function Players() {
       const confirmGenerate = window.confirm(
         `จำนวนผู้เล่นอาจไม่พอขั้นต่ำ ${minPlayers} คนต่อทีมสำหรับ ${competitionType}\n` +
           `ผู้เล่น Available: ${availablePlayers.length} คน / ${teamCount} ทีม\n` +
-          "ต้องการสุ่มทีมต่อหรือไม่?"
+          "ต้องการสุ่มทีมต่อหรือไม่?",
       );
 
       if (!confirmGenerate) return;
@@ -1680,7 +1683,7 @@ function Players() {
       availablePlayers.map((player) => [
         String(player.id),
         { ...player, lockedTeam: "" },
-      ])
+      ]),
     );
 
     const usedPlayerIds = new Set();
@@ -1733,11 +1736,11 @@ function Players() {
 
     const balancedTargets = getBalancedTargets(
       sortedPlayers.length,
-      draftCandidateTeams.length
+      draftCandidateTeams.length,
     );
 
     const baseTeamCounts = new Map(
-      draftCandidateTeams.map((team) => [team.name, team.players.length])
+      draftCandidateTeams.map((team) => [team.name, team.players.length]),
     );
 
     sortedPlayers.forEach((player) => {
@@ -1773,8 +1776,8 @@ function Players() {
               ...player,
               teamName: teamMap[player.id],
             }
-          : player
-      )
+          : player,
+      ),
     );
   };
 
@@ -1794,7 +1797,7 @@ function Players() {
     }
 
     const selectedPlayer = players.find(
-      (player) => String(player.id) === String(rosterExistingPlayerId)
+      (player) => String(player.id) === String(rosterExistingPlayerId),
     );
 
     if (!selectedPlayer) {
@@ -1811,7 +1814,7 @@ function Players() {
       const nextTeams = prevTeams.map((team) => ({
         ...team,
         players: team.players.filter(
-          (player) => player.id !== selectedPlayer.id
+          (player) => player.id !== selectedPlayer.id,
         ),
       }));
 
@@ -1822,8 +1825,8 @@ function Players() {
                 ...team,
                 players: [...team.players, updatedPlayer],
               }
-            : team
-        )
+            : team,
+        ),
       );
     });
 
@@ -1834,8 +1837,8 @@ function Players() {
               ...player,
               teamName: rosterTargetTeam,
             }
-          : player
-      )
+          : player,
+      ),
     );
 
     setRosterExistingPlayerId("");
@@ -1850,7 +1853,7 @@ function Players() {
     setTeams((prevTeams) => {
       const nextTeams = prevTeams.map((team) => {
         const foundPlayer = team.players.find(
-          (player) => player.id === playerId
+          (player) => player.id === playerId,
         );
         if (foundPlayer) {
           movedPlayer = {
@@ -1884,8 +1887,8 @@ function Players() {
                 ...team,
                 players: [...team.players, movedPlayer],
               }
-            : team
-        )
+            : team,
+        ),
       );
     });
 
@@ -1896,8 +1899,8 @@ function Players() {
               ...player,
               teamName: targetTeam,
             }
-          : player
-      )
+          : player,
+      ),
     );
   };
 
@@ -1909,8 +1912,8 @@ function Players() {
         prevTeams.map((team) => ({
           ...team,
           players: team.players.filter((player) => player.id !== playerId),
-        }))
-      )
+        })),
+      ),
     );
 
     setPlayers((prevPlayers) =>
@@ -1920,8 +1923,8 @@ function Players() {
               ...player,
               teamName: "",
             }
-          : player
-      )
+          : player,
+      ),
     );
   };
 
@@ -1968,9 +1971,9 @@ function Players() {
                 ...team,
                 players: [...team.players, newPlayer],
               }
-            : team
-        )
-      )
+            : team,
+        ),
+      ),
     );
 
     setNewRosterForm({
@@ -2034,8 +2037,8 @@ function Players() {
               ...player,
               teamName: teamMap[player.id],
             }
-          : player
-      )
+          : player,
+      ),
     );
   };
 
@@ -2050,8 +2053,8 @@ function Players() {
 
     setDrafts(
       drafts.map((draft) =>
-        draft.id === id ? { ...draft, name: newName } : draft
-      )
+        draft.id === id ? { ...draft, name: newName } : draft,
+      ),
     );
   };
 
@@ -2216,7 +2219,7 @@ function Players() {
           scoreA: "",
           scoreB: "",
           status: "Pending",
-        }
+        },
       );
     }
 
@@ -2237,8 +2240,8 @@ function Players() {
                   ? "Pending"
                   : match.status,
             }
-          : match
-      )
+          : match,
+      ),
     );
   };
 
@@ -2256,7 +2259,7 @@ function Players() {
           ...match,
           status: "Finished",
         };
-      })
+      }),
     );
   };
 
@@ -2386,7 +2389,7 @@ function Players() {
     }
 
     const player = players.find(
-      (item) => String(item.id) === String(loanForm.playerId)
+      (item) => String(item.id) === String(loanForm.playerId),
     );
 
     if (!player) {
@@ -2405,7 +2408,7 @@ function Players() {
     const currentRoster = getMatchRoster(match);
     const currentLoans = currentRoster[side].loanPlayers || [];
     const alreadyLoaned = currentLoans.some(
-      (loan) => Number(loan.playerId) === Number(player.id)
+      (loan) => Number(loan.playerId) === Number(player.id),
     );
 
     if (alreadyLoaned) {
@@ -2414,7 +2417,7 @@ function Players() {
     }
 
     const activeInSameTeam = (currentRoster[side].activePlayers || []).includes(
-      player.id
+      player.id,
     );
 
     if (activeInSameTeam) {
@@ -2456,7 +2459,7 @@ function Players() {
         [side]: {
           ...currentRoster[side],
           loanPlayers: currentLoans.filter(
-            (loan) => Number(loan.playerId) !== Number(playerId)
+            (loan) => Number(loan.playerId) !== Number(playerId),
           ),
         },
       },
@@ -2478,7 +2481,7 @@ function Players() {
 
     if (teamACount < minPlayers || teamBCount < minPlayers) {
       const confirmSave = window.confirm(
-        `ผู้เล่นยังไม่ครบ ${minPlayers} คน\n${match.teamA}: ${teamACount} คน\n${match.teamB}: ${teamBCount} คน\nต้องการบันทึกต่อหรือไม่?`
+        `ผู้เล่นยังไม่ครบ ${minPlayers} คน\n${match.teamA}: ${teamACount} คน\n${match.teamB}: ${teamBCount} คน\nต้องการบันทึกต่อหรือไม่?`,
       );
 
       if (!confirmSave) return;
@@ -2506,7 +2509,7 @@ function Players() {
     const matchTeam = getSideTeamName(match, side);
     const currentRoster = getMatchRoster(match);
     const currentLoanIds = (currentRoster[side].loanPlayers || []).map((loan) =>
-      Number(loan.playerId)
+      Number(loan.playerId),
     );
     const activeIds = currentRoster[side].activePlayers || [];
 
@@ -2524,7 +2527,7 @@ function Players() {
     const activeIds = roster[side]?.activePlayers || [];
     return activeIds
       .map((playerId) =>
-        players.find((player) => Number(player.id) === Number(playerId))
+        players.find((player) => Number(player.id) === Number(playerId)),
       )
       .filter(Boolean)
       .map((player) => ({
@@ -2576,7 +2579,7 @@ function Players() {
       match.id,
       player.playerId || player.id,
       player.role,
-      player.matchTeam
+      player.matchTeam,
     );
     return matchStatInputs[key]?.[field] ?? "";
   };
@@ -2586,7 +2589,7 @@ function Players() {
       match.id,
       player.playerId || player.id,
       player.role,
-      player.matchTeam
+      player.matchTeam,
     );
 
     setMatchStatInputs((prev) => ({
@@ -2698,7 +2701,7 @@ function Players() {
         match.id,
         playerId,
         player.role,
-        player.matchTeam
+        player.matchTeam,
       );
       const input = matchStatInputs[key] || {};
       const pts = Number(input.pts || 0);
@@ -2839,7 +2842,7 @@ function Players() {
   const getFinalsMvpOptions = () => {
     const statRows = getPlayerStatRows();
     const statsByPlayerId = new Map(
-      statRows.map((stat) => [String(stat.playerId), stat])
+      statRows.map((stat) => [String(stat.playerId), stat]),
     );
 
     const playerOptions = players.map((player) => {
@@ -2858,12 +2861,12 @@ function Players() {
       .filter(
         (stat) =>
           !playerOptions.some(
-            (player) => String(player.playerId) === String(stat.playerId)
-          )
+            (player) => String(player.playerId) === String(stat.playerId),
+          ),
       )
       .map((stat) => {
         const identityPlayer = players.find(
-          (player) => String(player.id) === String(stat.playerId)
+          (player) => String(player.id) === String(stat.playerId),
         );
         return {
           playerId: stat.playerId,
@@ -2879,11 +2882,11 @@ function Players() {
       .filter((player) => player.playerName)
       .sort((a, b) => {
         const teamCompare = String(a.teamName || "").localeCompare(
-          String(b.teamName || "")
+          String(b.teamName || ""),
         );
         if (teamCompare !== 0) return teamCompare;
         return String(a.playerName || "").localeCompare(
-          String(b.playerName || "")
+          String(b.playerName || ""),
         );
       });
   };
@@ -2892,7 +2895,7 @@ function Players() {
     if (!selectedFinalsMvpId) return null;
     return (
       getFinalsMvpOptions().find(
-        (player) => String(player.playerId) === String(selectedFinalsMvpId)
+        (player) => String(player.playerId) === String(selectedFinalsMvpId),
       ) || null
     );
   };
@@ -2901,12 +2904,12 @@ function Players() {
     if (!selectedProfilePlayerId) return null;
 
     const player = players.find(
-      (item) => String(item.id) === String(selectedProfilePlayerId)
+      (item) => String(item.id) === String(selectedProfilePlayerId),
     );
 
     const stat =
       getPlayerStatRows().find(
-        (row) => String(row.playerId) === String(selectedProfilePlayerId)
+        (row) => String(row.playerId) === String(selectedProfilePlayerId),
       ) || {};
 
     if (!player && !stat.playerId) return null;
@@ -2954,7 +2957,7 @@ function Players() {
     return Object.values(stat.gamesByMatch)
       .map((game) => {
         const match = schedule.find(
-          (item) => String(item.id) === String(game.matchId)
+          (item) => String(item.id) === String(game.matchId),
         );
 
         const isAppearance = Boolean(game.appearanceCounted);
@@ -2998,13 +3001,13 @@ function Players() {
 
     return (
       careerRows.find(
-        (career) => bamId && String(career.bamPlayerId || "") === bamId
+        (career) => bamId && String(career.bamPlayerId || "") === bamId,
       ) ||
       careerRows.find(
         (career) =>
           String(career.playerName || "")
             .trim()
-            .toLowerCase() === normalizedName
+            .toLowerCase() === normalizedName,
       ) ||
       null
     );
@@ -3178,7 +3181,7 @@ function Players() {
             center + Math.sin(angle) * radius
           }`;
         })
-        .join(" ")
+        .join(" "),
     );
 
     return (
@@ -3332,7 +3335,7 @@ function Players() {
 
     const career = getProfileCareerData(profile);
     const totalRating = Number(
-      profile.rating || calculateRatingFromSkills(profile) || 0
+      profile.rating || calculateRatingFromSkills(profile) || 0,
     );
     const tier = profile.tier || calculateTierFromRating(totalRating);
     const careerAwards = career?.awards || {};
@@ -3348,7 +3351,7 @@ function Players() {
         if (Number(b.season || 0) !== Number(a.season || 0))
           return Number(b.season || 0) - Number(a.season || 0);
         return String(b.seasonTitle || "").localeCompare(
-          String(a.seasonTitle || "")
+          String(a.seasonTitle || ""),
         );
       })
       .slice(0, 8);
@@ -3399,12 +3402,12 @@ function Players() {
     const tierClass = tier?.startsWith("SSS")
       ? "bam-tier-SSS"
       : tier?.startsWith("S")
-      ? "bam-tier-S"
-      : tier?.startsWith("A")
-      ? "bam-tier-A"
-      : tier?.startsWith("B")
-      ? "bam-tier-B"
-      : "bam-tier-C";
+        ? "bam-tier-S"
+        : tier?.startsWith("A")
+          ? "bam-tier-A"
+          : tier?.startsWith("B")
+            ? "bam-tier-B"
+            : "bam-tier-C";
 
     const skillBars = [
       ["การเลี้ยง", profile.dribbling],
@@ -3427,10 +3430,10 @@ function Players() {
             tier?.startsWith("SSS") || tier?.startsWith("S")
               ? "radial-gradient(circle at 18% 12%, #fff7cc 0, #ffffff 26%, #f8fafc 55%, #111827 140%)"
               : tier?.startsWith("A")
-              ? "radial-gradient(circle at 18% 12%, #f3e8ff 0, #ffffff 28%, #f8fafc 60%, #312e81 145%)"
-              : tier?.startsWith("B")
-              ? "radial-gradient(circle at 18% 12%, #dcfce7 0, #ffffff 28%, #f8fafc 60%, #064e3b 145%)"
-              : "radial-gradient(circle at 25% 15%, #ffffff 0, #ffffff 25%, #f1f5f9 55%, #e5e7eb 100%)",
+                ? "radial-gradient(circle at 18% 12%, #f3e8ff 0, #ffffff 28%, #f8fafc 60%, #312e81 145%)"
+                : tier?.startsWith("B")
+                  ? "radial-gradient(circle at 18% 12%, #dcfce7 0, #ffffff 28%, #f8fafc 60%, #064e3b 145%)"
+                  : "radial-gradient(circle at 25% 15%, #ffffff 0, #ffffff 25%, #f1f5f9 55%, #e5e7eb 100%)",
           boxShadow: "12px 12px 0 #111",
           color: "#111",
           overflow: "hidden",
@@ -3492,7 +3495,7 @@ function Players() {
                 {skillBars.map(([label, value], index) => {
                   const percent = Math.max(
                     0,
-                    Math.min(100, Number(value || 0) * 20)
+                    Math.min(100, Number(value || 0) * 20),
                   );
                   return (
                     <div className="bam-skill-row" key={`skill-bar-${label}`}>
@@ -3963,7 +3966,7 @@ function Players() {
         }
 
         return match;
-      })
+      }),
     );
   };
 
@@ -4081,7 +4084,7 @@ function Players() {
         `Regular Season MVP: ${seasonRecord.regularSeasonMvp}\n` +
         `Finals MVP: ${seasonRecord.finalsMvp}\n` +
         `Top Scorer: ${seasonRecord.topScorer}\n\n` +
-        "ระบบจะบันทึก Season History และล้างทีม/ตาราง/สถิติเพื่อเริ่ม Season ใหม่ โดยไม่ลบรายชื่อผู้เล่น รูปผู้เล่น และโลโก้ทีม"
+        "ระบบจะบันทึก Season History และล้างทีม/ตาราง/สถิติเพื่อเริ่ม Season ใหม่ โดยไม่ลบรายชื่อผู้เล่น รูปผู้เล่น และโลโก้ทีม",
     );
 
     if (!confirmClose) return;
@@ -4107,26 +4110,26 @@ function Players() {
     setSelectedProfilePlayerId("");
     setSelectedFinalsMvpId("");
     setPlayers((prevPlayers) =>
-      prevPlayers.map((player) => ({ ...player, teamName: "" }))
+      prevPlayers.map((player) => ({ ...player, teamName: "" })),
     );
 
     alert(
       `บันทึก ${projectName} แล้ว เริ่ม ${competitionType} Season ${
         currentSeason + 1
-      }`
+      }`,
     );
   };
 
   const deleteSeasonHistoryItem = (seasonId) => {
     if (!window.confirm("ต้องการลบประวัติ Season นี้ใช่ไหม?")) return;
     setSeasonHistory((prevHistory) =>
-      prevHistory.filter((season) => season.id !== seasonId)
+      prevHistory.filter((season) => season.id !== seasonId),
     );
   };
 
   const renameSeasonHistoryItem = (seasonId) => {
     const currentRecord = seasonHistory.find(
-      (season) => season.id === seasonId
+      (season) => season.id === seasonId,
     );
     const currentName =
       currentRecord?.projectName ||
@@ -4136,7 +4139,7 @@ function Players() {
 
     const newName = window.prompt(
       "ตั้งชื่อโครงการ / รายการแข่งขันใหม่",
-      currentName
+      currentName,
     );
     if (!newName || !newName.trim()) return;
 
@@ -4144,8 +4147,8 @@ function Players() {
       prevHistory.map((season) =>
         season.id === seasonId
           ? { ...season, projectName: newName.trim() }
-          : season
-      )
+          : season,
+      ),
     );
   };
 
@@ -4176,7 +4179,7 @@ function Players() {
       closedAtText: getSeasonHistoryEditDefault(
         seasonRecord,
         "closedAtText",
-        ""
+        "",
       ),
       champion: getSeasonHistoryEditDefault(seasonRecord, "champion", ""),
       runnerUp: getSeasonHistoryEditDefault(seasonRecord, "runnerUp", ""),
@@ -4184,7 +4187,7 @@ function Players() {
       regularSeasonMvp: getSeasonHistoryEditDefault(
         seasonRecord,
         "regularSeasonMvp",
-        seasonRecord.mvp || ""
+        seasonRecord.mvp || "",
       ),
       finalsMvp: getSeasonHistoryEditDefault(seasonRecord, "finalsMvp", ""),
       topScorer: getSeasonHistoryEditDefault(seasonRecord, "topScorer", ""),
@@ -4192,13 +4195,13 @@ function Players() {
       reboundLeader: getSeasonHistoryEditDefault(
         seasonRecord,
         "reboundLeader",
-        ""
+        "",
       ),
       reboundLeaderReb: Number(seasonRecord.reboundLeaderReb || 0),
       assistLeader: getSeasonHistoryEditDefault(
         seasonRecord,
         "assistLeader",
-        ""
+        "",
       ),
       assistLeaderAst: Number(seasonRecord.assistLeaderAst || 0),
       notes: getSeasonHistoryEditDefault(seasonRecord, "notes", ""),
@@ -4294,7 +4297,7 @@ function Players() {
                 }
               : null,
         };
-      })
+      }),
     );
 
     cancelEditSeasonHistoryItem();
@@ -4303,7 +4306,7 @@ function Players() {
   const moveSeasonHistoryItem = (seasonId, direction) => {
     setSeasonHistory((prevHistory) => {
       const currentIndex = prevHistory.findIndex(
-        (season) => season.id === seasonId
+        (season) => season.id === seasonId,
       );
 
       if (currentIndex === -1) return prevHistory;
@@ -4326,7 +4329,7 @@ function Players() {
   const moveSeasonHistoryToTop = (seasonId) => {
     setSeasonHistory((prevHistory) => {
       const currentIndex = prevHistory.findIndex(
-        (season) => season.id === seasonId
+        (season) => season.id === seasonId,
       );
 
       if (currentIndex <= 0) return prevHistory;
@@ -4340,7 +4343,7 @@ function Players() {
   const moveSeasonHistoryToBottom = (seasonId) => {
     setSeasonHistory((prevHistory) => {
       const currentIndex = prevHistory.findIndex(
-        (season) => season.id === seasonId
+        (season) => season.id === seasonId,
       );
 
       if (currentIndex === -1 || currentIndex === prevHistory.length - 1) {
@@ -4358,7 +4361,7 @@ function Players() {
 
     const confirmSort = window.confirm(
       "ต้องการเรียง Season History ตามประเภทการแข่งขันและเลข Season ใช่ไหม?\n\n" +
-        "ลำดับปัจจุบันจะถูกเปลี่ยน แต่ยังสามารถเลื่อนรายการเองได้หลังจากนี้"
+        "ลำดับปัจจุบันจะถูกเปลี่ยน แต่ยังสามารถเลื่อนรายการเองได้หลังจากนี้",
     );
 
     if (!confirmSort) return;
@@ -4376,7 +4379,7 @@ function Players() {
         if (seasonA !== seasonB) return seasonA - seasonB;
 
         return String(a.closedAt || "").localeCompare(String(b.closedAt || ""));
-      })
+      }),
     );
   };
 
@@ -4385,7 +4388,7 @@ function Players() {
       seasonRecord.projectName ||
         `${seasonRecord.competitionType || "5X5"}-Season-${
           seasonRecord.season || 1
-        }`
+        }`,
     )
       .replace(/[^a-zA-Z0-9ก-๙_-]+/g, "-")
       .replace(/-+/g, "-")
@@ -4420,26 +4423,26 @@ function Players() {
     const sourceTeams = Array.isArray(sourceArchived?.teams)
       ? sourceArchived.teams
       : Array.isArray(data?.teams)
-      ? data.teams
-      : [];
+        ? data.teams
+        : [];
     const sourceSchedule = Array.isArray(sourceArchived?.schedule)
       ? sourceArchived.schedule
       : Array.isArray(data?.schedule)
-      ? data.schedule
-      : [];
+        ? data.schedule
+        : [];
     const sourcePlayerStats =
       sourceArchived?.playerStats &&
       typeof sourceArchived.playerStats === "object"
         ? sourceArchived.playerStats
         : data?.playerStats && typeof data.playerStats === "object"
-        ? data.playerStats
-        : {};
+          ? data.playerStats
+          : {};
 
     const standingsRows = Array.isArray(sourceRecord?.standings)
       ? sourceRecord.standings
       : Array.isArray(sourceArchived?.standings)
-      ? sourceArchived.standings
-      : [];
+        ? sourceArchived.standings
+        : [];
     const champion = sourceRecord?.champion || standingsRows[0]?.team || "-";
     const runnerUp = sourceRecord?.runnerUp || standingsRows[1]?.team || "-";
 
@@ -4455,7 +4458,7 @@ function Players() {
         sourceRecord?.teamCount ||
           sourceArchived?.teamCount ||
           sourceTeams.length ||
-          defaultTeamCount
+          defaultTeamCount,
       ),
       closedAt: sourceRecord?.closedAt || new Date().toISOString(),
       closedAtText: sourceRecord?.closedAtText || new Date().toLocaleString(),
@@ -4469,7 +4472,7 @@ function Players() {
       regularSeasonMvpTeam:
         sourceRecord?.regularSeasonMvpTeam || sourceRecord?.mvpTeam || "-",
       regularSeasonMvpScore: Number(
-        sourceRecord?.regularSeasonMvpScore || sourceRecord?.mvpScore || 0
+        sourceRecord?.regularSeasonMvpScore || sourceRecord?.mvpScore || 0,
       ),
       finalsMvp: sourceRecord?.finalsMvp || "-",
       finalsMvpTeam: sourceRecord?.finalsMvpTeam || "-",
@@ -4480,7 +4483,7 @@ function Players() {
       mvpTeam:
         sourceRecord?.regularSeasonMvpTeam || sourceRecord?.mvpTeam || "-",
       mvpScore: Number(
-        sourceRecord?.regularSeasonMvpScore || sourceRecord?.mvpScore || 0
+        sourceRecord?.regularSeasonMvpScore || sourceRecord?.mvpScore || 0,
       ),
       topScorer: sourceRecord?.topScorer || "-",
       topScorerTeam: sourceRecord?.topScorerTeam || "-",
@@ -4501,52 +4504,52 @@ function Players() {
           sourceRecord?.teamCount ||
             sourceArchived?.teamCount ||
             sourceTeams.length ||
-            defaultTeamCount
+            defaultTeamCount,
         ),
         players: Array.isArray(sourceArchived?.players)
           ? sourceArchived.players
           : Array.isArray(data?.players)
-          ? data.players
-          : [],
+            ? data.players
+            : [],
         teams: sourceTeams,
         schedule: sourceSchedule,
         drafts: Array.isArray(sourceArchived?.drafts)
           ? sourceArchived.drafts
           : Array.isArray(data?.drafts)
-          ? data.drafts
-          : [],
+            ? data.drafts
+            : [],
         matchRosters:
           sourceArchived?.matchRosters &&
           typeof sourceArchived.matchRosters === "object"
             ? sourceArchived.matchRosters
             : data?.matchRosters && typeof data.matchRosters === "object"
-            ? data.matchRosters
-            : {},
+              ? data.matchRosters
+              : {},
         playerStats: sourcePlayerStats,
         matchStatInputs:
           sourceArchived?.matchStatInputs &&
           typeof sourceArchived.matchStatInputs === "object"
             ? sourceArchived.matchStatInputs
             : data?.matchStatInputs && typeof data.matchStatInputs === "object"
-            ? data.matchStatInputs
-            : {},
+              ? data.matchStatInputs
+              : {},
         teamNames: Array.isArray(sourceArchived?.teamNames)
           ? sourceArchived.teamNames
           : Array.isArray(data?.teamNames)
-          ? data.teamNames
-          : [],
+            ? data.teamNames
+            : [],
         teamLogos:
           sourceArchived?.teamLogos &&
           typeof sourceArchived.teamLogos === "object"
             ? sourceArchived.teamLogos
             : data?.teamLogos && typeof data.teamLogos === "object"
-            ? data.teamLogos
-            : {},
+              ? data.teamLogos
+              : {},
         lockGroups: Array.isArray(sourceArchived?.lockGroups)
           ? sourceArchived.lockGroups
           : Array.isArray(data?.lockGroups)
-          ? data.lockGroups
-          : [],
+            ? data.lockGroups
+            : [],
         standings: standingsRows,
       },
     };
@@ -4568,7 +4571,7 @@ function Players() {
 
       if (Array.isArray(data.seasonHistory) && data.seasonHistory.length > 0) {
         const importAll = window.confirm(
-          `พบ Season History ในไฟล์ ${data.seasonHistory.length} รายการ\nต้องการ Import ทั้งหมดหรือไม่?\n\nกด Cancel หากต้องการ Import เฉพาะข้อมูลลีกปัจจุบันเป็น 1 Season`
+          `พบ Season History ในไฟล์ ${data.seasonHistory.length} รายการ\nต้องการ Import ทั้งหมดหรือไม่?\n\nกด Cancel หากต้องการ Import เฉพาะข้อมูลลีกปัจจุบันเป็น 1 Season`,
         );
 
         if (importAll) {
@@ -4589,7 +4592,7 @@ function Players() {
             ...prevHistory,
           ]);
           alert(
-            `Import Season History สำเร็จ ${normalizedRecords.length} รายการ`
+            `Import Season History สำเร็จ ${normalizedRecords.length} รายการ`,
           );
           event.target.value = "";
           return;
@@ -4598,7 +4601,7 @@ function Players() {
 
       const targetTypeInput = window.prompt(
         "ประเภทการแข่งขันของ Season นี้? พิมพ์ 3X3 หรือ 5X5",
-        data.competitionType === "3X3" ? "3X3" : competitionType
+        data.competitionType === "3X3" ? "3X3" : competitionType,
       );
       if (!targetTypeInput) {
         event.target.value = "";
@@ -4609,7 +4612,7 @@ function Players() {
         targetTypeInput.toUpperCase() === "3X3" ? "3X3" : "5X5";
       const targetSeasonInput = window.prompt(
         "ต้องการบันทึกเป็น Season ที่เท่าไหร่?",
-        String(seasonByType[targetType] || 1)
+        String(seasonByType[targetType] || 1),
       );
       if (!targetSeasonInput) {
         event.target.value = "";
@@ -4628,7 +4631,7 @@ function Players() {
         `${targetType} Season ${targetSeason}`;
       const projectName = window.prompt(
         "ชื่อโครงการ / รายการแข่งขัน",
-        defaultName
+        defaultName,
       );
       if (!projectName || !projectName.trim()) {
         event.target.value = "";
@@ -4646,7 +4649,7 @@ function Players() {
         ...prevSeasons,
         [targetType]: Math.max(
           Number(prevSeasons[targetType] || 1),
-          targetSeason + 1
+          targetSeason + 1,
         ),
       }));
 
@@ -4728,13 +4731,13 @@ function Players() {
     setTeamCount(
       Number.isFinite(Number(data.teamCount)) && Number(data.teamCount) >= 3
         ? Number(data.teamCount)
-        : defaultTeamCount
+        : defaultTeamCount,
     );
     setCompetitionType(data.competitionType === "3X3" ? "3X3" : "5X5");
     setTeamNames(
       Array.isArray(data.teamNames)
         ? data.teamNames
-        : createDefaultTeamNames(defaultTeamCount)
+        : createDefaultTeamNames(defaultTeamCount),
     );
     setPlayers(Array.isArray(data.players) ? data.players : []);
     setTeams(Array.isArray(data.teams) ? data.teams : []);
@@ -4743,20 +4746,22 @@ function Players() {
     setMatchRosters(
       data.matchRosters && typeof data.matchRosters === "object"
         ? data.matchRosters
-        : {}
+        : {},
     );
     setPlayerStats(
       data.playerStats && typeof data.playerStats === "object"
         ? data.playerStats
-        : {}
+        : {},
     );
     setMatchStatInputs(
       data.matchStatInputs && typeof data.matchStatInputs === "object"
         ? data.matchStatInputs
-        : {}
+        : {},
     );
     setTeamLogos(
-      data.teamLogos && typeof data.teamLogos === "object" ? data.teamLogos : {}
+      data.teamLogos && typeof data.teamLogos === "object"
+        ? data.teamLogos
+        : {},
     );
     setLockGroups(Array.isArray(data.lockGroups) ? data.lockGroups : []);
 
@@ -4779,10 +4784,10 @@ function Players() {
     }
 
     setSeasonProjectName(
-      typeof data.seasonProjectName === "string" ? data.seasonProjectName : ""
+      typeof data.seasonProjectName === "string" ? data.seasonProjectName : "",
     );
     setSeasonHistory(
-      Array.isArray(data.seasonHistory) ? data.seasonHistory : []
+      Array.isArray(data.seasonHistory) ? data.seasonHistory : [],
     );
     if (data.publishMeta && typeof data.publishMeta === "object") {
       setPublishMeta(data.publishMeta);
@@ -4820,7 +4825,7 @@ function Players() {
 
       const backupVersion = parsed.version || parsed.data?.version || "legacy";
       const confirmImport = window.confirm(
-        `การ Import Backup จะเขียนทับข้อมูลลีกปัจจุบันทั้งหมด\n\nไฟล์ Version: ${backupVersion}\n\nต้องการดำเนินการต่อไหม?`
+        `การ Import Backup จะเขียนทับข้อมูลลีกปัจจุบันทั้งหมด\n\nไฟล์ Version: ${backupVersion}\n\nต้องการดำเนินการต่อไหม?`,
       );
 
       if (!confirmImport) {
@@ -4866,12 +4871,12 @@ function Players() {
       const teamPlayerIds = new Set();
       teams.forEach((team) => {
         (team.players || []).forEach((player) =>
-          teamPlayerIds.add(String(player.id))
+          teamPlayerIds.add(String(player.id)),
         );
       });
 
       const missingTeamNames = teams.filter(
-        (team) => !String(team.name || "").trim()
+        (team) => !String(team.name || "").trim(),
       );
       if (missingTeamNames.length > 0) {
         issues.push("มีทีมที่ยังไม่มีชื่อทีม");
@@ -4883,20 +4888,20 @@ function Players() {
         .filter((name, index, list) => list.indexOf(name) !== index);
       if (duplicateTeamNames.length > 0) {
         issues.push(
-          `พบชื่อทีมซ้ำ: ${[...new Set(duplicateTeamNames)].join(", ")}`
+          `พบชื่อทีมซ้ำ: ${[...new Set(duplicateTeamNames)].join(", ")}`,
         );
       }
     }
 
     const finishedMatches = schedule.filter(
-      (match) => match.status === "Finished"
+      (match) => match.status === "Finished",
     );
     const finishedWithoutScore = finishedMatches.filter(
-      (match) => match.scoreA === "" || match.scoreB === ""
+      (match) => match.scoreA === "" || match.scoreB === "",
     );
     if (finishedWithoutScore.length > 0) {
       issues.push(
-        `มีแมตช์ Finished แต่ยังไม่มีคะแนนครบ ${finishedWithoutScore.length} รายการ`
+        `มีแมตช์ Finished แต่ยังไม่มีคะแนนครบ ${finishedWithoutScore.length} รายการ`,
       );
     }
 
@@ -4904,11 +4909,11 @@ function Players() {
       (match) =>
         match.label === "League" &&
         (!teams.some((team) => team.name === match.teamA) ||
-          !teams.some((team) => team.name === match.teamB))
+          !teams.some((team) => team.name === match.teamB)),
     );
     if (invalidMatchTeams.length > 0) {
       warnings.push(
-        `มีแมตช์ที่ชื่อทีมไม่ตรงกับทีมปัจจุบัน ${invalidMatchTeams.length} รายการ`
+        `มีแมตช์ที่ชื่อทีมไม่ตรงกับทีมปัจจุบัน ${invalidMatchTeams.length} รายการ`,
       );
     }
 
@@ -4969,11 +4974,11 @@ function Players() {
 
     if (report.passed) {
       alert(
-        `Validate Local Draft ผ่านแล้ว (${report.score}%) พร้อม Publish to Cloud`
+        `Validate Local Draft ผ่านแล้ว (${report.score}%) พร้อม Publish to Cloud`,
       );
     } else {
       alert(
-        `Validate Local Draft ยังไม่ผ่าน\n\n- ${report.issues.join("\n- ")}`
+        `Validate Local Draft ยังไม่ผ่าน\n\n- ${report.issues.join("\n- ")}`,
       );
     }
 
@@ -4997,14 +5002,14 @@ function Players() {
     if (!report.passed) {
       alert(
         `ยัง Publish ไม่ได้ เพราะ Validate ไม่ผ่าน\n\n- ${report.issues.join(
-          "\n- "
-        )}`
+          "\n- ",
+        )}`,
       );
       return;
     }
 
     const confirmPublish = window.confirm(
-      `Validate ผ่านแล้ว (${report.score}%)\n\nต้องการ Publish Local Draft ขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ`
+      `Validate ผ่านแล้ว (${report.score}%)\n\nต้องการ Publish Local Draft ขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ`,
     );
 
     if (!confirmPublish) return;
@@ -5187,7 +5192,7 @@ function Players() {
 
   const uploadToCloud = async () => {
     const confirmUpload = window.confirm(
-      "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ"
+      "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ",
     );
 
     if (!confirmUpload) return;
@@ -5206,7 +5211,7 @@ function Players() {
 
   const downloadFromCloud = async () => {
     const confirmDownload = window.confirm(
-      "ต้องการ Download ข้อมูลจาก Cloud ใช่ไหม?\n\nข้อมูลในเครื่องปัจจุบันจะถูกเขียนทับ"
+      "ต้องการ Download ข้อมูลจาก Cloud ใช่ไหม?\n\nข้อมูลในเครื่องปัจจุบันจะถูกเขียนทับ",
     );
 
     if (!confirmDownload) return;
@@ -5233,13 +5238,13 @@ function Players() {
 
   const clearCloudData = async () => {
     const firstConfirm = window.confirm(
-      "ต้องการลบข้อมูล BAM League บน Cloud ใช่ไหม?\n\nข้อมูลในเครื่องจะไม่ถูกลบ"
+      "ต้องการลบข้อมูล BAM League บน Cloud ใช่ไหม?\n\nข้อมูลในเครื่องจะไม่ถูกลบ",
     );
 
     if (!firstConfirm) return;
 
     const secondConfirm = window.confirm(
-      "ยืนยันอีกครั้ง: ข้อมูลบน Cloud จะถูกลบ และไม่สามารถกู้คืนจาก Cloud ได้ ต้องการดำเนินการต่อไหม?"
+      "ยืนยันอีกครั้ง: ข้อมูลบน Cloud จะถูกลบ และไม่สามารถกู้คืนจาก Cloud ได้ ต้องการดำเนินการต่อไหม?",
     );
 
     if (!secondConfirm) return;
@@ -5258,7 +5263,7 @@ function Players() {
 
   const clearCurrentProject = () => {
     const confirmClear = window.confirm(
-      "ต้องการล้างโปรเจค/ซีซั่นปัจจุบันใช่ไหม?\n\nระบบจะล้าง Teams, Schedule, Drafts, Match Roster และ Stats\nแต่จะเก็บ Players, รูปผู้เล่น, โลโก้ทีม, Season History และการตั้งค่า Season ไว้"
+      "ต้องการล้างโปรเจค/ซีซั่นปัจจุบันใช่ไหม?\n\nระบบจะล้าง Teams, Schedule, Drafts, Match Roster และ Stats\nแต่จะเก็บ Players, รูปผู้เล่น, โลโก้ทีม, Season History และการตั้งค่า Season ไว้",
     );
 
     if (!confirmClear) return;
@@ -5279,7 +5284,7 @@ function Players() {
       prevPlayers.map((player) => ({
         ...player,
         teamName: "",
-      }))
+      })),
     );
 
     [
@@ -5292,14 +5297,14 @@ function Players() {
     ].forEach((key) => localStorage.removeItem(key));
 
     alert(
-      "ล้างโปรเจคปัจจุบันเรียบร้อย โดยยังเก็บรายชื่อผู้เล่นและประวัติ Season ไว้"
+      "ล้างโปรเจคปัจจุบันเรียบร้อย โดยยังเก็บรายชื่อผู้เล่นและประวัติ Season ไว้",
     );
   };
 
   const resetLeagueData = () => {
     if (
       !window.confirm(
-        "ต้องการล้างข้อมูลลีกทั้งหมดใช่ไหม? การกระทำนี้ย้อนกลับไม่ได้"
+        "ต้องการล้างข้อมูลลีกทั้งหมดใช่ไหม? การกระทำนี้ย้อนกลับไม่ได้",
       )
     )
       return;
@@ -5341,7 +5346,7 @@ function Players() {
 
   const resetAllSystem = () => {
     const confirmReset = window.confirm(
-      "⚠️ RESET ALL SYSTEM\n\nจะลบข้อมูลทั้งหมดของ BAM League ได้แก่:\n- Players\n- Teams\n- Schedule\n- Drafts\n- Match Roster\n- Player Stats\n- Team Names\n- League Settings\n\nการกระทำนี้ย้อนกลับไม่ได้\n\nต้องการดำเนินการต่อหรือไม่?"
+      "⚠️ RESET ALL SYSTEM\n\nจะลบข้อมูลทั้งหมดของ BAM League ได้แก่:\n- Players\n- Teams\n- Schedule\n- Drafts\n- Match Roster\n- Player Stats\n- Team Names\n- League Settings\n\nการกระทำนี้ย้อนกลับไม่ได้\n\nต้องการดำเนินการต่อหรือไม่?",
     );
 
     if (!confirmReset) return;
@@ -5418,7 +5423,7 @@ function Players() {
         const papg = gp > 0 ? (pa / gp).toFixed(1) : "0.0";
 
         const teamPlayerIds = (team.players || []).map((player) =>
-          String(player.id)
+          String(player.id),
         );
 
         const teamStats = playerRows.filter((stat) => {
@@ -5429,16 +5434,16 @@ function Players() {
         });
 
         const topScorer = [...teamStats].sort(
-          (a, b) => Number(b.pts || 0) - Number(a.pts || 0)
+          (a, b) => Number(b.pts || 0) - Number(a.pts || 0),
         )[0];
 
         const teamMvp = [...teamStats].sort(
-          (a, b) => Number(b.mvpScore || 0) - Number(a.mvpScore || 0)
+          (a, b) => Number(b.mvpScore || 0) - Number(a.mvpScore || 0),
         )[0];
 
         const totalMvpScore = teamStats.reduce(
           (sum, stat) => sum + Number(stat.mvpScore || 0),
-          0
+          0,
         );
 
         const powerScore = win * 100 + diff + totalMvpScore * 0.05;
@@ -5494,10 +5499,10 @@ function Players() {
   const getSeasonTeamAwards = () => {
     const finalMatch = schedule.find(
       (match) =>
-        match.playoffType === "final" || match.playoffType === "final_1v2"
+        match.playoffType === "final" || match.playoffType === "final_1v2",
     );
     const thirdPlaceMatch = schedule.find(
-      (match) => match.playoffType === "third_place"
+      (match) => match.playoffType === "third_place",
     );
 
     const finalResult = getFinishedMatchWinnerLoser(finalMatch);
@@ -5548,7 +5553,7 @@ function Players() {
       hallOfFameFilter === "ALL"
         ? seasonHistory
         : seasonHistory.filter(
-            (season) => (season.competitionType || "5X5") === hallOfFameFilter
+            (season) => (season.competitionType || "5X5") === hallOfFameFilter,
           );
 
     const countMap = (field, fallbackField = "") => {
@@ -5685,7 +5690,7 @@ function Players() {
     const seasonTitle = getSeasonHistoryTitle(seasonRecord);
     const type = seasonRecord.competitionType === "3X3" ? "3X3" : "5X5";
     const alreadyLoggedStats = player.seasons.some(
-      (item) => item.seasonId === seasonRecord.id && item.award === "played"
+      (item) => item.seasonId === seasonRecord.id && item.award === "played",
     );
 
     if (!alreadyLoggedStats) {
@@ -5704,7 +5709,7 @@ function Players() {
       hallOfFameFilter === "ALL"
         ? seasonHistory
         : seasonHistory.filter(
-            (season) => (season.competitionType || "5X5") === hallOfFameFilter
+            (season) => (season.competitionType || "5X5") === hallOfFameFilter,
           );
 
     const careerMap = {};
@@ -5717,7 +5722,7 @@ function Players() {
       const championRoster =
         archivedTeams.find((team) => team.name === championTeam)?.players || [];
       const archivedStats = Object.values(
-        seasonRecord.archivedData?.playerStats || {}
+        seasonRecord.archivedData?.playerStats || {},
       );
 
       championRoster.forEach((player) => {
@@ -5729,7 +5734,7 @@ function Players() {
           careerMap,
           regularSeasonMvp,
           "regularSeasonMvp",
-          seasonRecord
+          seasonRecord,
         );
       }
 
@@ -5738,7 +5743,7 @@ function Players() {
           careerMap,
           seasonRecord.finalsMvp,
           "finalsMvp",
-          seasonRecord
+          seasonRecord,
         );
       }
 
@@ -5747,7 +5752,7 @@ function Players() {
           careerMap,
           seasonRecord.topScorer,
           "topScorer",
-          seasonRecord
+          seasonRecord,
         );
       }
 
@@ -5756,7 +5761,7 @@ function Players() {
           careerMap,
           seasonRecord.reboundLeader,
           "reboundLeader",
-          seasonRecord
+          seasonRecord,
         );
       }
 
@@ -5765,7 +5770,7 @@ function Players() {
           careerMap,
           seasonRecord.assistLeader,
           "assistLeader",
-          seasonRecord
+          seasonRecord,
         );
       }
 
@@ -5883,11 +5888,11 @@ function Players() {
     const awards = getSeasonAwards();
     const statRows = getPlayerStatRows();
     const finishedMatches = schedule.filter(
-      (match) => match.status === "Finished"
+      (match) => match.status === "Finished",
     ).length;
     const totalMatches = schedule.length;
     const availablePlayers = players.filter(
-      (player) => player.available
+      (player) => player.available,
     ).length;
     const balance = teams.length > 0 ? getBalancePercent() : "0.0";
 
@@ -5962,7 +5967,7 @@ function Players() {
       publicSeasonId === "CURRENT"
         ? null
         : seasonHistory.find(
-            (season) => String(season.id) === String(publicSeasonId)
+            (season) => String(season.id) === String(publicSeasonId),
           );
 
     const isHistoryView = Boolean(selectedHistorySeason);
@@ -5997,10 +6002,10 @@ function Players() {
       : getCurrentSeasonTitle();
 
     const dashboardFinishedMatches = dashboardSchedule.filter(
-      (match) => match.status === "Finished"
+      (match) => match.status === "Finished",
     ).length;
     const dashboardAvailablePlayers = dashboardPlayers.filter(
-      (player) => player.available !== false
+      (player) => player.available !== false,
     ).length;
 
     const getArchivedStatRows = (statsObject = {}) => {
@@ -6044,7 +6049,7 @@ function Players() {
 
     const getDashboardPlayerStatRow = (playerId) => {
       return dashboardPlayerStatRows.find(
-        (row) => String(row.playerId) === String(playerId)
+        (row) => String(row.playerId) === String(playerId),
       );
     };
 
@@ -6072,7 +6077,7 @@ function Players() {
       return Object.values(stat.gamesByMatch)
         .map((game) => {
           const match = dashboardSchedule.find(
-            (item) => String(item.id) === String(game.matchId)
+            (item) => String(item.id) === String(game.matchId),
           );
 
           const opponent =
@@ -6361,7 +6366,7 @@ function Players() {
     );
 
     const dashboardStandingMap = new Map(
-      dashboardStandings.map((row) => [row.team, row])
+      dashboardStandings.map((row) => [row.team, row]),
     );
 
     const dashboardTeamRows = dashboardTeams.map((team) => {
@@ -6394,7 +6399,7 @@ function Players() {
         : "";
 
     const selectedPublicTeamData = dashboardTeamRows.find(
-      (team) => team.name === selectedPublicTeamName
+      (team) => team.name === selectedPublicTeamName,
     );
 
     const renderPublicTeamCard = (team) => {
@@ -6407,7 +6412,7 @@ function Players() {
           key={`public-team-card-${team.name}`}
           onClick={() =>
             setSelectedPublicTeam((current) =>
-              current === team.name ? "" : team.name
+              current === team.name ? "" : team.name,
             )
           }
           style={{
@@ -6524,7 +6529,7 @@ function Players() {
       }, {});
 
     const publicScheduleWeeks = Object.keys(publicScheduleByWeek).sort(
-      (a, b) => Number(a || 0) - Number(b || 0)
+      (a, b) => Number(a || 0) - Number(b || 0),
     );
 
     const getDashboardMatchStatRows = (match) => {
@@ -6710,17 +6715,17 @@ function Players() {
             {renderDashboardStatCard(
               "Teams",
               dashboardTeams.length,
-              `${dashboardTeams.length || teamCount} team setting`
+              `${dashboardTeams.length || teamCount} team setting`,
             )}
             {renderDashboardStatCard(
               "Players",
               dashboardAvailablePlayers,
-              "Available players"
+              "Available players",
             )}
             {renderDashboardStatCard(
               "Matches",
               `${dashboardFinishedMatches}/${dashboardSchedule.length}`,
-              "Finished / Total"
+              "Finished / Total",
             )}
           </div>
         ) : null}
@@ -6771,7 +6776,7 @@ function Players() {
                       >
                         {renderPublicTeamWithLogo(
                           selectedPublicTeamData.name,
-                          48
+                          48,
                         )}
                       </div>
                       <div
@@ -6807,7 +6812,7 @@ function Players() {
                           (pos) =>
                             `${pos} ${
                               selectedPublicTeamData.positionSummary?.[pos] || 0
-                            }`
+                            }`,
                         )
                         .join(" / ")}
                     </div>
@@ -6834,7 +6839,7 @@ function Players() {
                           {(selectedPublicTeamData.roster || []).map(
                             (player) => {
                               const dashboardStats = getDashboardPlayerStats(
-                                player.id
+                                player.id,
                               );
 
                               return (
@@ -6842,7 +6847,7 @@ function Players() {
                                   key={`public-team-roster-${selectedPublicTeamData.name}-${player.id}`}
                                   onClick={() =>
                                     setSelectedProfilePlayerId(
-                                      String(player.id)
+                                      String(player.id),
                                     )
                                   }
                                   style={{
@@ -6862,7 +6867,7 @@ function Players() {
                                       {renderPlayerAvatar(
                                         player.photoUrl ||
                                           getPlayerPhotoUrl(player.id),
-                                        34
+                                        34,
                                       )}
                                       <strong
                                         style={{ textDecoration: "underline" }}
@@ -6900,7 +6905,7 @@ function Players() {
                                   </td>
                                 </tr>
                               );
-                            }
+                            },
                           )}
                         </tbody>
                       </table>
@@ -7014,8 +7019,8 @@ function Players() {
                                     match.label === "Final"
                                       ? "#b45309"
                                       : match.label === "Semi Final"
-                                      ? "#7c3aed"
-                                      : "#555",
+                                        ? "#7c3aed"
+                                        : "#555",
                                 }}
                               >
                                 {match.label || "League"}
@@ -7209,8 +7214,8 @@ function Players() {
                   renderPublicPlayerRow(
                     player,
                     index,
-                    `${Number(player.mvpScore || 0).toFixed(1)}`
-                  )
+                    `${Number(player.mvpScore || 0).toFixed(1)}`,
+                  ),
                 )
               )}
             </div>
@@ -7221,7 +7226,11 @@ function Players() {
                 <p>ยังไม่มีข้อมูลคะแนนผู้เล่น</p>
               ) : (
                 dashboardTopScorers.map((player, index) =>
-                  renderPublicPlayerRow(player, index, `${player.pts || 0} PTS`)
+                  renderPublicPlayerRow(
+                    player,
+                    index,
+                    `${player.pts || 0} PTS`,
+                  ),
                 )
               )}
             </div>
@@ -7420,7 +7429,7 @@ function Players() {
                                   >
                                     {renderPlayerAvatar(
                                       getPlayerPhotoUrl(row.playerId),
-                                      32
+                                      32,
                                     )}
                                     <strong>{row.playerName}</strong>
                                   </span>
@@ -7484,13 +7493,13 @@ function Players() {
         {false && selectedPublicPlayer
           ? (() => {
               const playerStats = getDashboardPlayerStats(
-                selectedPublicPlayer.id
+                selectedPublicPlayer.id,
               );
               const matchLog = getDashboardPlayerMatchLog(
-                selectedPublicPlayer.id
+                selectedPublicPlayer.id,
               );
               const careerAwards = getDashboardPlayerCareerAwards(
-                selectedPublicPlayer.name
+                selectedPublicPlayer.name,
               );
 
               return (
@@ -7538,7 +7547,7 @@ function Players() {
                         {renderPlayerAvatar(
                           selectedPublicPlayer.photoUrl ||
                             getPlayerPhotoUrl(selectedPublicPlayer.id),
-                          70
+                          70,
                         )}
                         <div>
                           <h2 style={{ margin: 0 }}>
@@ -7619,22 +7628,22 @@ function Players() {
                       {renderSplitAwardCard(
                         "🏆",
                         "Champion",
-                        careerAwards.champion
+                        careerAwards.champion,
                       )}
                       {renderSplitAwardCard(
                         "👑",
                         "Regular MVP",
-                        careerAwards.regularSeasonMvp || careerAwards.mvp
+                        careerAwards.regularSeasonMvp || careerAwards.mvp,
                       )}
                       {renderSplitAwardCard(
                         "🏅",
                         "Finals MVP",
-                        careerAwards.finalsMvp
+                        careerAwards.finalsMvp,
                       )}
                       {renderSplitAwardCard(
                         "🎯",
                         "Top Scorer",
-                        careerAwards.topScorer
+                        careerAwards.topScorer,
                       )}
                     </div>
 
@@ -7834,7 +7843,7 @@ function Players() {
     adminTabs.find((tab) => tab.key === activeAdminMenu) || adminTabs[0];
 
   const finishedMatchesCount = schedule.filter(
-    (match) => match.status === "Finished"
+    (match) => match.status === "Finished",
   ).length;
 
   const adminPageShellStyle = {
@@ -7842,100 +7851,6 @@ function Players() {
     padding: "24px",
     fontFamily: "Arial",
     background: "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)",
-  };
-
-  const adminHeroStyle = {
-    border: "1px solid #e5e7eb",
-    borderRadius: "22px",
-    padding: "22px",
-    marginBottom: "18px",
-    background:
-      "linear-gradient(135deg, #111827 0%, #1f2937 55%, #0f172a 100%)",
-    color: "white",
-    boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
-  };
-
-  const adminHeroTopStyle = {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "18px",
-    flexWrap: "wrap",
-  };
-
-  const adminStatusPillStyle = {
-    padding: "8px 12px",
-    borderRadius: "999px",
-    background: "rgba(255,255,255,0.12)",
-    border: "1px solid rgba(255,255,255,0.18)",
-    color: "white",
-    display: "inline-block",
-    fontWeight: "bold",
-    fontSize: "13px",
-  };
-
-  const adminHeroActionStyle = {
-    background: "white",
-    color: "#111827",
-    border: "none",
-    borderRadius: "10px",
-    padding: "11px 14px",
-    cursor: "pointer",
-    fontWeight: "bold",
-    boxShadow: "0 8px 18px rgba(0,0,0,0.18)",
-  };
-
-  const adminKpiGridStyle = {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-    gap: "10px",
-    marginTop: "18px",
-  };
-
-  const adminKpiCardStyle = {
-    padding: "12px",
-    borderRadius: "14px",
-    background: "rgba(255,255,255,0.10)",
-    border: "1px solid rgba(255,255,255,0.14)",
-  };
-
-  const adminTabBarStyle = {
-    position: "sticky",
-    top: 0,
-    zIndex: 1000,
-    background: "rgba(255,255,255,0.97)",
-    backdropFilter: "blur(10px)",
-    border: "1px solid #e5e7eb",
-    borderRadius: "18px",
-    padding: "10px",
-    margin: "0 0 18px",
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-    gap: "8px",
-    boxShadow: "0 10px 28px rgba(15,23,42,0.10)",
-  };
-
-  const adminTabButtonStyle = (key) => ({
-    border: "1px solid " + (activeAdminMenu === key ? "#111827" : "#e5e7eb"),
-    borderRadius: "14px",
-    padding: "11px 12px",
-    background: activeAdminMenu === key ? "#111827" : "#f9fafb",
-    color: activeAdminMenu === key ? "white" : "#111827",
-    fontWeight: "bold",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    textAlign: "left",
-    boxShadow:
-      activeAdminMenu === key ? "0 8px 18px rgba(17,24,39,0.22)" : "none",
-  });
-
-  const adminSectionIntroStyle = {
-    border: "1px solid #e5e7eb",
-    borderRadius: "18px",
-    padding: "16px",
-    marginBottom: "14px",
-    background: "white",
-    boxShadow: "0 8px 22px rgba(15,23,42,0.06)",
   };
 
   if (viewMode === "PUBLIC") {
@@ -7966,114 +7881,31 @@ function Players() {
 
   return (
     <div style={adminPageShellStyle}>
-      <div style={adminHeroStyle}>
-        <div style={adminHeroTopStyle}>
-          <div>
-            <div
-              style={{
-                fontSize: "13px",
-                fontWeight: "bold",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "#cbd5e1",
-                marginBottom: "8px",
-              }}
-            >
-              Admin Portal
-            </div>
-            <h1 style={{ margin: 0, fontSize: "34px" }}>
-              🏀 BAM League Manager
-            </h1>
-            <p style={{ margin: "8px 0 0", color: "#cbd5e1" }}>
-              {getCurrentSeasonTitle()} · {competitionType} Season{" "}
-              {currentSeason}
-            </p>
-          </div>
+      <AdminHeader
+        seasonTitle={getCurrentSeasonTitle()}
+        competitionType={competitionType}
+        currentSeason={currentSeason}
+        cloudStatus={cloudStatus}
+        databaseVersion={databaseMeta.version}
+        publishValidated={publishMeta.validationPassed}
+        onOpenPublic={() => setViewMode("PUBLIC")}
+        teamsCount={teams.length}
+        teamCount={teamCount}
+        playersCount={players.length}
+        availablePlayersCount={
+          players.filter((player) => player.available).length
+        }
+        finishedMatchesCount={finishedMatchesCount}
+        scheduleCount={schedule.length}
+        draftsCount={drafts.length}
+      />
 
-          <div style={{ textAlign: "right" }}>
-            <div style={adminStatusPillStyle}>☁️ Cloud: {cloudStatus}</div>
-            <br />
-            <div style={{ ...adminStatusPillStyle, marginTop: "8px" }}>
-              🧠 DB: {databaseMeta.version}
-            </div>
-            <br />
-            <div style={{ ...adminStatusPillStyle, marginTop: "8px" }}>
-              🛡️ Publish: {publishMeta.validationPassed ? "Validated" : "Draft"}
-            </div>
-            <br />
-            <button
-              type="button"
-              onClick={() => setViewMode("PUBLIC")}
-              style={{ ...adminHeroActionStyle, marginTop: "12px" }}
-            >
-              👀 Open League Portal
-            </button>
-          </div>
-        </div>
-
-        <div style={adminKpiGridStyle}>
-          <div style={adminKpiCardStyle}>
-            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Teams</div>
-            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
-              {teams.length}
-            </div>
-            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
-              {teamCount} team setting
-            </div>
-          </div>
-          <div style={adminKpiCardStyle}>
-            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Players</div>
-            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
-              {players.length}
-            </div>
-            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
-              {players.filter((player) => player.available).length} available
-            </div>
-          </div>
-          <div style={adminKpiCardStyle}>
-            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Matches</div>
-            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
-              {finishedMatchesCount}/{schedule.length}
-            </div>
-            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
-              Finished / Total
-            </div>
-          </div>
-          <div style={adminKpiCardStyle}>
-            <div style={{ color: "#cbd5e1", fontSize: "13px" }}>Drafts</div>
-            <div style={{ fontSize: "24px", fontWeight: "bold" }}>
-              {drafts.length}
-            </div>
-            <div style={{ color: "#cbd5e1", fontSize: "12px" }}>
-              Saved versions
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style={adminTabBarStyle}>
-        {adminTabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveAdminMenu(tab.key)}
-            style={adminTabButtonStyle(tab.key)}
-            title={tab.description}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={adminSectionIntroStyle}>
-        <div style={{ fontSize: "13px", color: "#64748b", fontWeight: "bold" }}>
-          Current Module
-        </div>
-        <h2 style={{ margin: "4px 0" }}>{activeAdminTab.label}</h2>
-        <p style={{ margin: 0, color: "#475569" }}>
-          {activeAdminTab.description}
-        </p>
-      </div>
+      <AdminNavigation
+        tabs={adminTabs}
+        activeKey={activeAdminMenu}
+        activeTab={activeAdminTab}
+        onChange={setActiveAdminMenu}
+      />
 
       <details
         open
@@ -8222,7 +8054,7 @@ function Players() {
                       <option key={count} value={count}>
                         {count} Teams
                       </option>
-                    )
+                    ),
                   )}
                 </select>
               </label>
@@ -8625,8 +8457,8 @@ function Players() {
                 onChange={(e) =>
                   setSelectedLockPlayerIds(
                     Array.from(e.target.selectedOptions).map(
-                      (option) => option.value
-                    )
+                      (option) => option.value,
+                    ),
                   )
                 }
                 style={{
@@ -8962,7 +8794,7 @@ function Players() {
                   key={`team-dashboard-${teamData.teamName}`}
                   onClick={() =>
                     setExpandedTeamDashboard((prev) =>
-                      prev === teamData.teamName ? "" : teamData.teamName
+                      prev === teamData.teamName ? "" : teamData.teamName,
                     )
                   }
                   style={{
@@ -9047,13 +8879,13 @@ function Players() {
                         <button
                           onClick={() =>
                             setSelectedProfilePlayerId(
-                              teamData.teamMvp.playerId
+                              teamData.teamMvp.playerId,
                             )
                           }
                         >
                           {renderPlayerAvatar(
                             getPlayerPhotoUrl(teamData.teamMvp.playerId),
-                            24
+                            24,
                           )}{" "}
                           {teamData.teamMvp.playerName} /{" "}
                           {teamData.teamMvp.mvpScore.toFixed(1)}
@@ -9069,13 +8901,13 @@ function Players() {
                         <button
                           onClick={() =>
                             setSelectedProfilePlayerId(
-                              teamData.topScorer.playerId
+                              teamData.topScorer.playerId,
                             )
                           }
                         >
                           {renderPlayerAvatar(
                             getPlayerPhotoUrl(teamData.topScorer.playerId),
-                            24
+                            24,
                           )}{" "}
                           {teamData.topScorer.playerName} /{" "}
                           {teamData.topScorer.pts} PTS
@@ -9101,7 +8933,7 @@ function Players() {
                       >
                         {(() => {
                           const team = teams.find(
-                            (item) => item.name === teamData.teamName
+                            (item) => item.name === teamData.teamName,
                           );
 
                           if (!team) return <p>ไม่พบข้อมูลทีม</p>;
@@ -9163,7 +8995,7 @@ function Players() {
                                     {renderPlayerAvatar(
                                       player.photoUrl ||
                                         getPlayerPhotoUrl(player.id),
-                                      28
+                                      28,
                                     )}{" "}
                                     {player.name} | {player.tier} |{" "}
                                     {player.rating} | {player.pos1}
@@ -9383,7 +9215,7 @@ function Players() {
                             <td>
                               {renderPlayerAvatar(
                                 player.photoUrl || getPlayerPhotoUrl(player.id),
-                                34
+                                34,
                               )}
                             </td>
                             <td>
@@ -9504,7 +9336,7 @@ function Players() {
                                       updateMatchScore(
                                         match.id,
                                         "scoreA",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     style={{ width: "70px" }}
@@ -9519,7 +9351,7 @@ function Players() {
                                       updateMatchScore(
                                         match.id,
                                         "scoreB",
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     style={{ width: "70px" }}
@@ -9567,7 +9399,7 @@ function Players() {
 
       {selectedRosterMatchId &&
         schedule.find(
-          (m) => String(m.id) === String(selectedRosterMatchId)
+          (m) => String(m.id) === String(selectedRosterMatchId),
         ) && (
           <details
             open
@@ -9583,7 +9415,7 @@ function Players() {
             <div style={{ marginTop: "32px" }}>
               {(() => {
                 const selectedMatch = schedule.find(
-                  (m) => String(m.id) === String(selectedRosterMatchId)
+                  (m) => String(m.id) === String(selectedRosterMatchId),
                 );
                 const roster = getMatchRoster(selectedMatch);
 
@@ -9629,7 +9461,7 @@ function Players() {
                                 toggleActivePlayer(
                                   selectedMatch,
                                   side,
-                                  player.id
+                                  player.id,
                                 )
                               }
                             />{" "}
@@ -9677,7 +9509,7 @@ function Players() {
                             <li key={`${side}-loan-${loan.playerId}`}>
                               {renderPlayerAvatar(
                                 getPlayerPhotoUrl(loan.playerId),
-                                26
+                                26,
                               )}{" "}
                               {loan.playerName} | From: {loan.ownerTeam} | LOAN
                               | ไม่นับสถิติส่วนตัว{" "}
@@ -9686,7 +9518,7 @@ function Players() {
                                   removeLoanPlayerFromMatch(
                                     selectedMatch,
                                     side,
-                                    loan.playerId
+                                    loan.playerId,
                                   )
                                 }
                               >
@@ -9761,7 +9593,7 @@ function Players() {
             <div style={{ marginTop: "32px" }}>
               {(() => {
                 const selectedMatch = schedule.find(
-                  (m) => String(m.id) === String(selectedStatsMatchId)
+                  (m) => String(m.id) === String(selectedStatsMatchId),
                 );
                 const statRows = getAllStatRowsForMatch(selectedMatch);
 
@@ -9821,14 +9653,14 @@ function Players() {
                                     value={getStatInputValue(
                                       selectedMatch,
                                       player,
-                                      field.key
+                                      field.key,
                                     )}
                                     onChange={(e) =>
                                       updateMatchStatInput(
                                         selectedMatch,
                                         player,
                                         field.key,
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     style={{ width: "70px" }}
@@ -9931,7 +9763,7 @@ function Players() {
                       <td>
                         {renderPlayerAvatar(
                           getPlayerPhotoUrl(stat.playerId),
-                          38
+                          38,
                         )}
                       </td>
                       <td>
@@ -10051,7 +9883,7 @@ function Players() {
                     "MVP Score",
                     awards.regularSeasonMvp
                       ? Number(awards.regularSeasonMvp.mvpScore || 0).toFixed(1)
-                      : "-"
+                      : "-",
                   ),
                 },
                 {
@@ -10069,7 +9901,7 @@ function Players() {
                   content: renderAwardPlayer(
                     awards.topScorer,
                     "PTS",
-                    awards.topScorer?.pts || 0
+                    awards.topScorer?.pts || 0,
                   ),
                 },
                 {
@@ -10078,7 +9910,7 @@ function Players() {
                   content: renderAwardPlayer(
                     awards.reboundLeader,
                     "REB",
-                    awards.reboundLeader?.reb || 0
+                    awards.reboundLeader?.reb || 0,
                   ),
                 },
                 {
@@ -10087,7 +9919,7 @@ function Players() {
                   content: renderAwardPlayer(
                     awards.assistLeader,
                     "AST",
-                    awards.assistLeader?.ast || 0
+                    awards.assistLeader?.ast || 0,
                   ),
                 },
                 {
@@ -10096,7 +9928,7 @@ function Players() {
                   content: renderAwardPlayer(
                     awards.stealLeader,
                     "STL",
-                    awards.stealLeader?.stl || 0
+                    awards.stealLeader?.stl || 0,
                   ),
                 },
                 {
@@ -10105,7 +9937,7 @@ function Players() {
                   content: renderAwardPlayer(
                     awards.blockLeader,
                     "BLK",
-                    awards.blockLeader?.blk || 0
+                    awards.blockLeader?.blk || 0,
                   ),
                 },
               ];
@@ -10441,7 +10273,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "projectName",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10455,7 +10287,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "competitionType",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10474,7 +10306,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "season",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10488,7 +10320,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "closedAtText",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10502,7 +10334,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "champion",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10516,7 +10348,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "runnerUp",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10530,7 +10362,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "thirdPlace",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10544,7 +10376,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "regularSeasonMvp",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10558,7 +10390,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "finalsMvp",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10572,7 +10404,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "topScorer",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10588,7 +10420,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "topScorerPts",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10602,7 +10434,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "reboundLeader",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10618,7 +10450,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "reboundLeaderReb",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10632,7 +10464,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "assistLeader",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10648,7 +10480,7 @@ function Players() {
                             onChange={(event) =>
                               updateSeasonHistoryEditForm(
                                 "assistLeaderAst",
-                                event.target.value
+                                event.target.value,
                               )
                             }
                             style={{ width: "100%", marginTop: "4px" }}
@@ -10663,7 +10495,7 @@ function Players() {
                           onChange={(event) =>
                             updateSeasonHistoryEditForm(
                               "notes",
-                              event.target.value
+                              event.target.value,
                             )
                           }
                           rows={3}
@@ -10810,22 +10642,22 @@ function Players() {
                               {renderCareerBadge(
                                 "🏆",
                                 "Champion",
-                                career.awards.champion.total
+                                career.awards.champion.total,
                               )}
                               {renderCareerBadge(
                                 "👑",
                                 "Reg MVP",
-                                career.awards.regularSeasonMvp.total
+                                career.awards.regularSeasonMvp.total,
                               )}
                               {renderCareerBadge(
                                 "🏅",
                                 "Finals MVP",
-                                career.awards.finalsMvp.total
+                                career.awards.finalsMvp.total,
                               )}
                               {renderCareerBadge(
                                 "🎯",
                                 "Top Scorer",
-                                career.awards.topScorer.total
+                                career.awards.topScorer.total,
                               )}
                             </div>
                             <div style={{ color: "#475569", fontSize: "13px" }}>
@@ -10866,7 +10698,7 @@ function Players() {
                           {renderCareerLeaderList(
                             reboundLeaders,
                             "reb",
-                            " REB"
+                            " REB",
                           )}
                         </div>
                         <div
@@ -10942,7 +10774,7 @@ function Players() {
               >
                 <h3>👑 Regular MVP</h3>
                 {renderHallOfFameList(
-                  hallOfFame.regularSeasonMvps || hallOfFame.mvps
+                  hallOfFame.regularSeasonMvps || hallOfFame.mvps,
                 )}
               </div>
 
@@ -11021,7 +10853,7 @@ function Players() {
               <option value="">เลือกผู้เล่น</option>
               {getPlayerStatRows()
                 .sort((a, b) =>
-                  String(a.playerName).localeCompare(String(b.playerName))
+                  String(a.playerName).localeCompare(String(b.playerName)),
                 )
                 .map((stat) => (
                   <option
@@ -11058,7 +10890,7 @@ function Players() {
                     >
                       {renderPlayerAvatar(
                         getPlayerPhotoUrl(profile.playerId),
-                        96
+                        96,
                       )}
                       <div>
                         <h3 style={{ marginBottom: "6px" }}>
@@ -11214,7 +11046,7 @@ function Players() {
                               <button
                                 onClick={() => {
                                   setSelectedProfilePlayerId(
-                                    String(stat.playerId)
+                                    String(stat.playerId),
                                   );
                                   setActiveAdminMenu("stats");
                                 }}
