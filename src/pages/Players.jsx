@@ -10,6 +10,7 @@ import AdminHeader from "../components/admin/AdminHeader";
 import AdminNavigation from "../components/admin/AdminNavigation";
 import TeamDashboard from "../components/teams/TeamDashboard";
 import DraftHistory from "../components/drafts/DraftHistory";
+import SchedulePanel from "../components/schedule/SchedulePanel";
 
 import {
   uploadPlayerPhoto,
@@ -2116,6 +2117,34 @@ function Players() {
   // NOTE: Later migrate this region to src/services/schedule/scheduleService.js.
   // ======================================================
 
+  const resetScheduleDependentData = () => {
+    setSchedule([]);
+    setMatchRosters({});
+    setPlayerStats({});
+    setMatchStatInputs({});
+    setSelectedRosterMatchId("");
+    setSelectedStatsMatchId("");
+    setSelectedFinalsMvpId("");
+    localStorage.removeItem("schedule");
+    localStorage.removeItem("matchRosters");
+    localStorage.removeItem("playerStats");
+    localStorage.removeItem("matchStatInputs");
+  };
+
+  const shuffleScheduleTeamNames = (teamNames) => {
+    const shuffledNames = [...teamNames];
+
+    for (let index = shuffledNames.length - 1; index > 0; index -= 1) {
+      const randomIndex = Math.floor(Math.random() * (index + 1));
+      [shuffledNames[index], shuffledNames[randomIndex]] = [
+        shuffledNames[randomIndex],
+        shuffledNames[index],
+      ];
+    }
+
+    return shuffledNames;
+  };
+
   const createSchedule = () => {
     // Schedule Flow:
     // 1) Validate enough generated teams.
@@ -2127,7 +2156,9 @@ function Players() {
       return;
     }
 
-    const names = teams.map((team) => team.name);
+    resetScheduleDependentData();
+
+    const names = shuffleScheduleTeamNames(teams.map((team) => team.name));
     const roundRobinNames =
       names.length % 2 === 0 ? [...names] : [...names, "BYE"];
     const totalRounds = roundRobinNames.length - 1;
@@ -2228,8 +2259,6 @@ function Players() {
     }
 
     setSchedule(newSchedule);
-    setSelectedRosterMatchId("");
-    setSelectedStatsMatchId("");
   };
 
   const updateMatchScore = (id, field, value) => {
@@ -3976,9 +4005,7 @@ function Players() {
 
   const clearSchedule = () => {
     if (!window.confirm("ต้องการลบ Schedule ใช่ไหม?")) return;
-    setSchedule([]);
-    setSelectedRosterMatchId("");
-    localStorage.removeItem("schedule");
+    resetScheduleDependentData();
   };
 
   // ======================================================
@@ -8721,148 +8748,22 @@ function Players() {
         </details>
       )}
 
-      {activeAdminMenu === "schedule" && (
-        <details
-          open
-          style={{
-            ...adminAccordionStyle,
-            display: activeAdminMenu === "schedule" ? "block" : "none",
-          }}
-        >
-          <summary style={adminAccordionSummaryStyle}>
-            <span>📅 Schedule / Match Control</span>
-            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
-          </summary>
-          <div style={{ marginTop: "32px" }}>
-            <h2>📅 Schedule / Match Control</h2>
-            <p style={{ color: "#555" }}>
-              จัดการตารางแข่ง กรอกคะแนน Manage Roster และ Enter Stats
-              ของแต่ละแมตช์ในแท็บนี้
-            </p>
-
-            {teams.length === 0 ? (
-              <p>กรุณา Generate Teams ก่อนสร้างตารางแข่ง</p>
-            ) : (
-              <button
-                onClick={createSchedule}
-                style={{ marginRight: "8px", marginBottom: "12px" }}
-              >
-                {schedule.length > 0 ? "Recreate Schedule" : "Create Schedule"}
-              </button>
-            )}
-
-            {schedule.length > 0 && (
-              <>
-                <button
-                  onClick={updatePlayoffTeams}
-                  style={{ marginRight: "8px", marginBottom: "12px" }}
-                >
-                  Update Playoff Teams
-                </button>
-
-                <button
-                  onClick={clearSchedule}
-                  style={{ marginBottom: "12px" }}
-                >
-                  Clear Schedule
-                </button>
-
-                {[...new Set(schedule.map((match) => match.week))]
-                  .sort((a, b) => a - b)
-                  .map((week) => (
-                    <div key={week} style={{ marginTop: "20px" }}>
-                      <h3>Week {week}</h3>
-
-                      <table border="1" cellPadding="8" cellSpacing="0">
-                        <thead>
-                          <tr>
-                            <th>Round</th>
-                            <th>Team A</th>
-                            <th>Score A</th>
-                            <th>Team B</th>
-                            <th>Score B</th>
-                            <th>Status</th>
-                            <th>Roster</th>
-                            <th>Stats</th>
-                            <th>Action</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {schedule
-                            .filter((match) => match.week === week)
-                            .map((match) => (
-                              <tr key={match.id}>
-                                <td>{match.label}</td>
-                                <td>{renderTeamWithLogo(match.teamA, 30)}</td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    value={match.scoreA}
-                                    onChange={(e) =>
-                                      updateMatchScore(
-                                        match.id,
-                                        "scoreA",
-                                        e.target.value,
-                                      )
-                                    }
-                                    style={{ width: "70px" }}
-                                  />
-                                </td>
-                                <td>{renderTeamWithLogo(match.teamB, 30)}</td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    value={match.scoreB}
-                                    onChange={(e) =>
-                                      updateMatchScore(
-                                        match.id,
-                                        "scoreB",
-                                        e.target.value,
-                                      )
-                                    }
-                                    style={{ width: "70px" }}
-                                  />
-                                </td>
-                                <td>{match.status}</td>
-                                <td>
-                                  <button
-                                    onClick={() =>
-                                      setSelectedRosterMatchId(String(match.id))
-                                    }
-                                  >
-                                    Manage Roster
-                                  </button>
-                                </td>
-                                <td>
-                                  <button
-                                    onClick={() =>
-                                      setSelectedStatsMatchId(String(match.id))
-                                    }
-                                  >
-                                    Enter Stats
-                                  </button>
-                                </td>
-                                <td>
-                                  <button onClick={() => finishMatch(match.id)}>
-                                    Finish
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-              </>
-            )}
-
-            {schedule.length === 0 && teams.length > 0 && (
-              <p>ยังไม่มีตารางแข่ง กด Create Schedule เพื่อสร้างตาราง</p>
-            )}
-          </div>
-        </details>
-      )}
+      <SchedulePanel
+        activeAdminMenu={activeAdminMenu}
+        adminAccordionStyle={adminAccordionStyle}
+        adminAccordionSummaryStyle={adminAccordionSummaryStyle}
+        adminAccordionHintStyle={adminAccordionHintStyle}
+        teams={teams}
+        schedule={schedule}
+        createSchedule={createSchedule}
+        updatePlayoffTeams={updatePlayoffTeams}
+        clearSchedule={clearSchedule}
+        updateMatchScore={updateMatchScore}
+        finishMatch={finishMatch}
+        renderTeamWithLogo={renderTeamWithLogo}
+        setSelectedRosterMatchId={setSelectedRosterMatchId}
+        setSelectedStatsMatchId={setSelectedStatsMatchId}
+      />
 
       {selectedRosterMatchId &&
         schedule.find(
