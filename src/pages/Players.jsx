@@ -2647,6 +2647,36 @@ function Players() {
     }));
   };
 
+  const calculateTeamScoresFromMatchInputs = (match) => {
+    const rows = getAllStatRowsForMatch(match);
+    const totals = {
+      teamA: 0,
+      teamB: 0,
+    };
+
+    rows.forEach((player) => {
+      const key = getMatchStatKey(
+        match.id,
+        player.playerId || player.id,
+        player.role,
+        player.matchTeam,
+      );
+      const input = matchStatInputs[key] || {};
+      const points = Number(input.pts || 0);
+      const safePoints = Number.isNaN(points) ? 0 : points;
+
+      if (player.matchTeam === match.teamA) {
+        totals.teamA += safePoints;
+      }
+
+      if (player.matchTeam === match.teamB) {
+        totals.teamB += safePoints;
+      }
+    });
+
+    return totals;
+  };
+
   // ======================================================
   // 19. PLAYER STATS ENGINE
   // NOTE: Later migrate this region to src/services/stats/playerStatsService.js.
@@ -2813,6 +2843,19 @@ function Players() {
     });
 
     setPlayerStats(nextStats);
+    const teamScores = calculateTeamScoresFromMatchInputs(match);
+    setSchedule((prevSchedule) =>
+      prevSchedule.map((scheduleMatch) =>
+        String(scheduleMatch.id) === String(match.id)
+          ? {
+              ...scheduleMatch,
+              scoreA: String(teamScores.teamA),
+              scoreB: String(teamScores.teamB),
+              status: "Pending",
+            }
+          : scheduleMatch,
+      ),
+    );
     alert("บันทึก Player Stats สำเร็จ");
   };
 
