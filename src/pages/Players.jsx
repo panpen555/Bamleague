@@ -7995,7 +7995,7 @@ function Players() {
   const adminPageShellStyle = {
     minHeight: "100vh",
     padding: "24px",
-    fontFamily: "Arial",
+    fontFamily: "inherit",
     background: "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)",
   };
 
@@ -8004,7 +8004,7 @@ function Players() {
       <div
         style={{
           padding: "24px",
-          fontFamily: "Arial",
+          fontFamily: "inherit",
           background: "#f5f5f5",
           minHeight: "100vh",
         }}

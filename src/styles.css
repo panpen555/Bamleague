@@ -1,4 +1,29 @@
+html {
+  font-family: "Segoe UI", "Leelawadee UI", "Noto Sans Thai", Arial, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  font-family: inherit;
+  line-height: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+table {
+  font-family: inherit;
+}
+
 .App {
-  font-family: sans-serif;
+  font-family: inherit;
   text-align: center;
 }
