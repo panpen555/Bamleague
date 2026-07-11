@@ -13,6 +13,7 @@ import DraftHistory from "../components/drafts/DraftHistory";
 import SchedulePanel from "../components/schedule/SchedulePanel";
 import MatchRosterModal from "../components/matches/MatchRosterModal";
 import MatchStatsModal from "../components/matches/MatchStatsModal";
+import StandingsPanel from "../components/standings/StandingsPanel";
 
 import {
   uploadPlayerPhoto,
@@ -10296,55 +10297,14 @@ function Players() {
         </details>
       )}
 
-      {standings.length > 0 && (
-        <details
-          open
-          style={{
-            ...adminAccordionStyle,
-            display: activeAdminMenu === "schedule" ? "block" : "none",
-          }}
-        >
-          <summary style={adminAccordionSummaryStyle}>
-            <span>📋 League Standings</span>
-            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
-          </summary>
-          <div style={{ marginTop: "32px" }}>
-            <h2>League Standings</h2>
-
-            <table border="1" cellPadding="8" cellSpacing="0">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Logo</th>
-                  <th>Team</th>
-                  <th>P</th>
-                  <th>W</th>
-                  <th>L</th>
-                  <th>PF</th>
-                  <th>PA</th>
-                  <th>Diff</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {standings.map((row, index) => (
-                  <tr key={row.team}>
-                    <td>{index + 1}</td>
-                    <td>{renderTeamLogo(row.team, 34)}</td>
-                    <td>{row.team}</td>
-                    <td>{row.played}</td>
-                    <td>{row.win}</td>
-                    <td>{row.loss}</td>
-                    <td>{row.pf}</td>
-                    <td>{row.pa}</td>
-                    <td>{row.diff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
+      <StandingsPanel
+        activeAdminMenu={activeAdminMenu}
+        adminAccordionStyle={adminAccordionStyle}
+        adminAccordionSummaryStyle={adminAccordionSummaryStyle}
+        adminAccordionHintStyle={adminAccordionHintStyle}
+        standings={standings}
+        renderTeamLogo={renderTeamLogo}
+      />
 
       <DraftHistory
         activeAdminMenu={activeAdminMenu}
