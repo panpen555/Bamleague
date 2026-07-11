@@ -11,6 +11,8 @@ import AdminNavigation from "../components/admin/AdminNavigation";
 import TeamDashboard from "../components/teams/TeamDashboard";
 import DraftHistory from "../components/drafts/DraftHistory";
 import SchedulePanel from "../components/schedule/SchedulePanel";
+import MatchRosterModal from "../components/matches/MatchRosterModal";
+import MatchStatsModal from "../components/matches/MatchStatsModal";
 
 import {
   uploadPlayerPhoto,
@@ -2539,18 +2541,22 @@ function Players() {
   };
 
   const getLoanCandidates = (match, side) => {
-    const matchTeam = getSideTeamName(match, side);
     const currentRoster = getMatchRoster(match);
-    const currentLoanIds = (currentRoster[side].loanPlayers || []).map((loan) =>
-      Number(loan.playerId),
-    );
-    const activeIds = currentRoster[side].activePlayers || [];
+    const matchTeamNames = [match.teamA, match.teamB];
+    const currentLoanIds = [
+      ...(currentRoster.teamA.loanPlayers || []),
+      ...(currentRoster.teamB.loanPlayers || []),
+    ].map((loan) => Number(loan.playerId));
+    const activeIds = [
+      ...(currentRoster.teamA.activePlayers || []),
+      ...(currentRoster.teamB.activePlayers || []),
+    ].map((playerId) => Number(playerId));
 
     return players.filter((player) => {
-      if (!player.teamName) return false;
-      if (player.teamName === matchTeam) return false;
+      if (player.available === false) return false;
+      if (matchTeamNames.includes(player.teamName)) return false;
       if (currentLoanIds.includes(Number(player.id))) return false;
-      if (activeIds.includes(player.id)) return false;
+      if (activeIds.includes(Number(player.id))) return false;
       return true;
     });
   };
@@ -5428,6 +5434,12 @@ function Players() {
   };
 
   const standings = calculateStandings();
+  const selectedRosterMatch = schedule.find(
+    (match) => String(match.id) === String(selectedRosterMatchId),
+  );
+  const selectedStatsMatch = schedule.find(
+    (match) => String(match.id) === String(selectedStatsMatchId),
+  );
 
   const getTeamDashboardData = () => {
     const playerRows = getPlayerStatRows();
@@ -8765,302 +8777,42 @@ function Players() {
         setSelectedStatsMatchId={setSelectedStatsMatchId}
       />
 
-      {selectedRosterMatchId &&
-        schedule.find(
-          (m) => String(m.id) === String(selectedRosterMatchId),
-        ) && (
-          <details
-            open
-            style={{
-              ...adminAccordionStyle,
-              display: activeAdminMenu === "schedule" ? "block" : "none",
-            }}
-          >
-            <summary style={adminAccordionSummaryStyle}>
-              <span>📝 Match Roster</span>
-              <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
-            </summary>
-            <div style={{ marginTop: "32px" }}>
-              {(() => {
-                const selectedMatch = schedule.find(
-                  (m) => String(m.id) === String(selectedRosterMatchId),
-                );
-                const roster = getMatchRoster(selectedMatch);
+      <MatchRosterModal
+        isOpen={Boolean(selectedRosterMatch)}
+        selectedMatch={selectedRosterMatch}
+        adminAccordionStyle={adminAccordionStyle}
+        adminAccordionSummaryStyle={adminAccordionSummaryStyle}
+        adminAccordionHintStyle={adminAccordionHintStyle}
+        getMatchRoster={getMatchRoster}
+        getSideTeamName={getSideTeamName}
+        getTeamPlayers={getTeamPlayers}
+        getLoanCandidates={getLoanCandidates}
+        toggleActivePlayer={toggleActivePlayer}
+        loanForm={loanForm}
+        setLoanForm={setLoanForm}
+        addLoanPlayerToMatch={addLoanPlayerToMatch}
+        removeLoanPlayerFromMatch={removeLoanPlayerFromMatch}
+        saveMatchRoster={saveMatchRoster}
+        clearMatchRoster={clearMatchRoster}
+        onClose={() => setSelectedRosterMatchId("")}
+        renderTeamWithLogo={renderTeamWithLogo}
+        renderPlayerAvatar={renderPlayerAvatar}
+        getPlayerPhotoUrl={getPlayerPhotoUrl}
+      />
 
-                const renderSideRoster = (side, title) => {
-                  const teamName = getSideTeamName(selectedMatch, side);
-                  const teamPlayers = getTeamPlayers(teamName);
-                  const activePlayers = roster[side].activePlayers || [];
-                  const loanPlayers = roster[side].loanPlayers || [];
-                  const loanCandidates = getLoanCandidates(selectedMatch, side);
-                  const totalPlayers =
-                    activePlayers.length + loanPlayers.length;
-
-                  return (
-                    <div
-                      style={{
-                        border: "1px solid #999",
-                        padding: "12px",
-                        minWidth: "340px",
-                      }}
-                    >
-                      <h3>
-                        {title}: {renderTeamWithLogo(teamName, 36)}
-                      </h3>
-
-                      <p>
-                        Active + Loan: <strong>{totalPlayers}</strong> คน
-                        {totalPlayers < 5 ? " ⚠️ ยังไม่ครบ 5" : " ✅ ครบ 5"}
-                      </p>
-
-                      <h4>Regular Players</h4>
-                      {teamPlayers.length === 0 ? (
-                        <p>ยังไม่มีผู้เล่นในทีม</p>
-                      ) : (
-                        teamPlayers.map((player) => (
-                          <label
-                            key={`${side}-active-${player.id}`}
-                            style={{ display: "block", marginBottom: "6px" }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={activePlayers.includes(player.id)}
-                              onChange={() =>
-                                toggleActivePlayer(
-                                  selectedMatch,
-                                  side,
-                                  player.id,
-                                )
-                              }
-                            />{" "}
-                            {player.name} | {player.tier} | {player.rating}
-                          </label>
-                        ))
-                      )}
-
-                      <h4>Loan Players</h4>
-                      <div style={{ marginBottom: "8px" }}>
-                        <select
-                          value={
-                            loanForm.side === side ? loanForm.playerId : ""
-                          }
-                          onChange={(e) =>
-                            setLoanForm({ side, playerId: e.target.value })
-                          }
-                          style={{ marginRight: "8px" }}
-                        >
-                          <option value="">เลือกผู้เล่นยืมตัว</option>
-                          {loanCandidates.map((player) => (
-                            <option
-                              key={`loan-candidate-${side}-${player.id}`}
-                              value={player.id}
-                            >
-                              {player.name} ({player.teamName})
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          onClick={() =>
-                            addLoanPlayerToMatch(selectedMatch, side)
-                          }
-                        >
-                          Add Loan
-                        </button>
-                      </div>
-
-                      {loanPlayers.length === 0 ? (
-                        <p>ไม่มีผู้เล่นยืมตัว</p>
-                      ) : (
-                        <ul>
-                          {loanPlayers.map((loan) => (
-                            <li key={`${side}-loan-${loan.playerId}`}>
-                              {renderPlayerAvatar(
-                                getPlayerPhotoUrl(loan.playerId),
-                                26,
-                              )}{" "}
-                              {loan.playerName} | From: {loan.ownerTeam} | LOAN
-                              | ไม่นับสถิติส่วนตัว{" "}
-                              <button
-                                onClick={() =>
-                                  removeLoanPlayerFromMatch(
-                                    selectedMatch,
-                                    side,
-                                    loan.playerId,
-                                  )
-                                }
-                              >
-                                Remove
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                };
-
-                return (
-                  <>
-                    <h2>Match Roster</h2>
-                    <p>
-                      Match: Week {selectedMatch.week} | {selectedMatch.label} |{" "}
-                      {selectedMatch.teamA} vs {selectedMatch.teamB}
-                    </p>
-                    <p>
-                      Regular Player = นับสถิติในอนาคต / Loan Player = ช่วยแข่ง
-                      แต่ไม่นับสถิติส่วนตัว
-                    </p>
-
-                    <div
-                      style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}
-                    >
-                      {renderSideRoster("teamA", "Team A")}
-                      {renderSideRoster("teamB", "Team B")}
-                    </div>
-
-                    <div style={{ marginTop: "16px" }}>
-                      <button
-                        onClick={() => saveMatchRoster(selectedMatch)}
-                        style={{ marginRight: "8px" }}
-                      >
-                        Save Match Roster
-                      </button>
-
-                      <button
-                        onClick={() => clearMatchRoster(selectedMatch.id)}
-                        style={{ marginRight: "8px" }}
-                      >
-                        Clear Match Roster
-                      </button>
-
-                      <button onClick={() => setSelectedRosterMatchId("")}>
-                        Close
-                      </button>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </details>
-        )}
-
-      {selectedStatsMatchId &&
-        schedule.find((m) => String(m.id) === String(selectedStatsMatchId)) && (
-          <details
-            open
-            style={{
-              ...adminAccordionStyle,
-              display: activeAdminMenu === "schedule" ? "block" : "none",
-            }}
-          >
-            <summary style={adminAccordionSummaryStyle}>
-              <span>📊 Player Match Stats</span>
-              <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
-            </summary>
-            <div style={{ marginTop: "32px" }}>
-              {(() => {
-                const selectedMatch = schedule.find(
-                  (m) => String(m.id) === String(selectedStatsMatchId),
-                );
-                const statRows = getAllStatRowsForMatch(selectedMatch);
-
-                return (
-                  <>
-                    <h2>Player Match Stats</h2>
-                    <p>
-                      Match: Week {selectedMatch.week} | {selectedMatch.label} |{" "}
-                      {selectedMatch.teamA} vs {selectedMatch.teamB}
-                    </p>
-                    <p>
-                      กรอก PTS / REB / AST / STL / BLK / Games นับตามเกมของทีม /
-                      Appear นับเฉพาะคนที่ติ๊กลงจริง / Loan Player
-                      ไม่นับสถิติส่วนตัว
-                    </p>
-
-                    {statRows.length === 0 ? (
-                      <p>ยังไม่มีรายชื่อผู้เล่น กรุณากด Manage Roster ก่อน</p>
-                    ) : (
-                      <table border="1" cellPadding="8" cellSpacing="0">
-                        <thead>
-                          <tr>
-                            <th>Player</th>
-                            <th>Match Team</th>
-                            <th>Owner Team</th>
-                            <th>Role</th>
-                            {statFields.map((field) => (
-                              <th key={`stat-head-${field.key}`}>
-                                {field.label}
-                              </th>
-                            ))}
-                            <th>Personal Stat</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {statRows.map((player) => (
-                            <tr
-                              key={`${selectedMatch.id}-${
-                                player.playerId || player.id
-                              }-${player.role}-${player.matchTeam}`}
-                            >
-                              <td>{player.name}</td>
-                              <td>{player.matchTeam}</td>
-                              <td>{player.ownerTeam}</td>
-                              <td>
-                                {player.role === "loan" ? "LOAN" : "REGULAR"}
-                              </td>
-                              {statFields.map((field) => (
-                                <td
-                                  key={`${selectedMatch.id}-${
-                                    player.playerId || player.id
-                                  }-${field.key}`}
-                                >
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={getStatInputValue(
-                                      selectedMatch,
-                                      player,
-                                      field.key,
-                                    )}
-                                    onChange={(e) =>
-                                      updateMatchStatInput(
-                                        selectedMatch,
-                                        player,
-                                        field.key,
-                                        e.target.value,
-                                      )
-                                    }
-                                    style={{ width: "70px" }}
-                                  />
-                                </td>
-                              ))}
-                              <td>
-                                {player.countPersonalStats ? "นับ" : "ไม่นับ"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-
-                    <div style={{ marginTop: "16px" }}>
-                      <button
-                        onClick={() => saveMatchStats(selectedMatch)}
-                        style={{ marginRight: "8px" }}
-                      >
-                        Save Match Stats
-                      </button>
-                      <button onClick={() => setSelectedStatsMatchId("")}>
-                        Close
-                      </button>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </details>
-        )}
+      <MatchStatsModal
+        isOpen={Boolean(selectedStatsMatch)}
+        selectedMatch={selectedStatsMatch}
+        adminAccordionStyle={adminAccordionStyle}
+        adminAccordionSummaryStyle={adminAccordionSummaryStyle}
+        adminAccordionHintStyle={adminAccordionHintStyle}
+        getAllStatRowsForMatch={getAllStatRowsForMatch}
+        statFields={statFields}
+        getStatInputValue={getStatInputValue}
+        updateMatchStatInput={updateMatchStatInput}
+        saveMatchStats={saveMatchStats}
+        onClose={() => setSelectedStatsMatchId("")}
+      />
 
       {activeAdminMenu === "stats" && (
         <div
