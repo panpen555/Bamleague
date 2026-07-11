@@ -2677,6 +2677,66 @@ function Players() {
     return totals;
   };
 
+  const getMatchScoreSyncInfo = (match) => {
+    const rows = getAllStatRowsForMatch(match);
+    let hasPtsInput = false;
+    const expectedScores = {
+      teamA: 0,
+      teamB: 0,
+    };
+
+    rows.forEach((player) => {
+      const key = getMatchStatKey(
+        match.id,
+        player.playerId || player.id,
+        player.role,
+        player.matchTeam,
+      );
+      const input = matchStatInputs[key] || {};
+      const hasPlayerPtsInput = input.pts !== undefined && input.pts !== "";
+
+      if (!hasPlayerPtsInput) return;
+
+      hasPtsInput = true;
+      const points = Number(input.pts || 0);
+      const safePoints = Number.isNaN(points) ? 0 : points;
+
+      if (player.matchTeam === match.teamA) {
+        expectedScores.teamA += safePoints;
+      }
+
+      if (player.matchTeam === match.teamB) {
+        expectedScores.teamB += safePoints;
+      }
+    });
+
+    if (!hasPtsInput) {
+      return {
+        hasPtsInput: false,
+        expectedScoreA: expectedScores.teamA,
+        expectedScoreB: expectedScores.teamB,
+        currentScoreA: match.scoreA,
+        currentScoreB: match.scoreB,
+        hasMismatch: false,
+      };
+    }
+
+    const expectedScoreA = String(expectedScores.teamA);
+    const expectedScoreB = String(expectedScores.teamB);
+    const currentScoreA = String(match.scoreA ?? "");
+    const currentScoreB = String(match.scoreB ?? "");
+
+    return {
+      hasPtsInput: true,
+      expectedScoreA,
+      expectedScoreB,
+      currentScoreA,
+      currentScoreB,
+      hasMismatch:
+        currentScoreA !== expectedScoreA || currentScoreB !== expectedScoreB,
+    };
+  };
+
   // ======================================================
   // 19. PLAYER STATS ENGINE
   // NOTE: Later migrate this region to src/services/stats/playerStatsService.js.
@@ -8818,6 +8878,7 @@ function Players() {
         renderTeamWithLogo={renderTeamWithLogo}
         setSelectedRosterMatchId={setSelectedRosterMatchId}
         setSelectedStatsMatchId={setSelectedStatsMatchId}
+        getMatchScoreSyncInfo={getMatchScoreSyncInfo}
       />
 
       <MatchRosterModal

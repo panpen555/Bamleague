@@ -1,3 +1,5 @@
+import React from "react";
+
 const SchedulePanel = ({
   activeAdminMenu,
   adminAccordionStyle,
@@ -13,6 +15,7 @@ const SchedulePanel = ({
   renderTeamWithLogo,
   setSelectedRosterMatchId,
   setSelectedStatsMatchId,
+  getMatchScoreSyncInfo,
 }) => (
   <>
     {activeAdminMenu === "schedule" && (
@@ -85,65 +88,95 @@ const SchedulePanel = ({
                       <tbody>
                         {schedule
                           .filter((match) => match.week === week)
-                          .map((match) => (
-                            <tr key={match.id}>
-                              <td>{match.label}</td>
-                              <td>{renderTeamWithLogo(match.teamA, 30)}</td>
-                              <td>
-                                <input
-                                  type="number"
-                                  value={match.scoreA}
-                                  onChange={(e) =>
-                                    updateMatchScore(
-                                      match.id,
-                                      "scoreA",
-                                      e.target.value,
-                                    )
-                                  }
-                                  style={{ width: "70px" }}
-                                />
-                              </td>
-                              <td>{renderTeamWithLogo(match.teamB, 30)}</td>
-                              <td>
-                                <input
-                                  type="number"
-                                  value={match.scoreB}
-                                  onChange={(e) =>
-                                    updateMatchScore(
-                                      match.id,
-                                      "scoreB",
-                                      e.target.value,
-                                    )
-                                  }
-                                  style={{ width: "70px" }}
-                                />
-                              </td>
-                              <td>{match.status}</td>
-                              <td>
-                                <button
-                                  onClick={() =>
-                                    setSelectedRosterMatchId(String(match.id))
-                                  }
-                                >
-                                  Manage Roster
-                                </button>
-                              </td>
-                              <td>
-                                <button
-                                  onClick={() =>
-                                    setSelectedStatsMatchId(String(match.id))
-                                  }
-                                >
-                                  Enter Stats
-                                </button>
-                              </td>
-                              <td>
-                                <button onClick={() => finishMatch(match.id)}>
-                                  Finish
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          .map((match) => {
+                            const scoreSyncInfo =
+                              getMatchScoreSyncInfo?.(match);
+
+                            return (
+                              <React.Fragment key={match.id}>
+                                <tr>
+                                  <td>{match.label}</td>
+                                  <td>{renderTeamWithLogo(match.teamA, 30)}</td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      value={match.scoreA}
+                                      onChange={(e) =>
+                                        updateMatchScore(
+                                          match.id,
+                                          "scoreA",
+                                          e.target.value,
+                                        )
+                                      }
+                                      style={{ width: "70px" }}
+                                    />
+                                  </td>
+                                  <td>{renderTeamWithLogo(match.teamB, 30)}</td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      value={match.scoreB}
+                                      onChange={(e) =>
+                                        updateMatchScore(
+                                          match.id,
+                                          "scoreB",
+                                          e.target.value,
+                                        )
+                                      }
+                                      style={{ width: "70px" }}
+                                    />
+                                  </td>
+                                  <td>{match.status}</td>
+                                  <td>
+                                    <button
+                                      onClick={() =>
+                                        setSelectedRosterMatchId(
+                                          String(match.id),
+                                        )
+                                      }
+                                    >
+                                      Manage Roster
+                                    </button>
+                                  </td>
+                                  <td>
+                                    <button
+                                      onClick={() =>
+                                        setSelectedStatsMatchId(
+                                          String(match.id),
+                                        )
+                                      }
+                                    >
+                                      Enter Stats
+                                    </button>
+                                  </td>
+                                  <td>
+                                    <button
+                                      onClick={() => finishMatch(match.id)}
+                                    >
+                                      Finish
+                                    </button>
+                                  </td>
+                                </tr>
+                                {scoreSyncInfo?.hasMismatch && (
+                                  <tr key={`${match.id}-score-warning`}>
+                                    <td
+                                      colSpan="9"
+                                      style={{
+                                        color: "#92400e",
+                                        background: "#fffbeb",
+                                        fontSize: "13px",
+                                      }}
+                                    >
+                                      ⚠ คะแนนทีมไม่ตรงกับ Enter Stats —
+                                      Expected:{" "}
+                                      {scoreSyncInfo.expectedScoreA} -{" "}
+                                      {scoreSyncInfo.expectedScoreB}
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
