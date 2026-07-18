@@ -14,6 +14,7 @@ import SchedulePanel from "../components/schedule/SchedulePanel";
 import MatchRosterModal from "../components/matches/MatchRosterModal";
 import MatchStatsModal from "../components/matches/MatchStatsModal";
 import StandingsPanel from "../components/standings/StandingsPanel";
+import MvpRankingPanel from "../components/stats/MvpRankingPanel";
 
 import {
   uploadPlayerPhoto,
@@ -217,6 +218,7 @@ function Players() {
 
   const [selectedStatsMatchId, setSelectedStatsMatchId] = useState("");
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState("");
+  const [profileCardView, setProfileCardView] = useState("current");
 
   // ======================================================
   // 05. STATE: TEAM LOGOS / LOCK GROUPS
@@ -422,6 +424,12 @@ function Players() {
   useEffect(() => {
     localStorage.setItem("bamPublishMeta", JSON.stringify(publishMeta));
   }, [publishMeta]);
+
+  useEffect(() => {
+    if (selectedProfilePlayerId) {
+      setProfileCardView("current");
+    }
+  }, [selectedProfilePlayerId]);
 
   useEffect(() => {
     const hasLegacyLocks =
@@ -3269,6 +3277,11 @@ function Players() {
     .bam-avatar-frame::after { content: ""; position: absolute; inset: -30%; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.5) 48%, transparent 62%); animation: bamFoilSweep 3s ease-in-out infinite; pointer-events: none; }
     .bam-grade-badge { animation: bamGradePulse 1.9s ease-in-out infinite; }
     .bam-stat-tile { animation: bamStatRise .48s ease-out both; }
+    @keyframes bamProfileFlipIn {
+      from { opacity: 0; transform: perspective(900px) rotateY(-8deg) translateY(8px); }
+      to { opacity: 1; transform: perspective(900px) rotateY(0) translateY(0); }
+    }
+    .bam-profile-view-panel { animation: bamProfileFlipIn .32s ease-out both; transform-origin: center; min-height: 340px; }
     .bam-award-badge { animation: bamBadgePop .5s cubic-bezier(.2,1.2,.2,1) both; transition: transform .18s ease, box-shadow .18s ease; }
     .bam-award-badge:hover { transform: translateY(-5px) scale(1.03); box-shadow: 7px 7px 0 #111 !important; }
     .bam-skill-row { display: grid; grid-template-columns: 96px 1fr 32px; gap: 8px; align-items: center; margin: 8px 0; font-size: 12px; font-weight: 900; }
@@ -3617,7 +3630,7 @@ function Players() {
                   boxShadow: "5px 5px 0 #6b7280",
                 }}
               >
-                "{title}"
+                {profileCardView === "career" ? `"${title}"` : '"CURRENT SEASON"'}
               </div>
 
               {renderMangaSkillRadar(profile)}
@@ -3707,10 +3720,10 @@ function Players() {
                         color: "#555",
                       }}
                     >
-                      LEGACY
+                      {profileCardView === "career" ? "LEGACY" : "CURRENT"}
                     </div>
                     <div style={{ fontSize: "36px", fontWeight: "1000" }}>
-                      {legacyScore}
+                      {profileCardView === "career" ? legacyScore : "SEASON"}
                     </div>
                   </div>
                 </div>
@@ -3797,165 +3810,257 @@ function Players() {
 
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-                  gap: "10px",
+                  display: "flex",
+                  gap: "8px",
+                  flexWrap: "wrap",
                   marginTop: "18px",
                 }}
               >
                 {[
-                  ["GP", profile.games || careerStats.games || 0],
-                  ["PTS", profile.pts || careerStats.pts || 0],
-                  ["PPG", profile.ppg || career?.ppg || "0.0"],
-                  ["REB", profile.reb || careerStats.reb || 0],
-                  ["AST", profile.ast || careerStats.ast || 0],
-                  ["MVP", Number(profile.mvpScore || 0).toFixed(1)],
-                ].map(([label, value], index) => (
-                  <div
-                    key={`manga-stat-${label}`}
-                    className="bam-stat-tile"
-                    style={{
-                      animationDelay: `${0.08 + index * 0.06}s`,
-                      border: "3px solid #111",
-                      borderRadius: "14px",
-                      background: "white",
-                      padding: "10px",
-                      textAlign: "center",
-                      boxShadow: "4px 4px 0 #111",
-                    }}
-                  >
-                    <div
+                  ["current", "Current Season"],
+                  ["career", "Career"],
+                ].map(([viewKey, label]) => {
+                  const isActive = profileCardView === viewKey;
+                  return (
+                    <button
+                      key={`profile-card-view-${viewKey}`}
+                      onClick={() => setProfileCardView(viewKey)}
                       style={{
-                        fontSize: "12px",
-                        color: "#555",
-                        fontWeight: "900",
+                        border: "3px solid #111",
+                        borderRadius: "999px",
+                        padding: "8px 14px",
+                        fontWeight: "1000",
+                        cursor: "pointer",
+                        background: isActive ? "#111" : "white",
+                        color: isActive ? "white" : "#111",
+                        boxShadow: isActive
+                          ? "4px 4px 0 #facc15"
+                          : "4px 4px 0 #111",
                       }}
                     >
                       {label}
-                    </div>
-                    <div style={{ fontSize: "24px", fontWeight: "1000" }}>
-                      {value}
-                    </div>
-                  </div>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
 
               <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                  gap: "10px",
-                  marginTop: "18px",
-                }}
+                key={`profile-card-${profileCardView}`}
+                className="bam-profile-view-panel"
               >
-                {badgeList.map((badge, index) => (
-                  <div
-                    key={`manga-badge-${badge.label}`}
-                    className="bam-award-badge"
-                    style={{
-                      animationDelay: `${0.16 + index * 0.08}s`,
-                      border: "3px solid #111",
-                      borderRadius: "14px",
-                      background: "white",
-                      padding: "10px",
-                      boxShadow: "4px 4px 0 #111",
-                    }}
-                  >
-                    <div style={{ fontWeight: "1000" }}>
-                      {badge.icon} {badge.label}
-                    </div>
-                    <div style={{ fontSize: "22px", fontWeight: "1000" }}>
-                      x{badge.count}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "14px",
-                  marginTop: "18px",
-                }}
-              >
-                <div
-                  style={{
-                    border: "3px solid #111",
-                    borderRadius: "18px",
-                    background: "white",
-                    padding: "14px",
-                    boxShadow: "5px 5px 0 #111",
-                  }}
-                >
-                  <h3 style={{ marginTop: 0 }}>📜 Season Timeline</h3>
-                  {timelineItems.length === 0 ? (
-                    <p style={{ color: "#666" }}>ยังไม่มีประวัติข้ามซีซัน</p>
-                  ) : (
-                    timelineItems.map((item) => (
-                      <div
-                        key={`manga-timeline-${item.seasonId}-${item.award}`}
-                        style={{
-                          borderBottom: "1px solid #ddd",
-                          padding: "8px 0",
-                        }}
-                      >
-                        <strong>{item.seasonTitle}</strong>
-                        <div style={{ color: "#555" }}>
-                          {awardLabels[item.award] || item.award}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    border: "3px solid #111",
-                    borderRadius: "18px",
-                    background: "white",
-                    padding: "14px",
-                    boxShadow: "5px 5px 0 #111",
-                    overflowX: "auto",
-                  }}
-                >
-                  <h3 style={{ marginTop: 0 }}>📊 Match Log</h3>
-                  {matchLogs.length === 0 ? (
-                    <p style={{ color: "#666" }}>ยังไม่มี Match Log</p>
-                  ) : (
-                    <table
+                {profileCardView === "current" ? (
+                  <>
+                    <div
                       style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                        fontSize: "13px",
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(110px, 1fr))",
+                        gap: "10px",
+                        marginTop: "18px",
                       }}
                     >
-                      <thead>
-                        <tr>
-                          <th>W</th>
-                          <th>OPP</th>
-                          <th>PTS</th>
-                          <th>REB</th>
-                          <th>AST</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matchLogs.slice(-8).map((log) => (
-                          <tr
-                            key={`manga-log-${profile.playerId}-${log.matchId}`}
-                            style={{ borderTop: "1px solid #ddd" }}
+                      {[
+                        ["GP", profile.games ?? 0],
+                        ["PTS", profile.pts ?? 0],
+                        ["PPG", profile.ppg ?? "0.0"],
+                        ["REB", profile.reb ?? 0],
+                        ["AST", profile.ast ?? 0],
+                        ["MVP", Number(profile.mvpScore ?? 0).toFixed(1)],
+                      ].map(([label, value], index) => (
+                        <div
+                          key={`manga-current-stat-${label}`}
+                          className="bam-stat-tile"
+                          style={{
+                            animationDelay: `${0.08 + index * 0.06}s`,
+                            border: "3px solid #111",
+                            borderRadius: "14px",
+                            background: "white",
+                            padding: "10px",
+                            textAlign: "center",
+                            boxShadow: "4px 4px 0 #111",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "#555",
+                              fontWeight: "900",
+                            }}
                           >
-                            <td>{log.week}</td>
-                            <td>{log.opponent}</td>
-                            <td>{log.appearance ? log.pts : "-"}</td>
-                            <td>{log.appearance ? log.reb : "-"}</td>
-                            <td>{log.appearance ? log.ast : "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+                            {label}
+                          </div>
+                          <div style={{ fontSize: "24px", fontWeight: "1000" }}>
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      style={{
+                        border: "3px solid #111",
+                        borderRadius: "18px",
+                        background: "white",
+                        padding: "14px",
+                        boxShadow: "5px 5px 0 #111",
+                        overflowX: "auto",
+                        marginTop: "18px",
+                      }}
+                    >
+                      <h3 style={{ marginTop: 0 }}>?? Current Match Log</h3>
+                      {matchLogs.length === 0 ? (
+                        <p style={{ color: "#666" }}>
+                          ???????? Match Log ????????????
+                        </p>
+                      ) : (
+                        <table
+                          style={{
+                            width: "100%",
+                            borderCollapse: "collapse",
+                            fontSize: "13px",
+                          }}
+                        >
+                          <thead>
+                            <tr>
+                              <th>W</th>
+                              <th>OPP</th>
+                              <th>PTS</th>
+                              <th>REB</th>
+                              <th>AST</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matchLogs.slice(-8).map((log) => (
+                              <tr
+                                key={`manga-log-${profile.playerId}-${log.matchId}`}
+                                style={{ borderTop: "1px solid #ddd" }}
+                              >
+                                <td>{log.week}</td>
+                                <td>{log.opponent}</td>
+                                <td>{log.appearance ? log.pts : "-"}</td>
+                                <td>{log.appearance ? log.reb : "-"}</td>
+                                <td>{log.appearance ? log.ast : "-"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(110px, 1fr))",
+                        gap: "10px",
+                        marginTop: "18px",
+                      }}
+                    >
+                      {[
+                        ["Seasons", career?.seasonCount ?? 0],
+                        ["Games", careerStats.games ?? 0],
+                        ["PTS", careerStats.pts ?? 0],
+                        ["PPG", career?.ppg ?? "0.0"],
+                        ["REB", careerStats.reb ?? 0],
+                        ["AST", careerStats.ast ?? 0],
+                      ].map(([label, value], index) => (
+                        <div
+                          key={`manga-career-stat-${label}`}
+                          className="bam-stat-tile"
+                          style={{
+                            animationDelay: `${0.08 + index * 0.06}s`,
+                            border: "3px solid #111",
+                            borderRadius: "14px",
+                            background: "white",
+                            padding: "10px",
+                            textAlign: "center",
+                            boxShadow: "4px 4px 0 #111",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "#555",
+                              fontWeight: "900",
+                            }}
+                          >
+                            {label}
+                          </div>
+                          <div style={{ fontSize: "24px", fontWeight: "1000" }}>
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(150px, 1fr))",
+                        gap: "10px",
+                        marginTop: "18px",
+                      }}
+                    >
+                      {badgeList.map((badge, index) => (
+                        <div
+                          key={`manga-badge-${badge.label}`}
+                          className="bam-award-badge"
+                          style={{
+                            animationDelay: `${0.16 + index * 0.08}s`,
+                            border: "3px solid #111",
+                            borderRadius: "14px",
+                            background: "white",
+                            padding: "10px",
+                            boxShadow: "4px 4px 0 #111",
+                          }}
+                        >
+                          <div style={{ fontWeight: "1000" }}>
+                            {badge.icon} {badge.label}
+                          </div>
+                          <div style={{ fontSize: "22px", fontWeight: "1000" }}>
+                            x{badge.count}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      style={{
+                        border: "3px solid #111",
+                        borderRadius: "18px",
+                        background: "white",
+                        padding: "14px",
+                        boxShadow: "5px 5px 0 #111",
+                        marginTop: "18px",
+                      }}
+                    >
+                      <h3 style={{ marginTop: 0 }}>?? Season Timeline</h3>
+                      {timelineItems.length === 0 ? (
+                        <p style={{ color: "#666" }}>
+                          ????????????????????????
+                        </p>
+                      ) : (
+                        timelineItems.map((item) => (
+                          <div
+                            key={`manga-timeline-${item.seasonId}-${item.award}`}
+                            style={{
+                              borderBottom: "1px solid #ddd",
+                              padding: "8px 0",
+                            }}
+                          >
+                            <strong>{item.seasonTitle}</strong>
+                            <div style={{ color: "#555" }}>
+                              {awardLabels[item.award] || item.award}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -8941,85 +9046,18 @@ function Players() {
         </div>
       )}
 
-      {getPlayerStatRows().length > 0 && (
-        <details
-          open
-          style={{
-            ...adminAccordionStyle,
-            display: activeAdminMenu === "stats" ? "block" : "none",
-          }}
-        >
-          <summary style={adminAccordionSummaryStyle}>
-            <span>📈 MVP Ranking</span>
-            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
-          </summary>
-          <div style={{ marginTop: "32px" }}>
-            <h2>MVP Ranking</h2>
-            <p>
-              Formula: PTS + REB×1.2 + AST×1.5 + STL×2 + BLK×2 + Appearance
-              Bonus
-            </p>
-
-            <table border="1" cellPadding="8" cellSpacing="0">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Photo</th>
-                  <th>Player</th>
-                  <th>Team</th>
-                  <th>MVP Score</th>
-                  <th>Games</th>
-                  <th>Appear</th>
-                  <th>PTS</th>
-                  <th>REB</th>
-                  <th>AST</th>
-                  <th>STL</th>
-                  <th>BLK</th>
-                  <th>PPG</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {getMVPRanking()
-                  .slice(0, 10)
-                  .map((stat, index) => (
-                    <tr key={`mvp-${stat.playerId}`}>
-                      <td>{index + 1}</td>
-                      <td>
-                        {renderPlayerAvatar(
-                          getPlayerPhotoUrl(stat.playerId),
-                          38,
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          onClick={() => {
-                            setSelectedProfilePlayerId(String(stat.playerId));
-                            setActiveAdminMenu("stats");
-                          }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          {stat.playerName}
-                        </button>
-                      </td>
-                      <td>{stat.teamName || "-"}</td>
-                      <td>{Number(stat.mvpScore || 0).toFixed(1)}</td>
-                      <td>{stat.games}</td>
-                      <td>{stat.appearances || 0}</td>
-                      <td>{stat.pts || 0}</td>
-                      <td>{stat.reb || 0}</td>
-                      <td>{stat.ast || 0}</td>
-                      <td>{stat.stl || 0}</td>
-                      <td>{stat.blk || 0}</td>
-                      <td>{stat.ppg}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
-
+      <MvpRankingPanel
+        activeAdminMenu={activeAdminMenu}
+        adminAccordionStyle={adminAccordionStyle}
+        adminAccordionSummaryStyle={adminAccordionSummaryStyle}
+        adminAccordionHintStyle={adminAccordionHintStyle}
+        hasPlayerStats={getPlayerStatRows().length > 0}
+        mvpRanking={getMVPRanking().slice(0, 10)}
+        renderPlayerAvatar={renderPlayerAvatar}
+        getPlayerPhotoUrl={getPlayerPhotoUrl}
+        setSelectedProfilePlayerId={setSelectedProfilePlayerId}
+        setActiveAdminMenu={setActiveAdminMenu}
+      />
       {activeAdminMenu === "seasonAwards" && (
         <div
           style={{
