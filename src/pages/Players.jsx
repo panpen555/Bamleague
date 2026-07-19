@@ -15,6 +15,7 @@ import MatchRosterModal from "../components/matches/MatchRosterModal";
 import MatchStatsModal from "../components/matches/MatchStatsModal";
 import StandingsPanel from "../components/standings/StandingsPanel";
 import MvpRankingPanel from "../components/stats/MvpRankingPanel";
+import PlayerStatLeadersPanel from "../components/stats/PlayerStatLeadersPanel";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -5749,6 +5750,38 @@ function Players() {
     (match) => String(match.id) === String(selectedStatsMatchId),
   );
 
+  const statLeaderBoards = [
+    {
+      title: "Top Scorer",
+      field: "pts",
+      label: "PTS",
+      leaders: getStatLeaders("pts"),
+    },
+    {
+      title: "Top Rebound",
+      field: "reb",
+      label: "REB",
+      leaders: getStatLeaders("reb"),
+    },
+    {
+      title: "Top Assist",
+      field: "ast",
+      label: "AST",
+      leaders: getStatLeaders("ast"),
+    },
+    {
+      title: "Top Steal",
+      field: "stl",
+      label: "STL",
+      leaders: getStatLeaders("stl"),
+    },
+    {
+      title: "Top Block",
+      field: "blk",
+      label: "BLK",
+      leaders: getStatLeaders("blk"),
+    },
+  ];
   const getTeamDashboardData = () => {
     const playerRows = getPlayerStatRows();
 
@@ -10358,86 +10391,17 @@ function Players() {
         </details>
       )}
 
-      {getPlayerStatRows().length > 0 && (
-        <details
-          open
-          style={{
-            ...adminAccordionStyle,
-            display: activeAdminMenu === "stats" ? "block" : "none",
-          }}
-        >
-          <summary style={adminAccordionSummaryStyle}>
-            <span>📊 Player Stat Leaders</span>
-            <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
-          </summary>
-          <div style={{ marginTop: "32px" }}>
-            <h2>Player Stat Leaders</h2>
-            <button onClick={clearPlayerStats} style={{ marginBottom: "12px" }}>
-              Clear Player Stats
-            </button>
-
-            {[
-              { title: "Top Scorer", field: "pts", label: "PTS" },
-              { title: "Top Rebound", field: "reb", label: "REB" },
-              { title: "Top Assist", field: "ast", label: "AST" },
-              { title: "Top Steal", field: "stl", label: "STL" },
-              { title: "Top Block", field: "blk", label: "BLK" },
-            ].map((board) => {
-              const leaders = getStatLeaders(board.field);
-
-              return (
-                <div key={board.field} style={{ marginBottom: "24px" }}>
-                  <h3>{board.title}</h3>
-
-                  {leaders.length === 0 ? (
-                    <p>ยังไม่มีข้อมูล {board.label}</p>
-                  ) : (
-                    <table border="1" cellPadding="8" cellSpacing="0">
-                      <thead>
-                        <tr>
-                          <th>Rank</th>
-                          <th>Player</th>
-                          <th>Team</th>
-                          <th>Games</th>
-                          <th>Appear</th>
-                          <th>{board.label}</th>
-                          {board.field === "pts" && <th>PPG</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {leaders.map((stat, index) => (
-                          <tr key={`${board.field}-${stat.playerId}`}>
-                            <td>{index + 1}</td>
-                            <td>
-                              <button
-                                onClick={() => {
-                                  setSelectedProfilePlayerId(
-                                    String(stat.playerId),
-                                  );
-                                  setActiveAdminMenu("stats");
-                                }}
-                                style={{ cursor: "pointer" }}
-                              >
-                                {stat.playerName}
-                              </button>
-                            </td>
-                            <td>{stat.teamName || "-"}</td>
-                            <td>{stat.games}</td>
-                            <td>{stat.appearances || 0}</td>
-                            <td>{stat[board.field] || 0}</td>
-                            {board.field === "pts" && <td>{stat.ppg}</td>}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </details>
-      )}
-
+      <PlayerStatLeadersPanel
+        activeAdminMenu={activeAdminMenu}
+        adminAccordionStyle={adminAccordionStyle}
+        adminAccordionSummaryStyle={adminAccordionSummaryStyle}
+        adminAccordionHintStyle={adminAccordionHintStyle}
+        hasPlayerStats={getPlayerStatRows().length > 0}
+        statLeaderBoards={statLeaderBoards}
+        clearPlayerStats={clearPlayerStats}
+        setSelectedProfilePlayerId={setSelectedProfilePlayerId}
+        setActiveAdminMenu={setActiveAdminMenu}
+      />
       <StandingsPanel
         activeAdminMenu={activeAdminMenu}
         adminAccordionStyle={adminAccordionStyle}
