@@ -6702,6 +6702,16 @@ function Players() {
       setSelectedProfilePlayerId(target.currentPlayerId);
     };
 
+    const openPublicRosterPlayerProfile = (player) => {
+      openPublicPlayerProfile({
+        playerId: player.id,
+        bamPlayerId: player.bamPlayerId,
+        playerName: player.name,
+        name: player.name,
+        teamName: player.teamName,
+      });
+    };
+
     const getDashboardPlayerStats = (playerId) => {
       const stat = getDashboardPlayerStatRow(playerId);
 
@@ -7059,89 +7069,64 @@ function Players() {
       return (
         <button
           key={`public-team-card-${team.name}`}
+          type="button"
+          aria-pressed={isSelected}
           onClick={() =>
             setSelectedPublicTeam((current) =>
               current === team.name ? "" : team.name,
             )
           }
-          style={{
-            textAlign: "left",
-            border: isSelected ? "2px solid #111" : "1px solid #ddd",
-            borderRadius: "18px",
-            padding: "16px",
-            background: isSelected ? "#f5f5f5" : "white",
-            cursor: "pointer",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-          }}
+          className={`bam-public-team-card${
+            isSelected ? " bam-public-team-card-selected" : ""
+          }`}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {isSelected ? (
+            <span className="bam-public-team-selected-badge">Selected</span>
+          ) : null}
+          <div className="bam-public-team-card-header">
             {dashboardTeamLogos[team.name] ? (
               <img
                 src={dashboardTeamLogos[team.name]}
                 alt={team.name}
                 width={56}
                 height={56}
-                style={{
-                  objectFit: "contain",
-                  borderRadius: "12px",
-                  border: "1px solid #ddd",
-                }}
+                className="bam-public-team-logo"
               />
             ) : (
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: "12px",
-                  background: "#eee",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "26px",
-                  border: "1px solid #ddd",
-                }}
-              >
-                🛡️
-              </div>
+              <div className="bam-public-team-logo-placeholder">🛡️</div>
             )}
-            <div>
-              <h3 style={{ margin: 0 }}>{team.name}</h3>
-              <div style={{ color: "#666", marginTop: "4px" }}>
+            <div className="bam-public-team-card-copy">
+              <h3 className="bam-public-team-name">{team.name}</h3>
+              <div className="bam-public-team-subtitle">
                 {team.roster.length} Players / Rating {team.totalScore || 0}
               </div>
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4,1fr)",
-              gap: "8px",
-              marginTop: "14px",
-              textAlign: "center",
-            }}
-          >
-            <div>
-              <strong>
+          <div className="bam-public-team-stat-grid">
+            <div className="bam-public-team-stat">
+              <strong className="bam-public-team-stat-value">
                 {standing.win || 0}-{standing.loss || 0}
               </strong>
-              <br />
-              <span style={{ color: "#777" }}>W-L</span>
+              <span className="bam-public-team-stat-label">W-L</span>
             </div>
-            <div>
-              <strong>{standing.pf || 0}</strong>
-              <br />
-              <span style={{ color: "#777" }}>PF</span>
+            <div className="bam-public-team-stat">
+              <strong className="bam-public-team-stat-value">
+                {standing.pf || 0}
+              </strong>
+              <span className="bam-public-team-stat-label">PF</span>
             </div>
-            <div>
-              <strong>{standing.pa || 0}</strong>
-              <br />
-              <span style={{ color: "#777" }}>PA</span>
+            <div className="bam-public-team-stat">
+              <strong className="bam-public-team-stat-value">
+                {standing.pa || 0}
+              </strong>
+              <span className="bam-public-team-stat-label">PA</span>
             </div>
-            <div>
-              <strong>{diff > 0 ? `+${diff}` : diff}</strong>
-              <br />
-              <span style={{ color: "#777" }}>Diff</span>
+            <div className="bam-public-team-stat">
+              <strong className="bam-public-team-stat-value">
+                {diff > 0 ? `+${diff}` : diff}
+              </strong>
+              <span className="bam-public-team-stat-label">Diff</span>
             </div>
           </div>
         </button>
@@ -7335,186 +7320,132 @@ function Players() {
         ) : null}
 
         {publicDashboardTab === "teams" ? (
-          <div style={{ ...cardStyle, marginBottom: "22px" }}>
-            <h2 style={sectionTitleStyle}>🏀 Team View</h2>
+          <div className="bam-public-panel bam-public-teams-panel">
+            <h2 className="bam-public-panel-title">🏀 Team View</h2>
             {dashboardTeamRows.length === 0 ? (
-              <p>ยังไม่มีข้อมูลทีม</p>
+              <div className="bam-public-empty-state bam-public-team-empty">
+                <div className="bam-public-empty-icon">🏀</div>
+                <p>ยังไม่มีข้อมูลทีม</p>
+              </div>
             ) : (
               <>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))",
-                    gap: "14px",
-                    marginBottom: "18px",
-                  }}
-                >
+                <div className="bam-public-team-grid">
                   {dashboardTeamRows.map(renderPublicTeamCard)}
                 </div>
 
                 {selectedPublicTeamData ? (
-                  <div
-                    style={{
-                      border: "1px solid #eee",
-                      borderRadius: "18px",
-                      padding: "18px",
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "16px",
-                        flexWrap: "wrap",
-                        marginBottom: "16px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                        }}
-                      >
+                  <div className="bam-public-selected-team">
+                    <div className="bam-public-selected-team-header">
+                      <div className="bam-public-selected-team-identity">
                         {renderPublicTeamWithLogo(
                           selectedPublicTeamData.name,
                           48,
                         )}
                       </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "14px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <strong>
+                      <div className="bam-public-selected-team-stats">
+                        <strong className="bam-public-selected-team-chip">
                           Record: {selectedPublicTeamData.standing.win || 0}-
                           {selectedPublicTeamData.standing.loss || 0}
                         </strong>
-                        <strong>
+                        <strong className="bam-public-selected-team-chip">
                           PF: {selectedPublicTeamData.standing.pf || 0}
                         </strong>
-                        <strong>
+                        <strong className="bam-public-selected-team-chip">
                           PA: {selectedPublicTeamData.standing.pa || 0}
                         </strong>
-                        <strong>
+                        <strong className="bam-public-selected-team-chip">
                           Diff: {selectedPublicTeamData.standing.diff || 0}
                         </strong>
-                        <strong>
+                        <strong className="bam-public-selected-team-chip">
                           Total Rating: {selectedPublicTeamData.totalScore || 0}
                         </strong>
                       </div>
                     </div>
 
-                    <div style={{ marginBottom: "12px", color: "#555" }}>
-                      Position Summary:{" "}
-                      {validPositions
-                        .map(
-                          (pos) =>
-                            `${pos} ${
-                              selectedPublicTeamData.positionSummary?.[pos] || 0
-                            }`,
-                        )
-                        .join(" / ")}
+                    <div className="bam-public-position-summary">
+                      <span className="bam-public-position-summary-label">
+                        Position Summary
+                      </span>
+                      <div className="bam-public-position-pills">
+                        {validPositions.map((pos) => (
+                          <span
+                            key={`public-position-${selectedPublicTeamData.name}-${pos}`}
+                            className="bam-public-position-pill"
+                          >
+                            {pos} {selectedPublicTeamData.positionSummary?.[pos] || 0}
+                          </span>
+                        ))}
+                      </div>
                     </div>
 
-                    <div style={{ overflowX: "auto" }}>
-                      <table
-                        style={{
-                          width: "100%",
-                          borderCollapse: "collapse",
-                          background: "white",
-                        }}
-                      >
-                        <thead>
-                          <tr style={{ borderBottom: "1px solid #eee" }}>
-                            <th style={{ textAlign: "left", padding: "8px" }}>
-                              Player
-                            </th>
-                            <th style={{ padding: "8px" }}>POS</th>
-                            <th style={{ padding: "8px" }}>MVP Score</th>
-                            <th style={{ padding: "8px" }}>Scoring</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(selectedPublicTeamData.roster || []).map(
-                            (player) => {
-                              const dashboardStats = getDashboardPlayerStats(
-                                player.id,
-                              );
+                    <div className="bam-public-roster-wrap">
+                      {(selectedPublicTeamData.roster || []).length === 0 ? (
+                        <div className="bam-public-empty-state bam-public-roster-empty">
+                          <div className="bam-public-empty-icon">👤</div>
+                          <p>ยังไม่มีผู้เล่นในทีมนี้</p>
+                        </div>
+                      ) : (
+                        <table className="bam-public-roster-table">
+                          <thead>
+                            <tr>
+                              <th>Player</th>
+                              <th>POS</th>
+                              <th>MVP Score</th>
+                              <th>Scoring</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(selectedPublicTeamData.roster || []).map(
+                              (player) => {
+                                const dashboardStats = getDashboardPlayerStats(
+                                  player.id,
+                                );
 
-                              return (
-                                <tr
-                                  key={`public-team-roster-${selectedPublicTeamData.name}-${player.id}`}
-                                  onClick={() => {
-                                    setPublicProfileSeasonContext(null);
-                                    setProfileCardView("current");
-                                    setSelectedProfilePlayerId(
-                                      String(player.id),
-                                    );
-                                  }}
-                                  style={{
-                                    borderBottom: "1px solid #f1f1f1",
-                                    cursor: "pointer",
-                                  }}
-                                  title="กดเพื่อดูข้อมูลผู้เล่น"
-                                >
-                                  <td style={{ padding: "8px" }}>
-                                    <span
-                                      style={{
-                                        display: "inline-flex",
-                                        alignItems: "center",
-                                        gap: "8px",
-                                      }}
-                                    >
-                                      {renderPlayerAvatar(
-                                        player.photoUrl ||
-                                          getPlayerPhotoUrl(player.id),
-                                        34,
-                                      )}
-                                      <strong
-                                        style={{ textDecoration: "underline" }}
+                                return (
+                                  <tr
+                                    key={`public-team-roster-${selectedPublicTeamData.name}-${player.id}`}
+                                    className="bam-public-roster-row"
+                                  >
+                                    <td>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          openPublicRosterPlayerProfile(player)
+                                        }
+                                        className="bam-public-roster-player-button"
+                                        title="กดเพื่อดูข้อมูลผู้เล่น"
                                       >
-                                        {player.name}
+                                        {renderPlayerAvatar(
+                                          player.photoUrl ||
+                                            getPlayerPhotoUrl(player.id),
+                                          34,
+                                        )}
+                                        <strong className="bam-public-roster-player-name">
+                                          {player.name}
+                                        </strong>
+                                      </button>
+                                    </td>
+                                    <td>
+                                      {player.pos1 || "-"}
+                                      {player.pos2 ? ` / ${player.pos2}` : ""}
+                                    </td>
+                                    <td>
+                                      <strong className="bam-public-roster-value">
+                                        {dashboardStats.mvpScore}
                                       </strong>
-                                    </span>
-                                  </td>
-                                  <td
-                                    style={{
-                                      textAlign: "center",
-                                      padding: "8px",
-                                    }}
-                                  >
-                                    {player.pos1 || "-"}
-                                    {player.pos2 ? ` / ${player.pos2}` : ""}
-                                  </td>
-                                  <td
-                                    style={{
-                                      textAlign: "center",
-                                      padding: "8px",
-                                      fontWeight: "bold",
-                                    }}
-                                  >
-                                    {dashboardStats.mvpScore}
-                                  </td>
-                                  <td
-                                    style={{
-                                      textAlign: "center",
-                                      padding: "8px",
-                                      fontWeight: "bold",
-                                    }}
-                                  >
-                                    {dashboardStats.scoring}
-                                  </td>
-                                </tr>
-                              );
-                            },
-                          )}
-                        </tbody>
-                      </table>
+                                    </td>
+                                    <td>
+                                      <strong className="bam-public-roster-value">
+                                        {dashboardStats.scoring}
+                                      </strong>
+                                    </td>
+                                  </tr>
+                                );
+                              },
+                            )}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   </div>
                 ) : null}
