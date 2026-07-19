@@ -466,6 +466,21 @@ function Players() {
   }, [selectedProfilePlayerId, publicProfileSeasonContext]);
 
   useEffect(() => {
+    if (!selectedPublicMatch) return undefined;
+
+    const handlePublicMatchEscape = (event) => {
+      if (event.key === "Escape") {
+        setSelectedPublicMatch(null);
+      }
+    };
+
+    window.addEventListener("keydown", handlePublicMatchEscape);
+    return () => {
+      window.removeEventListener("keydown", handlePublicMatchEscape);
+    };
+  }, [selectedPublicMatch]);
+
+  useEffect(() => {
     const hasLegacyLocks =
       players.some((player) => player.lockedTeam) ||
       teams.some((team) =>
@@ -7752,191 +7767,160 @@ function Players() {
           ? (() => {
               const matchStatRows =
                 getDashboardMatchStatRows(selectedPublicMatch);
+              const isFinished = selectedPublicMatch.status === "Finished";
+              const hasScore =
+                selectedPublicMatch.scoreA !== "" &&
+                selectedPublicMatch.scoreB !== "";
+              const matchScoreText = hasScore
+                ? `${selectedPublicMatch.scoreA} - ${selectedPublicMatch.scoreB}`
+                : "VS";
+              const stageClassName =
+                selectedPublicMatch.label === "Final"
+                  ? " bam-public-match-stage-final"
+                  : selectedPublicMatch.label === "Semi Final"
+                    ? " bam-public-match-stage-semi-final"
+                    : selectedPublicMatch.label === "3rd Place"
+                      ? " bam-public-match-stage-third-place"
+                      : "";
+              const teamAMatchRows = matchStatRows.filter(
+                (row) => row.teamName === selectedPublicMatch.teamA,
+              );
+              const teamBMatchRows = matchStatRows.filter(
+                (row) => row.teamName === selectedPublicMatch.teamB,
+              );
+              const renderPublicMatchStatTable = (teamName, rows) => (
+                <div className="bam-public-match-detail-team-panel">
+                  <div className="bam-public-match-detail-team-heading">
+                    {renderPublicTeamWithLogo(teamName, 30)}
+                    <span>{rows.length} Player{rows.length === 1 ? "" : "s"}</span>
+                  </div>
+                  {rows.length === 0 ? (
+                    <div className="bam-public-empty-state bam-public-match-detail-empty">
+                      <div className="bam-public-empty-icon">🏀</div>
+                      <p>ยังไม่มีสถิติผู้เล่นของทีมนี้</p>
+                    </div>
+                  ) : (
+                    <div className="bam-public-match-detail-table-wrap">
+                      <table className="bam-public-match-detail-table">
+                        <thead>
+                          <tr>
+                            <th>Player</th>
+                            <th>PTS</th>
+                            <th>REB</th>
+                            <th>AST</th>
+                            <th>STL</th>
+                            <th>BLK</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr
+                              key={`public-match-stat-${selectedPublicMatch.id}-${row.playerId}-${row.teamName}`}
+                            >
+                              <td>
+                                <span className="bam-public-match-detail-player">
+                                  {renderPlayerAvatar(
+                                    getPlayerPhotoUrl(row.playerId),
+                                    32,
+                                  )}
+                                  <strong>{row.playerName}</strong>
+                                </span>
+                              </td>
+                              <td>{row.pts}</td>
+                              <td>{row.reb}</td>
+                              <td>{row.ast}</td>
+                              <td>{row.stl}</td>
+                              <td>{row.blk}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
 
               return (
                 <div
+                  className="bam-public-match-detail-backdrop"
                   onClick={() => setSelectedPublicMatch(null)}
-                  style={{
-                    position: "fixed",
-                    inset: 0,
-                    background: "rgba(0,0,0,0.55)",
-                    zIndex: 9999,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "20px",
-                  }}
                 >
                   <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="bam-public-match-detail-title"
+                    className="bam-public-match-detail-modal"
                     onClick={(event) => event.stopPropagation()}
-                    style={{
-                      background: "white",
-                      borderRadius: "22px",
-                      padding: "22px",
-                      width: "min(900px, 96vw)",
-                      maxHeight: "86vh",
-                      overflow: "auto",
-                      boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
-                    }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: "16px",
-                        marginBottom: "16px",
-                      }}
-                    >
+                    <div className="bam-public-match-detail-header">
                       <div>
-                        <h2 style={{ margin: 0 }}>📊 Match Stats</h2>
-                        <p style={{ margin: "6px 0 0", color: "#555" }}>
-                          Week {selectedPublicMatch.week} ·{" "}
-                          {selectedPublicMatch.label || "League"}
-                        </p>
-                        <h3 style={{ margin: "10px 0 0" }}>
-                          {selectedPublicMatch.teamA}{" "}
-                          {selectedPublicMatch.scoreA !== ""
-                            ? selectedPublicMatch.scoreA
-                            : "-"}
-                          {" - "}
-                          {selectedPublicMatch.scoreB !== ""
-                            ? selectedPublicMatch.scoreB
-                            : "-"}{" "}
-                          {selectedPublicMatch.teamB}
-                        </h3>
+                        <h2
+                          id="bam-public-match-detail-title"
+                          className="bam-public-match-detail-title"
+                        >
+                          📊 Match Stats
+                        </h2>
+                        <div className="bam-public-match-detail-badges">
+                          <span className="bam-public-match-detail-badge">
+                            Week {selectedPublicMatch.week}
+                          </span>
+                          <span
+                            className={`bam-public-match-stage${stageClassName}`}
+                          >
+                            {selectedPublicMatch.label || "League"}
+                          </span>
+                          <span
+                            className={`bam-public-match-status ${
+                              isFinished
+                                ? "bam-public-match-status-finished"
+                                : "bam-public-match-status-pending"
+                            }`}
+                          >
+                            {isFinished ? "Finished" : "Pending"}
+                          </span>
+                        </div>
                       </div>
 
                       <button
                         type="button"
+                        aria-label="Close match details"
                         onClick={() => setSelectedPublicMatch(null)}
-                        style={{
-                          border: "none",
-                          background: "#111",
-                          color: "white",
-                          borderRadius: "999px",
-                          padding: "8px 12px",
-                          cursor: "pointer",
-                          fontWeight: "bold",
-                        }}
+                        className="bam-public-match-detail-close"
                       >
-                        ✕
+                        ×
                       </button>
                     </div>
 
+                    <div className="bam-public-match-detail-scoreboard">
+                      <div className="bam-public-match-detail-team bam-public-match-detail-team-left">
+                        {renderPublicTeamWithLogo(selectedPublicMatch.teamA, 46)}
+                      </div>
+                      <div className="bam-public-match-detail-score">
+                        {matchScoreText}
+                      </div>
+                      <div className="bam-public-match-detail-team bam-public-match-detail-team-right">
+                        {renderPublicTeamWithLogo(selectedPublicMatch.teamB, 46)}
+                      </div>
+                    </div>
+
                     {matchStatRows.length === 0 ? (
-                      <div
-                        style={{
-                          textAlign: "center",
-                          color: "#777",
-                          padding: "34px 0",
-                        }}
-                      >
-                        <div style={{ fontSize: "46px" }}>🏀</div>
+                      <div className="bam-public-empty-state bam-public-match-detail-empty-main">
+                        <div className="bam-public-empty-icon">🏀</div>
                         <p>ยังไม่มีสถิติผู้เล่นของ Match นี้</p>
-                        <p style={{ fontSize: "13px" }}>
-                          บันทึก Match Roster และ Player Stats ก่อน
-                          ข้อมูลจะแสดงที่นี่
+                        <p className="bam-public-empty-subtext">
+                          บันทึก Match Roster และ Player Stats ก่อน ข้อมูลจะแสดงที่นี่
                         </p>
                       </div>
                     ) : (
-                      <div style={{ overflowX: "auto" }}>
-                        <table
-                          style={{ width: "100%", borderCollapse: "collapse" }}
-                        >
-                          <thead>
-                            <tr
-                              style={{
-                                borderBottom: "1px solid #eee",
-                                background: "#fafafa",
-                              }}
-                            >
-                              <th
-                                style={{ textAlign: "left", padding: "10px" }}
-                              >
-                                Player
-                              </th>
-                              <th
-                                style={{ textAlign: "left", padding: "10px" }}
-                              >
-                                Team
-                              </th>
-                              <th style={{ padding: "10px" }}>PTS</th>
-                              <th style={{ padding: "10px" }}>REB</th>
-                              <th style={{ padding: "10px" }}>AST</th>
-                              <th style={{ padding: "10px" }}>STL</th>
-                              <th style={{ padding: "10px" }}>BLK</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {matchStatRows.map((row) => (
-                              <tr
-                                key={`public-match-stat-${selectedPublicMatch.id}-${row.playerId}-${row.teamName}`}
-                                style={{ borderBottom: "1px solid #f1f1f1" }}
-                              >
-                                <td style={{ padding: "10px" }}>
-                                  <span
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: "8px",
-                                    }}
-                                  >
-                                    {renderPlayerAvatar(
-                                      getPlayerPhotoUrl(row.playerId),
-                                      32,
-                                    )}
-                                    <strong>{row.playerName}</strong>
-                                  </span>
-                                </td>
-                                <td style={{ padding: "10px" }}>
-                                  {renderPublicTeamWithLogo(row.teamName, 26)}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: "center",
-                                    padding: "10px",
-                                    fontWeight: "bold",
-                                  }}
-                                >
-                                  {row.pts}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: "center",
-                                    padding: "10px",
-                                  }}
-                                >
-                                  {row.reb}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: "center",
-                                    padding: "10px",
-                                  }}
-                                >
-                                  {row.ast}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: "center",
-                                    padding: "10px",
-                                  }}
-                                >
-                                  {row.stl}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: "center",
-                                    padding: "10px",
-                                  }}
-                                >
-                                  {row.blk}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div className="bam-public-match-detail-stats-grid">
+                        {renderPublicMatchStatTable(
+                          selectedPublicMatch.teamA,
+                          teamAMatchRows,
+                        )}
+                        {renderPublicMatchStatTable(
+                          selectedPublicMatch.teamB,
+                          teamBMatchRows,
+                        )}
                       </div>
                     )}
                   </div>
@@ -7944,7 +7928,6 @@ function Players() {
               );
             })()
           : null}
-
         {false && selectedPublicPlayer
           ? (() => {
               const playerStats = getDashboardPlayerStats(
