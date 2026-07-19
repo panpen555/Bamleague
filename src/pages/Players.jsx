@@ -229,6 +229,8 @@ function Players() {
   const [selectedStatsMatchId, setSelectedStatsMatchId] = useState("");
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState("");
   const [profileCardView, setProfileCardView] = useState("current");
+  const [publicProfileSeasonContext, setPublicProfileSeasonContext] =
+    useState(null);
 
   // ======================================================
   // 05. STATE: TEAM LOGOS / LOCK GROUPS
@@ -458,10 +460,10 @@ function Players() {
   }, []);
 
   useEffect(() => {
-    if (selectedProfilePlayerId) {
+    if (selectedProfilePlayerId && !publicProfileSeasonContext) {
       setProfileCardView("current");
     }
-  }, [selectedProfilePlayerId]);
+  }, [selectedProfilePlayerId, publicProfileSeasonContext]);
 
   useEffect(() => {
     const hasLegacyLocks =
@@ -3083,8 +3085,111 @@ function Players() {
     );
   };
 
+  const closePlayerProfile = () => {
+    setSelectedProfilePlayerId("");
+    setPublicProfileSeasonContext(null);
+    setProfileCardView("current");
+  };
+
+  const getSelectedSeasonPlayerProfile = () => {
+    if (!publicProfileSeasonContext?.archivedPlayerId) return null;
+
+    const selectedSeason = seasonHistory.find(
+      (season) =>
+        String(season.id) === String(publicProfileSeasonContext.seasonId),
+    );
+    const archivedData = selectedSeason?.archivedData || {};
+    const archivedPlayers = Array.isArray(archivedData.players)
+      ? archivedData.players
+      : [];
+    const archivedPlayerStats =
+      archivedData.playerStats && typeof archivedData.playerStats === "object"
+        ? archivedData.playerStats
+        : {};
+    const archivedPlayerId = String(publicProfileSeasonContext.archivedPlayerId);
+
+    const archivedPlayer = archivedPlayers.find(
+      (player) => String(player.id) === archivedPlayerId,
+    );
+    const archivedStat =
+      archivedPlayerStats[archivedPlayerId] ||
+      Object.values(archivedPlayerStats).find(
+        (stat) => String(stat?.playerId) === archivedPlayerId,
+      ) ||
+      {};
+
+    if (!archivedPlayer && !archivedStat.playerId) return null;
+
+    const appearances = Number(archivedStat.appearances || 0);
+    const pts = Number(archivedStat.pts || 0);
+    const reb = Number(archivedStat.reb || 0);
+    const ast = Number(archivedStat.ast || 0);
+    const stl = Number(archivedStat.stl || 0);
+    const blk = Number(archivedStat.blk || 0);
+    const ppg = appearances > 0 ? (pts / appearances).toFixed(1) : "0.0";
+    const mvpScore =
+      pts + reb * 1.2 + ast * 1.5 + stl * 2 + blk * 2 + appearances * 0.75;
+
+    const currentPlayer = players.find(
+      (player) =>
+        String(player.id) === String(publicProfileSeasonContext.currentPlayerId),
+    );
+    const basePlayer = archivedPlayer || currentPlayer || {};
+
+    return {
+      ...currentPlayer,
+      ...basePlayer,
+      ...archivedStat,
+      playerId: archivedPlayerId,
+      id: archivedPlayerId,
+      currentPlayerId: publicProfileSeasonContext.currentPlayerId,
+      playerName:
+        basePlayer.name ||
+        archivedStat.playerName ||
+        currentPlayer?.name ||
+        "-",
+      name:
+        basePlayer.name ||
+        archivedStat.playerName ||
+        currentPlayer?.name ||
+        "-",
+      teamName: archivedStat.teamName || basePlayer.teamName || "",
+      bamPlayerId: basePlayer.bamPlayerId || currentPlayer?.bamPlayerId || "",
+      photoUrl: basePlayer.photoUrl || currentPlayer?.photoUrl || "",
+      tier: basePlayer.tier || currentPlayer?.tier || "",
+      rating:
+        basePlayer.rating ||
+        currentPlayer?.rating ||
+        calculateRatingFromSkills(basePlayer),
+      pos1: basePlayer.pos1 || currentPlayer?.pos1 || "-",
+      pos2: basePlayer.pos2 || currentPlayer?.pos2 || "",
+      dribbling: basePlayer.dribbling || currentPlayer?.dribbling || 3,
+      insideScoring:
+        basePlayer.insideScoring || currentPlayer?.insideScoring || 3,
+      shooting: basePlayer.shooting || currentPlayer?.shooting || 3,
+      defense: basePlayer.defense || currentPlayer?.defense || 3,
+      passing: basePlayer.passing || currentPlayer?.passing || 3,
+      gamesByMatch: archivedStat.gamesByMatch || {},
+      games: Number(archivedStat.games || 0),
+      appearances,
+      pts,
+      reb,
+      ast,
+      stl,
+      blk,
+      ppg,
+      mvpScore,
+      profileSeasonTitle: publicProfileSeasonContext.seasonTitle,
+      isSelectedSeasonProfile: true,
+    };
+  };
+
   const getSelectedPlayerProfile = () => {
     if (!selectedProfilePlayerId) return null;
+
+    if (publicProfileSeasonContext?.mode === "history") {
+      return getSelectedSeasonPlayerProfile();
+    }
 
     const player = players.find(
       (item) => String(item.id) === String(selectedProfilePlayerId),
@@ -3134,12 +3239,12 @@ function Players() {
     };
   };
 
-  const getPlayerMatchLog = (stat) => {
+  const getPlayerMatchLog = (stat, sourceSchedule = schedule) => {
     if (!stat || !stat.gamesByMatch) return [];
 
     return Object.values(stat.gamesByMatch)
       .map((game) => {
-        const match = schedule.find(
+        const match = sourceSchedule.find(
           (item) => String(item.id) === String(game.matchId),
         );
 
@@ -3532,6 +3637,11 @@ function Players() {
     const title = getProfileTitle(profile, career);
     const profilePhoto =
       profile.photoUrl || getPlayerPhotoUrl(profile.playerId);
+    const isSelectedSeasonView = profileCardView === "selectedSeason";
+    const seasonViewLabel = profile.isSelectedSeasonProfile
+      ? profile.profileSeasonTitle || "Selected Season"
+      : "Current Season";
+    const seasonViewTitle = seasonViewLabel;
 
     const timelineItems = (career?.seasons || [])
       .slice()
@@ -3662,7 +3772,7 @@ function Players() {
                   boxShadow: "5px 5px 0 #6b7280",
                 }}
               >
-                {profileCardView === "career" ? `"${title}"` : '"CURRENT SEASON"'}
+                {profileCardView === "career" ? `"${title}"` : `"${seasonViewLabel}"`}
               </div>
 
               {renderMangaSkillRadar(profile)}
@@ -3752,7 +3862,7 @@ function Players() {
                         color: "#555",
                       }}
                     >
-                      {profileCardView === "career" ? "LEGACY" : "CURRENT"}
+                      {profileCardView === "career" ? "LEGACY" : seasonViewLabel}
                     </div>
                     <div style={{ fontSize: "36px", fontWeight: "1000" }}>
                       {profileCardView === "career" ? legacyScore : "SEASON"}
@@ -3849,7 +3959,12 @@ function Players() {
                 }}
               >
                 {[
-                  ["current", "Current Season"],
+                  [
+                    profile.isSelectedSeasonProfile ? "selectedSeason" : "current",
+                    profile.isSelectedSeasonProfile
+                      ? "Selected Season"
+                      : "Current Season",
+                  ],
                   ["career", "Career"],
                 ].map(([viewKey, label]) => {
                   const isActive = profileCardView === viewKey;
@@ -3880,8 +3995,17 @@ function Players() {
                 key={`profile-card-${profileCardView}`}
                 className="bam-profile-view-panel"
               >
-                {profileCardView === "current" ? (
+                {profileCardView === "current" || isSelectedSeasonView ? (
                   <>
+                    <div
+                      style={{
+                        marginTop: "18px",
+                        fontWeight: "1000",
+                        color: "#c2410c",
+                      }}
+                    >
+                      {seasonViewTitle}
+                    </div>
                     <div
                       style={{
                         display: "grid",
@@ -3939,7 +4063,7 @@ function Players() {
                         marginTop: "18px",
                       }}
                     >
-                      <h3 style={{ marginTop: 0 }}>?? Current Match Log</h3>
+                      <h3 style={{ marginTop: 0 }}>📜 {seasonViewTitle} Match Log</h3>
                       {matchLogs.length === 0 ? (
                         <p style={{ color: "#666" }}>
                           ???????? Match Log ????????????
@@ -4104,12 +4228,21 @@ function Players() {
   const renderPlayerProfileModal = () => {
     const profile = getSelectedPlayerProfile();
     if (!selectedProfilePlayerId || !profile) return null;
-    const matchLogs = getPlayerMatchLog(profile);
+    const selectedSeasonForProfile = publicProfileSeasonContext
+      ? seasonHistory.find(
+          (season) =>
+            String(season.id) === String(publicProfileSeasonContext.seasonId),
+        )
+      : null;
+    const matchLogs = getPlayerMatchLog(
+      profile,
+      selectedSeasonForProfile?.archivedData?.schedule || schedule,
+    );
 
     return (
       <div
         className="bam-profile-modal-animated"
-        onClick={() => setSelectedProfilePlayerId("")}
+        onClick={closePlayerProfile}
         style={{
           position: "fixed",
           inset: 0,
@@ -4134,7 +4267,7 @@ function Players() {
           }}
         >
           <button
-            onClick={() => setSelectedProfilePlayerId("")}
+            onClick={closePlayerProfile}
             style={{
               position: "sticky",
               top: 0,
@@ -6295,41 +6428,51 @@ function Players() {
     };
   };
 
-  const renderDashboardStatCard = (label, value, subText = "") => (
-    <div
-      style={{
-        border: "1px solid #ddd",
-        borderRadius: "14px",
-        padding: "16px",
-        background: "white",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-      }}
-    >
-      <div style={{ color: "#666", fontSize: "13px", marginBottom: "6px" }}>
-        {label}
-      </div>
-      <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
-      {subText ? (
-        <div style={{ color: "#777", marginTop: "4px" }}>{subText}</div>
-      ) : null}
-    </div>
-  );
+  const dashboardStatCardStyle = {
+    border: "1px solid #ddd",
+    borderRadius: "14px",
+    padding: "16px",
+    background: "white",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+  };
 
-  const renderPublicPlayerRow = (player, index, valueText) => (
-    <div
-      key={`${player.playerId || player.playerName}-${index}`}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "12px",
-        borderBottom: "1px solid #eee",
-        padding: "8px 0",
-      }}
-    >
-      <span
-        style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+  const renderDashboardStatCard = (label, value, subText = "", onClick) => {
+    const content = (
+      <>
+        <div style={{ color: "#666", fontSize: "13px", marginBottom: "6px" }}>
+          {label}
+        </div>
+        <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
+        {subText ? (
+          <div style={{ color: "#777", marginTop: "4px" }}>{subText}</div>
+        ) : null}
+      </>
+    );
+
+    if (!onClick) {
+      return <div style={dashboardStatCardStyle}>{content}</div>;
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="bam-public-stat-card-button"
+        style={dashboardStatCardStyle}
       >
+        {content}
+      </button>
+    );
+  };
+
+  const renderPublicPlayerRow = (
+    player,
+    index,
+    valueText,
+    onOpenProfile = null,
+  ) => {
+    const playerIdentity = (
+      <>
         <strong>#{index + 1}</strong>
         {renderPlayerAvatar(getPlayerPhotoUrl(player.playerId), 34)}
         <span>
@@ -6339,10 +6482,40 @@ function Players() {
             {player.teamName || "-"}
           </span>
         </span>
-      </span>
-      <strong>{valueText}</strong>
-    </div>
-  );
+      </>
+    );
+
+    return (
+      <div
+        key={`${player.playerId || player.playerName}-${index}`}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          borderBottom: "1px solid #eee",
+          padding: "8px 0",
+        }}
+      >
+        {onOpenProfile ? (
+          <button
+            type="button"
+            onClick={onOpenProfile}
+            className="bam-public-player-link"
+          >
+            {playerIdentity}
+          </button>
+        ) : (
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+          >
+            {playerIdentity}
+          </span>
+        )}
+        <strong>{valueText}</strong>
+      </div>
+    );
+  };
 
   // ======================================================
   // 23. RENDER: PUBLIC DASHBOARD
@@ -6437,6 +6610,115 @@ function Players() {
       return dashboardPlayerStatRows.find(
         (row) => String(row.playerId) === String(playerId),
       );
+    };
+
+    const normalizePublicPlayerName = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+
+    const resolvePublicProfileTarget = (stat) => {
+      if (!stat?.playerId) return null;
+
+      if (!isHistoryView) {
+        return {
+          currentPlayerId: String(stat.playerId),
+          archivedPlayerId: "",
+          isHistorical: false,
+        };
+      }
+
+      const bamPlayerId = String(stat.bamPlayerId || "").trim();
+      if (bamPlayerId) {
+        const currentPlayerByBamId = players.find(
+          (player) => String(player.bamPlayerId || "") === bamPlayerId,
+        );
+
+        if (currentPlayerByBamId) {
+          return {
+            currentPlayerId: String(currentPlayerByBamId.id),
+            archivedPlayerId: String(stat.playerId),
+            isHistorical: true,
+          };
+        }
+      }
+
+      const legacyPlayerId = String(stat.playerId || "").trim();
+      if (legacyPlayerId) {
+        const currentPlayerByLegacyId = players.find(
+          (player) => String(player.id) === legacyPlayerId,
+        );
+
+        if (currentPlayerByLegacyId) {
+          return {
+            currentPlayerId: String(currentPlayerByLegacyId.id),
+            archivedPlayerId: legacyPlayerId,
+            isHistorical: true,
+          };
+        }
+
+        const archivedPlayer = dashboardPlayers.find(
+          (player) => String(player.id) === legacyPlayerId,
+        );
+        const archivedBamPlayerId = String(
+          archivedPlayer?.bamPlayerId || "",
+        ).trim();
+
+        if (archivedBamPlayerId) {
+          const currentPlayerByArchivedBamId = players.find(
+            (player) =>
+              String(player.bamPlayerId || "") === archivedBamPlayerId,
+          );
+
+          if (currentPlayerByArchivedBamId) {
+            return {
+              currentPlayerId: String(currentPlayerByArchivedBamId.id),
+              archivedPlayerId: legacyPlayerId,
+              isHistorical: true,
+            };
+          }
+        }
+      }
+
+      const normalizedName = normalizePublicPlayerName(
+        stat.playerName || stat.name,
+      );
+      if (!normalizedName) return null;
+
+      const currentNameMatches = players.filter(
+        (player) => normalizePublicPlayerName(player.name) === normalizedName,
+      );
+
+      return currentNameMatches.length === 1
+        ? {
+            currentPlayerId: String(currentNameMatches[0].id),
+            archivedPlayerId: String(stat.playerId),
+            isHistorical: true,
+          }
+        : null;
+    };
+
+    const openPublicPlayerProfile = (stat) => {
+      const target = resolvePublicProfileTarget(stat);
+      if (!target?.currentPlayerId) return;
+
+      if (!target.isHistorical) {
+        setPublicProfileSeasonContext(null);
+        setProfileCardView("current");
+        setSelectedProfilePlayerId(target.currentPlayerId);
+        return;
+      }
+
+      setPublicProfileSeasonContext({
+        mode: "history",
+        seasonId: String(selectedHistorySeason.id),
+        seasonTitle: dashboardTitle,
+        archivedPlayerId: target.archivedPlayerId,
+        currentPlayerId: target.currentPlayerId,
+      });
+      setProfileCardView("selectedSeason");
+      setSelectedProfilePlayerId(target.currentPlayerId);
     };
 
     const getDashboardPlayerStats = (playerId) => {
@@ -6971,6 +7253,22 @@ function Players() {
       gap: "8px",
     };
 
+    const scrollPublicDashboardToTabs = () => {
+      window.requestAnimationFrame(() => {
+        document
+          .querySelector(".bam-public-tabs")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    };
+
+    const openPublicDashboardTab = (tabKey) => {
+      setPublicDashboardTab(tabKey);
+      setSelectedPublicTeam("");
+      setSelectedPublicMatch(null);
+      setSelectedPublicPlayer(null);
+      scrollPublicDashboardToTabs();
+    };
+
     const publicDashboardTabs = [
       { key: "overview", label: "Overview", icon: "🏠" },
       { key: "teams", label: "Teams", icon: "🏀" },
@@ -7018,6 +7316,7 @@ function Players() {
                 setSelectedPublicTeam("");
                 setSelectedPublicMatch(null);
                 setSelectedPublicPlayer(null);
+                closePlayerProfile();
               }}
               className="bam-public-season-select"
             >
@@ -7045,6 +7344,7 @@ function Players() {
               "Teams",
               dashboardTeams.length,
               `${dashboardTeams.length || teamCount} team setting`,
+              () => openPublicDashboardTab("teams"),
             )}
             {renderDashboardStatCard(
               "Players",
@@ -7055,6 +7355,7 @@ function Players() {
               "Matches",
               `${dashboardFinishedMatches}/${dashboardSchedule.length}`,
               "Finished / Total",
+              () => openPublicDashboardTab("schedule"),
             )}
           </div>
         ) : null}
@@ -7174,11 +7475,13 @@ function Players() {
                               return (
                                 <tr
                                   key={`public-team-roster-${selectedPublicTeamData.name}-${player.id}`}
-                                  onClick={() =>
+                                  onClick={() => {
+                                    setPublicProfileSeasonContext(null);
+                                    setProfileCardView("current");
                                     setSelectedProfilePlayerId(
                                       String(player.id),
-                                    )
-                                  }
+                                    );
+                                  }}
                                   style={{
                                     borderBottom: "1px solid #f1f1f1",
                                     cursor: "pointer",
@@ -7544,6 +7847,7 @@ function Players() {
                     player,
                     index,
                     `${Number(player.mvpScore || 0).toFixed(1)}`,
+                    () => openPublicPlayerProfile(player),
                   ),
                 )
               )}
@@ -7559,6 +7863,7 @@ function Players() {
                     player,
                     index,
                     `${player.pts || 0} PTS`,
+                    () => openPublicPlayerProfile(player),
                   ),
                 )
               )}
@@ -8187,7 +8492,10 @@ function Players() {
       <div className="bam-public-shell">
         <button
           type="button"
-          onClick={() => setViewMode("ADMIN")}
+          onClick={() => {
+            closePlayerProfile();
+            setViewMode("ADMIN");
+          }}
           className="bam-public-back-button"
         >
           🔧 Back to Admin Mode
@@ -10208,7 +10516,16 @@ function Players() {
               getSelectedPlayerProfile() &&
               (() => {
                 const profile = getSelectedPlayerProfile();
-                const matchLogs = getPlayerMatchLog(profile);
+                const selectedSeasonForProfile = publicProfileSeasonContext
+      ? seasonHistory.find(
+          (season) =>
+            String(season.id) === String(publicProfileSeasonContext.seasonId),
+        )
+      : null;
+    const matchLogs = getPlayerMatchLog(
+      profile,
+      selectedSeasonForProfile?.archivedData?.schedule || schedule,
+    );
 
                 return (
                   <div

@@ -261,3 +261,46 @@
     padding: 10px 14px;
   }
 }
+.bam-public-stat-card-button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.bam-public-stat-card-button:hover {
+  border-color: rgba(249, 115, 22, 0.55) !important;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12) !important;
+  transform: translateY(-1px);
+}
+
+.bam-public-stat-card-button:focus-visible,
+.bam-public-player-link:focus-visible {
+  outline: 3px solid rgba(249, 115, 22, 0.45);
+  outline-offset: 3px;
+}
+
+.bam-public-player-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  padding: 2px 4px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bam-public-player-link:hover {
+  color: #c2410c;
+  background: rgba(249, 115, 22, 0.08);
+}
