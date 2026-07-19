@@ -298,7 +298,10 @@ function Players() {
 
   const [hallOfFameFilter, setHallOfFameFilter] = useState("ALL");
   const [publicSeasonId, setPublicSeasonId] = useState("CURRENT");
-  const [viewMode, setViewMode] = useState("ADMIN");
+  const isPublicOnlyRoute = window.location.hash === "#/public";
+  const [viewMode, setViewMode] = useState(() =>
+    isPublicOnlyRoute ? "PUBLIC" : "ADMIN",
+  );
   const [selectedPublicTeam, setSelectedPublicTeam] = useState("");
   const [publicDashboardTab, setPublicDashboardTab] = useState("overview");
   const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
@@ -8291,19 +8294,21 @@ function Players() {
     background: "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)",
   };
 
-  if (viewMode === "PUBLIC") {
+  if (isPublicOnlyRoute || viewMode === "PUBLIC") {
     return (
       <div className="bam-public-shell">
-        <button
-          type="button"
-          onClick={() => {
-            closePlayerProfile();
-            setViewMode("ADMIN");
-          }}
-          className="bam-public-back-button"
-        >
-          🔧 Back to Admin Mode
-        </button>
+        {!isPublicOnlyRoute ? (
+          <button
+            type="button"
+            onClick={() => {
+              closePlayerProfile();
+              setViewMode("ADMIN");
+            }}
+            className="bam-public-back-button"
+          >
+            🔧 Back to Admin Mode
+          </button>
+        ) : null}
         {renderPublicDashboard()}
         {renderPlayerProfileModal()}
       </div>
