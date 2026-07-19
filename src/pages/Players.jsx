@@ -15,6 +15,13 @@ import MatchRosterModal from "../components/matches/MatchRosterModal";
 import MatchStatsModal from "../components/matches/MatchStatsModal";
 import StandingsPanel from "../components/standings/StandingsPanel";
 import MvpRankingPanel from "../components/stats/MvpRankingPanel";
+import {
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from "firebase/auth";
+import { auth } from "../firebase";
 
 import {
   uploadPlayerPhoto,
@@ -292,6 +299,9 @@ function Players() {
   const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
   const [selectedPublicMatch, setSelectedPublicMatch] = useState(null);
   const [cloudStatus, setCloudStatus] = useState("Saved");
+  const [adminUser, setAdminUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
   const [activeAdminMenu, setActiveAdminMenu] = useState("players");
   const [expandedTeamDashboard, setExpandedTeamDashboard] = useState("");
   const [selectedFinalsMvpId, setSelectedFinalsMvpId] = useState("");
@@ -424,6 +434,25 @@ function Players() {
   useEffect(() => {
     localStorage.setItem("bamPublishMeta", JSON.stringify(publishMeta));
   }, [publishMeta]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        setAdminUser(user);
+        setAuthLoading(false);
+        setAuthError("");
+      },
+      (error) => {
+        console.error("Firebase Auth Error:", error);
+        setAdminUser(null);
+        setAuthLoading(false);
+        setAuthError("Firebase Auth ??????????????");
+      },
+    );
+
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (selectedProfilePlayerId) {
@@ -5231,7 +5260,71 @@ function Players() {
     return report;
   };
 
+  const requireAdminLogin = (actionLabel) => {
+    if (adminUser) return true;
+
+    setCloudStatus("Login Required");
+    alert(actionLabel + " requires Google sign-in first");
+    return false;
+  };
+
+  const signInAdminWithGoogle = async () => {
+    setAuthError("");
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Admin Sign In Error:", error);
+      setAuthError("Sign in failed. Please try again.");
+    }
+  };
+
+  const signOutAdmin = async () => {
+    setAuthError("");
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Admin Sign Out Error:", error);
+      setAuthError("Sign out failed. Please try again.");
+    }
+  };
+
+  const renderAdminAuthCard = () => (
+    <div style={{ border: "1px solid #c7d2fe", borderRadius: "14px", padding: "14px", background: "#eef2ff" }}>
+      <h3 style={{ marginTop: 0, color: "#3730a3" }}>Admin Login</h3>
+      <p style={{ marginTop: 0, color: "#4338ca", fontSize: "13px" }}>
+        Use Google Sign-In to get the Firebase UID for Firestore Rules Phase 2
+      </p>
+      {authLoading ? (
+        <p style={{ color: "#555" }}>Checking login status...</p>
+      ) : adminUser ? (
+        <div style={{ border: "1px solid #a5b4fc", borderRadius: "12px", padding: "10px", background: "white", marginBottom: "10px", wordBreak: "break-word" }}>
+          <div><strong>Name:</strong> {adminUser.displayName || "-"}</div>
+          <div><strong>Email:</strong> {adminUser.email || "-"}</div>
+          <div><strong>Firebase UID:</strong> {adminUser.uid}</div>
+        </div>
+      ) : (
+        <p style={{ color: "#7c2d12", fontSize: "13px" }}>
+          Not signed in: Upload / Safe Publish / Clear Cloud are disabled
+        </p>
+      )}
+      {authError ? (
+        <div style={{ color: "#b91c1c", marginBottom: "8px" }}>{authError}</div>
+      ) : null}
+      {adminUser ? (
+        <button type="button" onClick={signOutAdmin} style={{ width: "100%", padding: "10px", border: "none", borderRadius: "8px", background: "#334155", color: "white", fontWeight: "bold", cursor: "pointer" }}>
+          Sign out
+        </button>
+      ) : (
+        <button type="button" onClick={signInAdminWithGoogle} disabled={authLoading} style={{ width: "100%", padding: "10px", border: "none", borderRadius: "8px", background: authLoading ? "#94a3b8" : "#2563eb", color: "white", fontWeight: "bold", cursor: authLoading ? "not-allowed" : "pointer" }}>
+          Sign in with Google
+        </button>
+      )}
+    </div>
+  );
   const safePublishToCloud = async () => {
+    if (!requireAdminLogin("Safe Publish To Cloud")) return;
+
     const report = getLocalDraftValidationReport();
 
     setPublishMeta((prevMeta) => ({
@@ -5390,16 +5483,18 @@ function Players() {
         <button
           type="button"
           onClick={safePublishToCloud}
-          disabled={!isValidated}
+          disabled={!isValidated || !adminUser || authLoading}
           style={{
             width: "100%",
             padding: "10px",
             border: "none",
             borderRadius: "8px",
-            background: isValidated ? "#15803d" : "#94a3b8",
+            background:
+              isValidated && adminUser && !authLoading ? "#15803d" : "#94a3b8",
             color: "white",
             fontWeight: "bold",
-            cursor: isValidated ? "pointer" : "not-allowed",
+            cursor:
+              isValidated && adminUser && !authLoading ? "pointer" : "not-allowed",
           }}
         >
           🚀 Publish Validated Draft To Cloud
@@ -5437,6 +5532,8 @@ function Players() {
   });
 
   const uploadToCloud = async () => {
+    if (!requireAdminLogin("Upload To Cloud")) return;
+
     const confirmUpload = window.confirm(
       "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ",
     );
@@ -5483,6 +5580,8 @@ function Players() {
   };
 
   const clearCloudData = async () => {
+    if (!requireAdminLogin("Clear Cloud Data")) return;
+
     const firstConfirm = window.confirm(
       "ต้องการลบข้อมูล BAM League บน Cloud ใช่ไหม?\n\nข้อมูลในเครื่องจะไม่ถูกลบ",
     );
@@ -8196,6 +8295,8 @@ function Players() {
           >
             {renderSystemHealthCard()}
 
+            {renderAdminAuthCard()}
+
             <BackupRestoreTools
               exportAllData={exportLeagueBackup}
               importLeagueBackup={importLeagueBackup}
@@ -8208,6 +8309,8 @@ function Players() {
               uploadToCloud={uploadToCloud}
               downloadFromCloud={downloadFromCloud}
               clearCloudData={clearCloudData}
+              adminUser={adminUser}
+              authLoading={authLoading}
             />
 
             <SeasonManagementTools

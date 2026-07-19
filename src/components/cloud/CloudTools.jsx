@@ -5,7 +5,15 @@ function CloudTools({
   uploadToCloud,
   downloadFromCloud,
   clearCloudData,
+  adminUser,
+  authLoading,
 }) {
+  const canWriteCloud = Boolean(adminUser) && !authLoading;
+  const writeDisabledStyle = {
+    opacity: canWriteCloud ? 1 : 0.55,
+    cursor: canWriteCloud ? "pointer" : "not-allowed",
+  };
+
   return (
     <div
       style={{
@@ -15,11 +23,12 @@ function CloudTools({
         background: "#f0fdfa",
       }}
     >
-      <h3 style={{ marginTop: 0, color: "#0f766e" }}>☁️ Cloud Storage</h3>
+      <h3 style={{ marginTop: 0, color: "#0f766e" }}>Cloud Storage</h3>
 
       <p style={{ color: "#555", fontSize: "14px" }}>
-        Manual Cloud Mode: ต้องกด Upload เองเท่านั้น เพื่อป้องกันการเขียนทับ
-        Cloud โดยไม่ตั้งใจ
+        Manual Cloud Mode: Download is public. Upload, Safe Publish, and Clear
+        Cloud require Google sign-in. Firestore Rules will enforce real security
+        in Phase 2.
       </p>
 
       <div
@@ -34,11 +43,18 @@ function CloudTools({
           fontWeight: "bold",
         }}
       >
-        ☁️ Status: {cloudStatus}
+        Status: {cloudStatus}
       </div>
+
+      {!canWriteCloud ? (
+        <p style={{ color: "#7c2d12", fontSize: "13px", marginTop: 0 }}>
+          Sign in with Google to enable Upload To Cloud and Clear Cloud Data.
+        </p>
+      ) : null}
 
       <button
         onClick={uploadToCloud}
+        disabled={!canWriteCloud}
         style={{
           width: "100%",
           padding: "10px",
@@ -48,10 +64,10 @@ function CloudTools({
           border: "none",
           borderRadius: "8px",
           fontWeight: "bold",
-          cursor: "pointer",
+          ...writeDisabledStyle,
         }}
       >
-        ☁️ Upload To Cloud
+        Upload To Cloud
       </button>
 
       <button
@@ -68,11 +84,12 @@ function CloudTools({
           cursor: "pointer",
         }}
       >
-        ☁️ Download From Cloud
+        Download From Cloud
       </button>
 
       <button
         onClick={clearCloudData}
+        disabled={!canWriteCloud}
         style={{
           width: "100%",
           padding: "10px",
@@ -81,10 +98,10 @@ function CloudTools({
           border: "none",
           borderRadius: "8px",
           fontWeight: "bold",
-          cursor: "pointer",
+          ...writeDisabledStyle,
         }}
       >
-        🗑️ Clear Cloud Data
+        Clear Cloud Data
       </button>
     </div>
   );

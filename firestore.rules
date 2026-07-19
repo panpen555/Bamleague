@@ -1,0 +1,15 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid == "pVbt4p6bUzOaxWFZsxwQuBzh5rM2";
+    }
+
+    match /bamLeague/main {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
