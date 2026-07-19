@@ -6428,38 +6428,28 @@ function Players() {
     };
   };
 
-  const dashboardStatCardStyle = {
-    border: "1px solid #ddd",
-    borderRadius: "14px",
-    padding: "16px",
-    background: "white",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-  };
-
   const renderDashboardStatCard = (label, value, subText = "", onClick) => {
+    const cardClassName = `bam-public-summary-card ${
+      onClick
+        ? "bam-public-stat-card-button bam-public-summary-card-button"
+        : "bam-public-summary-card-static"
+    }`;
     const content = (
       <>
-        <div style={{ color: "#666", fontSize: "13px", marginBottom: "6px" }}>
-          {label}
-        </div>
-        <div style={{ fontSize: "28px", fontWeight: "bold" }}>{value}</div>
+        <div className="bam-public-summary-label">{label}</div>
+        <div className="bam-public-summary-value">{value}</div>
         {subText ? (
-          <div style={{ color: "#777", marginTop: "4px" }}>{subText}</div>
+          <div className="bam-public-summary-subtext">{subText}</div>
         ) : null}
       </>
     );
 
     if (!onClick) {
-      return <div style={dashboardStatCardStyle}>{content}</div>;
+      return <div className={cardClassName}>{content}</div>;
     }
 
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="bam-public-stat-card-button"
-        style={dashboardStatCardStyle}
-      >
+      <button type="button" onClick={onClick} className={cardClassName}>
         {content}
       </button>
     );
@@ -6478,7 +6468,7 @@ function Players() {
         <span>
           <strong>{player.playerName}</strong>
           <br />
-          <span style={{ color: "#777", fontSize: "12px" }}>
+          <span className="bam-public-leader-team">
             {player.teamName || "-"}
           </span>
         </span>
@@ -6488,14 +6478,7 @@ function Players() {
     return (
       <div
         key={`${player.playerId || player.playerName}-${index}`}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "12px",
-          borderBottom: "1px solid #eee",
-          padding: "8px 0",
-        }}
+        className="bam-public-leader-row"
       >
         {onOpenProfile ? (
           <button
@@ -6506,13 +6489,11 @@ function Players() {
             {playerIdentity}
           </button>
         ) : (
-          <span
-            style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
-          >
+          <span className="bam-public-leader-identity">
             {playerIdentity}
           </span>
         )}
-        <strong>{valueText}</strong>
+        <strong className="bam-public-leader-value">{valueText}</strong>
       </div>
     );
   };
@@ -7332,14 +7313,7 @@ function Players() {
         {renderPublicDashboardNav()}
 
         {publicDashboardTab === "overview" ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
-              gap: "16px",
-              marginBottom: "22px",
-            }}
-          >
+          <div className="bam-public-summary-grid">
             {renderDashboardStatCard(
               "Teams",
               dashboardTeams.length,
@@ -7719,109 +7693,91 @@ function Players() {
 
         {publicDashboardTab === "overview" ||
         publicDashboardTab === "awards" ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
-              gap: "18px",
-              marginBottom: "22px",
-            }}
-          >
-            <div style={cardStyle}>
-              <h2 style={sectionTitleStyle}>🏆 Current Awards</h2>
-              {dashboardAwardRows.map(([icon, label, value, detail]) => (
-                <div
-                  key={`public-award-${label}`}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    borderBottom: "1px solid #eee",
-                    padding: "10px 0",
-                    gap: "12px",
-                  }}
-                >
-                  <strong>
-                    {icon} {label}
-                  </strong>
-                  <span style={{ textAlign: "right" }}>
-                    {value || "-"}
-                    {detail ? (
-                      <span
-                        style={{
-                          color: "#777",
-                          fontSize: "12px",
-                          marginLeft: "6px",
-                        }}
-                      >
-                        ({detail})
+          <div className="bam-public-overview-grid">
+            <div className="bam-public-panel bam-public-awards-panel">
+              <h2 className="bam-public-panel-title">🏆 Current Awards</h2>
+              <div className="bam-public-awards-grid">
+                {dashboardAwardRows.map(([icon, label, value, detail]) => {
+                  const isFeaturedAward = [
+                    "Champion",
+                    "Regular Season MVP",
+                    "Top Scorer",
+                  ].includes(label);
+
+                  return (
+                    <div
+                      key={`public-award-${label}`}
+                      className={`bam-public-award-row${
+                        isFeaturedAward ? " bam-public-award-row-featured" : ""
+                      }`}
+                    >
+                      <strong className="bam-public-award-label">
+                        <span className="bam-public-award-icon">{icon}</span>
+                        {label}
+                      </strong>
+                      <span className="bam-public-award-value">
+                        {value || "-"}
+                        {detail ? (
+                          <span className="bam-public-award-detail">
+                            ({detail})
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                </div>
-              ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div style={cardStyle}>
-              <h2 style={sectionTitleStyle}>📊 Standings</h2>
+            <div className="bam-public-panel bam-public-standings-panel">
+              <h2 className="bam-public-panel-title">📊 Standings</h2>
               {dashboardStandings.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: "center",
-                    color: "#777",
-                    padding: "40px 0",
-                  }}
-                >
-                  <div style={{ fontSize: "54px" }}>📋</div>
+                <div className="bam-public-empty-state">
+                  <div className="bam-public-empty-icon">📋</div>
                   <p>ยังไม่มีตารางคะแนน</p>
-                  <p style={{ fontSize: "13px" }}>
+                  <p className="bam-public-empty-subtext">
                     เมื่อมีผลการแข่งขัน ตารางคะแนนจะปรากฏที่นี่
                   </p>
                 </div>
               ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #eee" }}>
-                      <th style={{ textAlign: "left", padding: "8px" }}>#</th>
-                      <th style={{ textAlign: "left", padding: "8px" }}>
-                        Team
-                      </th>
-                      <th style={{ padding: "8px" }}>W</th>
-                      <th style={{ padding: "8px" }}>L</th>
-                      <th style={{ padding: "8px" }}>PF</th>
-                      <th style={{ padding: "8px" }}>PA</th>
-                      <th style={{ padding: "8px" }}>+/-</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dashboardStandings.map((row, index) => (
-                      <tr
-                        key={`public-standing-${row.team}`}
-                        style={{ borderBottom: "1px solid #f1f1f1" }}
-                      >
-                        <td style={{ padding: "8px" }}>{index + 1}</td>
-                        <td style={{ padding: "8px" }}>
-                          {renderPublicTeamWithLogo(row.team, 28)}
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
-                          {row.win}
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
-                          {row.loss}
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
-                          {row.pf}
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
-                          {row.pa}
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
-                          {row.diff}
-                        </td>
+                <div className="bam-public-standings-wrap">
+                  <table className="bam-public-standings-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Team</th>
+                        <th>W</th>
+                        <th>L</th>
+                        <th>PF</th>
+                        <th>PA</th>
+                        <th>+/-</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {dashboardStandings.map((row, index) => (
+                        <tr key={`public-standing-${row.team}`}>
+                          <td>
+                            <span
+                              className={`bam-public-rank-badge${
+                                index < 3
+                                  ? ` bam-public-rank-badge-${index + 1}`
+                                  : ""
+                              }`}
+                            >
+                              {index + 1}
+                            </span>
+                          </td>
+                          <td>{renderPublicTeamWithLogo(row.team, 28)}</td>
+                          <td>{row.win}</td>
+                          <td>{row.loss}</td>
+                          <td>{row.pf}</td>
+                          <td>{row.pa}</td>
+                          <td>{row.diff}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
@@ -7829,18 +7785,11 @@ function Players() {
 
         {publicDashboardTab === "overview" ||
         publicDashboardTab === "awards" ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))",
-              gap: "14px",
-              marginBottom: "18px",
-            }}
-          >
-            <div style={cardStyle}>
-              <h2>👑 MVP Race</h2>
+          <div className="bam-public-leaders-grid">
+            <div className="bam-public-panel bam-public-leader-card">
+              <h2 className="bam-public-panel-title">👑 MVP Race</h2>
               {dashboardMvpRace.length === 0 ? (
-                <p>ยังไม่มีข้อมูล MVP</p>
+                <p className="bam-public-empty-state bam-public-leader-empty">ยังไม่มีข้อมูล MVP</p>
               ) : (
                 dashboardMvpRace.map((player, index) =>
                   renderPublicPlayerRow(
@@ -7853,10 +7802,10 @@ function Players() {
               )}
             </div>
 
-            <div style={cardStyle}>
-              <h2>🎯 Top Scorers</h2>
+            <div className="bam-public-panel bam-public-leader-card">
+              <h2 className="bam-public-panel-title">🎯 Top Scorers</h2>
               {dashboardTopScorers.length === 0 ? (
-                <p>ยังไม่มีข้อมูลคะแนนผู้เล่น</p>
+                <p className="bam-public-empty-state bam-public-leader-empty">ยังไม่มีข้อมูลคะแนนผู้เล่น</p>
               ) : (
                 dashboardTopScorers.map((player, index) =>
                   renderPublicPlayerRow(

@@ -304,3 +304,330 @@
   color: #c2410c;
   background: rgba(249, 115, 22, 0.08);
 }
+
+.bam-public-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.bam-public-summary-card {
+  position: relative;
+  min-height: 138px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 24px;
+  padding: 18px;
+  color: #111827;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 250, 242, 0.92)),
+    radial-gradient(circle at 88% 18%, rgba(249, 115, 22, 0.18), transparent 32%);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.1);
+}
+
+.bam-public-summary-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background:
+    repeating-linear-gradient(118deg, transparent 0 18px, rgba(17, 24, 39, 0.38) 19px 21px),
+    linear-gradient(90deg, transparent 0 62%, rgba(249, 115, 22, 0.2) 62% 64%, transparent 64%);
+}
+
+.bam-public-summary-card::after {
+  content: "";
+  position: absolute;
+  right: -34px;
+  bottom: -42px;
+  width: 116px;
+  height: 116px;
+  border: 2px solid rgba(249, 115, 22, 0.28);
+  border-radius: 50%;
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(249, 115, 22, 0.2) 49% 51%, transparent 52%),
+    linear-gradient(0deg, transparent 48%, rgba(249, 115, 22, 0.2) 49% 51%, transparent 52%);
+}
+
+.bam-public-summary-label,
+.bam-public-summary-value,
+.bam-public-summary-subtext {
+  position: relative;
+  z-index: 1;
+}
+
+.bam-public-summary-label {
+  margin-bottom: 8px;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.bam-public-summary-value {
+  font-size: 42px;
+  font-weight: 1000;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+}
+
+.bam-public-summary-subtext {
+  margin-top: 10px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.bam-public-summary-card-button {
+  border-color: rgba(249, 115, 22, 0.28);
+}
+
+.bam-public-summary-card-button:hover {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 247, 237, 0.96)),
+    radial-gradient(circle at 88% 18%, rgba(249, 115, 22, 0.24), transparent 32%);
+}
+
+.bam-public-summary-card-static {
+  opacity: 0.94;
+}
+
+.bam-public-overview-grid,
+.bam-public-leaders-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.bam-public-panel {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 26px;
+  padding: 20px;
+  color: #111827;
+  background: rgba(255, 250, 242, 0.9);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
+}
+
+.bam-public-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 5px;
+  background: linear-gradient(90deg, #111827, #f97316, #facc15);
+}
+
+.bam-public-panel-title {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 16px;
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: -0.025em;
+}
+
+.bam-public-awards-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bam-public-award-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.bam-public-award-row-featured {
+  grid-column: span 2;
+  border-color: rgba(249, 115, 22, 0.24);
+  background:
+    linear-gradient(135deg, rgba(255, 247, 237, 0.94), rgba(255, 255, 255, 0.86));
+  box-shadow: inset 5px 0 0 #f97316;
+}
+
+.bam-public-award-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-weight: 1000;
+}
+
+.bam-public-award-icon {
+  flex: 0 0 auto;
+}
+
+.bam-public-award-value {
+  min-width: 0;
+  color: #111827;
+  font-weight: 900;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.bam-public-award-detail {
+  margin-left: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.bam-public-standings-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.bam-public-standings-table {
+  width: 100%;
+  min-width: 540px;
+  border-collapse: collapse;
+}
+
+.bam-public-standings-table th,
+.bam-public-standings-table td {
+  padding: 10px 9px;
+  text-align: center;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.bam-public-standings-table th {
+  color: #475569;
+  background: rgba(255, 247, 237, 0.82);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bam-public-standings-table th:nth-child(2),
+.bam-public-standings-table td:nth-child(2) {
+  text-align: left;
+}
+
+.bam-public-standings-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.bam-public-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 999px;
+  color: #111827;
+  background: #e5e7eb;
+  font-weight: 1000;
+}
+
+.bam-public-rank-badge-1 {
+  color: #111827;
+  background: linear-gradient(135deg, #facc15, #fb923c);
+}
+
+.bam-public-rank-badge-2 {
+  color: #111827;
+  background: linear-gradient(135deg, #e5e7eb, #cbd5e1);
+}
+
+.bam-public-rank-badge-3 {
+  color: #fffaf2;
+  background: linear-gradient(135deg, #c2410c, #7c2d12);
+}
+
+.bam-public-leader-card {
+  display: flex;
+  min-height: 430px;
+  flex-direction: column;
+}
+
+.bam-public-leader-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 10px 0;
+}
+
+.bam-public-leader-row:last-child {
+  border-bottom: 0;
+}
+
+.bam-public-leader-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bam-public-leader-team {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bam-public-leader-value {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: #fffaf2;
+  background: #111827;
+  font-weight: 1000;
+  white-space: nowrap;
+  box-shadow: 4px 4px 0 rgba(249, 115, 22, 0.28);
+}
+
+.bam-public-empty-state {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 34px 18px;
+  color: #64748b;
+  text-align: center;
+}
+
+.bam-public-empty-icon {
+  font-size: 54px;
+  line-height: 1;
+}
+
+.bam-public-empty-subtext {
+  margin: 0;
+  font-size: 13px;
+}
+
+.bam-public-leader-empty {
+  flex: 1;
+  min-height: 300px;
+}
