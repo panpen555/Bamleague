@@ -29,6 +29,8 @@ import {
   uploadTeamLogo as uploadTeamLogoToCloud,
 } from "../storage";
 
+import "../styles/public-dashboard.css";
+
 import {
   uploadLeagueBackup,
   downloadLeagueBackup,
@@ -6977,22 +6979,7 @@ function Players() {
     ];
 
     const renderPublicDashboardNav = () => (
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "10px",
-          marginBottom: "22px",
-          background: "white",
-          border: "1px solid #ddd",
-          borderRadius: "18px",
-          padding: "10px",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-          position: "sticky",
-          top: "10px",
-          zIndex: 20,
-        }}
-      >
+      <nav className="bam-public-tabs" aria-label="Public dashboard sections">
         {publicDashboardTabs.map((tab) => {
           const active = publicDashboardTab === tab.key;
 
@@ -7004,62 +6991,26 @@ function Players() {
                 setPublicDashboardTab(tab.key);
                 if (tab.key !== "teams") setSelectedPublicTeam("");
               }}
-              style={{
-                border: active ? "1px solid #111" : "1px solid #e5e5e5",
-                background: active ? "#111" : "#f8f8f8",
-                color: active ? "white" : "#222",
-                borderRadius: "999px",
-                padding: "10px 16px",
-                fontWeight: "800",
-                cursor: "pointer",
-                minWidth: "110px",
-              }}
+              className={`bam-public-tab${active ? " bam-public-tab-active" : ""}`}
             >
-              {tab.icon} {tab.label}
+              <span className="bam-public-tab-icon">{tab.icon}</span>
+              <span>{tab.label}</span>
             </button>
           );
         })}
-      </div>
+      </nav>
     );
 
     return (
-      <div>
-        <div
-          style={{
-            padding: "28px 34px",
-            borderRadius: "24px",
-            color: "white",
-            background: "linear-gradient(135deg,#151515,#303030)",
-            marginBottom: "22px",
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "18px",
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <h1 style={{ margin: 0, fontSize: "36px" }}>🏀 {dashboardTitle}</h1>
+      <div className="bam-public-dashboard">
+        <header className="bam-public-hero">
+          <div className="bam-public-hero-copy">
+            <div className="bam-public-kicker">BAM League Public View</div>
+            <h1 className="bam-public-title">🏀 {dashboardTitle}</h1>
           </div>
 
-          <div
-            style={{
-              border: "1px solid rgba(255,255,255,0.2)",
-              borderRadius: "16px",
-              padding: "14px",
-              background: "rgba(255,255,255,0.08)",
-              minWidth: "260px",
-            }}
-          >
-            <label
-              style={{
-                display: "block",
-                marginBottom: "8px",
-                fontWeight: "bold",
-              }}
-            >
-              เลือกดู Season
-            </label>
+          <div className="bam-public-season-card">
+            <label className="bam-public-season-label">เลือกดู Season</label>
             <select
               value={publicSeasonId}
               onChange={(event) => {
@@ -7068,13 +7019,7 @@ function Players() {
                 setSelectedPublicMatch(null);
                 setSelectedPublicPlayer(null);
               }}
-              style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: "10px",
-                border: "1px solid #ddd",
-                fontSize: "15px",
-              }}
+              className="bam-public-season-select"
             >
               {publicSeasonOptions.map((season) => (
                 <option key={season.id} value={season.id}>
@@ -7083,7 +7028,7 @@ function Players() {
               ))}
             </select>
           </div>
-        </div>
+        </header>
 
         {renderPublicDashboardNav()}
 
@@ -8239,17 +8184,11 @@ function Players() {
 
   if (viewMode === "PUBLIC") {
     return (
-      <div
-        style={{
-          padding: "24px",
-          fontFamily: "inherit",
-          background: "#f5f5f5",
-          minHeight: "100vh",
-        }}
-      >
+      <div className="bam-public-shell">
         <button
+          type="button"
           onClick={() => setViewMode("ADMIN")}
-          style={{ marginBottom: "14px" }}
+          className="bam-public-back-button"
         >
           🔧 Back to Admin Mode
         </button>
