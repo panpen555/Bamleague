@@ -972,3 +972,288 @@
 .bam-public-roster-empty {
   min-height: 180px;
 }
+
+.bam-public-schedule-panel,
+.bam-public-schedule-table-panel {
+  margin-bottom: 22px;
+}
+
+.bam-public-week-list {
+  display: grid;
+  gap: 18px;
+}
+
+.bam-public-week-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 247, 237, 0.86));
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.bam-public-week-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.1;
+  background: repeating-linear-gradient(118deg, transparent 0 20px, rgba(17, 24, 39, 0.32) 21px 23px);
+}
+
+.bam-public-week-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  color: #fffaf2;
+  background:
+    linear-gradient(90deg, #111827 0%, #171717 68%, #c2410c 100%);
+  box-shadow: inset 6px 0 0 #f97316;
+}
+
+.bam-public-week-title {
+  font-size: 18px;
+  font-weight: 1000;
+  letter-spacing: -0.02em;
+}
+
+.bam-public-week-count {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #fed7aa;
+  background: rgba(15, 23, 42, 0.34);
+  font-size: 12px;
+  font-weight: 1000;
+  white-space: nowrap;
+}
+
+.bam-public-match-list {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.bam-public-match-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.bam-public-match-card::after {
+  content: "";
+  position: absolute;
+  right: -44px;
+  bottom: -58px;
+  width: 128px;
+  height: 128px;
+  border: 2px solid rgba(249, 115, 22, 0.18);
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(249, 115, 22, 0.16) 49% 51%, transparent 52%),
+    linear-gradient(0deg, transparent 48%, rgba(249, 115, 22, 0.16) 49% 51%, transparent 52%);
+}
+
+.bam-public-match-card-finished {
+  border-color: rgba(22, 163, 74, 0.16);
+}
+
+.bam-public-match-card-pending {
+  border-color: rgba(249, 115, 22, 0.18);
+}
+
+.bam-public-match-team {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-weight: 750;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.bam-public-match-team-left {
+  justify-content: flex-start;
+}
+
+.bam-public-match-team-right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.bam-public-match-team-winner {
+  font-weight: 1000;
+  transform: translateY(-1px);
+}
+
+.bam-public-match-team-muted {
+  opacity: 0.55;
+}
+
+.bam-public-match-center {
+  position: relative;
+  z-index: 1;
+  min-width: 132px;
+  text-align: center;
+}
+
+.bam-public-match-stage {
+  width: fit-content;
+  margin: 0 auto 7px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #475569;
+  background: rgba(241, 245, 249, 0.9);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bam-public-match-stage-semi-final {
+  color: #5b21b6;
+  background: rgba(237, 233, 254, 0.94);
+}
+
+.bam-public-match-stage-final {
+  color: #92400e;
+  background: rgba(254, 243, 199, 0.96);
+  box-shadow: inset 0 0 0 1px rgba(249, 115, 22, 0.22);
+}
+
+.bam-public-match-stage-third-place {
+  color: #9a3412;
+  background: rgba(255, 237, 213, 0.96);
+}
+
+.bam-public-score-button {
+  min-height: 44px;
+  min-width: 104px;
+  border: 0;
+  border-radius: 16px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 1000;
+  line-height: 1;
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.bam-public-score-button:hover,
+.bam-public-schedule-table-score:hover {
+  transform: translateY(-1px);
+}
+
+.bam-public-score-button:focus-visible,
+.bam-public-schedule-table-score:focus-visible {
+  outline: 3px solid rgba(249, 115, 22, 0.48);
+  outline-offset: 3px;
+}
+
+.bam-public-score-button-finished {
+  color: #052e16;
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  box-shadow: 5px 5px 0 rgba(22, 101, 52, 0.18);
+}
+
+.bam-public-score-button-pending {
+  color: #111827;
+  background: linear-gradient(135deg, #f8fafc, #fff7ed);
+  box-shadow: 5px 5px 0 rgba(249, 115, 22, 0.2);
+}
+
+.bam-public-match-status {
+  width: fit-content;
+  margin: 8px auto 0;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.bam-public-match-status-finished {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.9);
+}
+
+.bam-public-match-status-pending {
+  color: #9a3412;
+  background: rgba(255, 237, 213, 0.92);
+}
+
+.bam-public-schedule-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.bam-public-schedule-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+
+.bam-public-schedule-table th,
+.bam-public-schedule-table td {
+  padding: 10px;
+  text-align: center;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.bam-public-schedule-table th {
+  color: #475569;
+  background: rgba(255, 247, 237, 0.86);
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bam-public-schedule-table th:nth-child(2),
+.bam-public-schedule-table th:nth-child(3),
+.bam-public-schedule-table td:nth-child(2),
+.bam-public-schedule-table td:nth-child(3) {
+  text-align: left;
+}
+
+.bam-public-schedule-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.bam-public-schedule-table-score {
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #111827;
+  background: #dcfce7;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 1000;
+}
+
+.bam-public-schedule-empty {
+  min-height: 220px;
+}

@@ -7455,159 +7455,107 @@ function Players() {
         ) : null}
 
         {publicDashboardTab === "schedule" ? (
-          <div style={{ ...cardStyle, marginBottom: "22px" }}>
-            <h2 style={sectionTitleStyle}>🗓️ Schedule View</h2>
+          <div className="bam-public-panel bam-public-schedule-panel">
+            <h2 className="bam-public-panel-title">🗓️ Schedule View</h2>
             {dashboardSchedule.length === 0 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  color: "#777",
-                  padding: "34px 0",
-                }}
-              >
-                <div style={{ fontSize: "52px" }}>📅</div>
+              <div className="bam-public-empty-state bam-public-schedule-empty">
+                <div className="bam-public-empty-icon">📅</div>
                 <p>ยังไม่มีตารางแข่งขัน</p>
-                <p style={{ fontSize: "13px" }}>
+                <p className="bam-public-empty-subtext">
                   เมื่อสร้าง Schedule แล้ว ตารางจะแสดงที่นี่
                 </p>
               </div>
             ) : (
-              <div style={{ display: "grid", gap: "16px" }}>
+              <div className="bam-public-week-list">
                 {publicScheduleWeeks.map((week) => (
                   <div
                     key={`public-schedule-week-${week}`}
-                    style={{
-                      border: "1px solid #eee",
-                      borderRadius: "18px",
-                      overflow: "hidden",
-                      background: "#fafafa",
-                    }}
+                    className="bam-public-week-card"
                   >
-                    <div
-                      style={{
-                        padding: "12px 16px",
-                        background: "#111",
-                        color: "white",
-                        fontWeight: "800",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "12px",
-                      }}
-                    >
-                      <span>Week {week}</span>
-                      <span style={{ fontSize: "13px", opacity: 0.8 }}>
+                    <div className="bam-public-week-header">
+                      <span className="bam-public-week-title">Week {week}</span>
+                      <span className="bam-public-week-count">
                         {publicScheduleByWeek[week].length} Match
                         {publicScheduleByWeek[week].length > 1 ? "es" : ""}
                       </span>
                     </div>
 
-                    <div
-                      style={{ display: "grid", gap: "10px", padding: "14px" }}
-                    >
+                    <div className="bam-public-match-list">
                       {publicScheduleByWeek[week].map((match) => {
                         const winner = getPublicMatchWinner(match);
                         const isFinished = match.status === "Finished";
                         const isTeamAWinner = winner === match.teamA;
                         const isTeamBWinner = winner === match.teamB;
+                        const stageClassName =
+                          match.label === "Final"
+                            ? " bam-public-match-stage-final"
+                            : match.label === "Semi Final"
+                              ? " bam-public-match-stage-semi-final"
+                              : match.label === "3rd Place"
+                                ? " bam-public-match-stage-third-place"
+                                : "";
 
                         return (
                           <div
                             key={`public-schedule-match-${match.id}`}
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "1fr auto 1fr",
-                              gap: "12px",
-                              alignItems: "center",
-                              padding: "14px",
-                              borderRadius: "16px",
-                              background: "white",
-                              border: "1px solid #eee",
-                            }}
+                            className={`bam-public-match-card ${
+                              isFinished
+                                ? "bam-public-match-card-finished"
+                                : "bam-public-match-card-pending"
+                            }`}
                           >
                             <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                                justifyContent: "flex-start",
-                                fontWeight: isTeamAWinner ? "900" : "600",
-                                opacity:
-                                  isFinished &&
-                                  winner &&
-                                  !isTeamAWinner &&
-                                  winner !== "DRAW"
-                                    ? 0.55
-                                    : 1,
-                              }}
+                              className={`bam-public-match-team bam-public-match-team-left${
+                                isTeamAWinner
+                                  ? " bam-public-match-team-winner"
+                                  : isFinished && winner && winner !== "DRAW"
+                                    ? " bam-public-match-team-muted"
+                                    : ""
+                              }`}
                             >
                               {renderPublicTeamWithLogo(match.teamA, 32)}
                             </div>
 
-                            <div
-                              style={{ textAlign: "center", minWidth: "120px" }}
-                            >
+                            <div className="bam-public-match-center">
                               <div
-                                style={{
-                                  fontSize: "13px",
-                                  fontWeight: "800",
-                                  marginBottom: "6px",
-                                  color:
-                                    match.label === "Final"
-                                      ? "#b45309"
-                                      : match.label === "Semi Final"
-                                        ? "#7c3aed"
-                                        : "#555",
-                                }}
+                                className={`bam-public-match-stage${stageClassName}`}
                               >
                                 {match.label || "League"}
                               </div>
                               <button
                                 type="button"
                                 onClick={() => setSelectedPublicMatch(match)}
+                                aria-label={`View match details: ${match.teamA} vs ${match.teamB}, Week ${match.week}`}
                                 title="กดเพื่อดูสถิติผู้เล่นในแมตช์นี้"
-                                style={{
-                                  fontSize: "22px",
-                                  fontWeight: "900",
-                                  background: isFinished
-                                    ? "#f0fdf4"
-                                    : "#f5f5f5",
-                                  borderRadius: "12px",
-                                  padding: "6px 10px",
-                                  border: "none",
-                                  cursor: "pointer",
-                                }}
+                                className={`bam-public-score-button ${
+                                  isFinished
+                                    ? "bam-public-score-button-finished"
+                                    : "bam-public-score-button-pending"
+                                }`}
                               >
                                 {match.scoreA !== "" && match.scoreB !== ""
                                   ? `${match.scoreA} - ${match.scoreB}`
                                   : "VS"}
                               </button>
                               <div
-                                style={{
-                                  marginTop: "6px",
-                                  fontSize: "12px",
-                                  color: "#777",
-                                }}
+                                className={`bam-public-match-status ${
+                                  isFinished
+                                    ? "bam-public-match-status-finished"
+                                    : "bam-public-match-status-pending"
+                                }`}
                               >
                                 {isFinished ? "Finished" : "Pending"}
                               </div>
                             </div>
 
                             <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                                justifyContent: "flex-end",
-                                fontWeight: isTeamBWinner ? "900" : "600",
-                                opacity:
-                                  isFinished &&
-                                  winner &&
-                                  !isTeamBWinner &&
-                                  winner !== "DRAW"
-                                    ? 0.55
-                                    : 1,
-                              }}
+                              className={`bam-public-match-team bam-public-match-team-right${
+                                isTeamBWinner
+                                  ? " bam-public-match-team-winner"
+                                  : isFinished && winner && winner !== "DRAW"
+                                    ? " bam-public-match-team-muted"
+                                    : ""
+                              }`}
                             >
                               {renderPublicTeamWithLogo(match.teamB, 32)}
                             </div>
@@ -7752,57 +7700,50 @@ function Players() {
         ) : null}
 
         {publicDashboardTab === "schedule" ? (
-          <div style={cardStyle}>
-            <h2>🗓️ Schedule</h2>
+          <div className="bam-public-panel bam-public-schedule-table-panel">
+            <h2 className="bam-public-panel-title">Quick Results</h2>
             {dashboardSchedule.length === 0 ? (
-              <p>ยังไม่มี Schedule</p>
+              <div className="bam-public-empty-state bam-public-schedule-empty">
+                <p>ยังไม่มี Schedule</p>
+              </div>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid #eee" }}>
-                    <th style={{ textAlign: "left", padding: "8px" }}>Week</th>
-                    <th style={{ textAlign: "left", padding: "8px" }}>Stage</th>
-                    <th style={{ textAlign: "left", padding: "8px" }}>Match</th>
-                    <th style={{ padding: "8px" }}>Score</th>
-                    <th style={{ padding: "8px" }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboardSchedule.map((match) => (
-                    <tr
-                      key={`public-schedule-${match.id}`}
-                      style={{ borderBottom: "1px solid #f1f1f1" }}
-                    >
-                      <td style={{ padding: "8px" }}>{match.week}</td>
-                      <td style={{ padding: "8px" }}>{match.label}</td>
-                      <td style={{ padding: "8px" }}>
-                        {match.teamA} vs {match.teamB}
-                      </td>
-                      <td style={{ textAlign: "center", padding: "8px" }}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPublicMatch(match)}
-                          style={{
-                            border: "none",
-                            background: "#f0fdf4",
-                            borderRadius: "8px",
-                            padding: "4px 8px",
-                            cursor: "pointer",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {match.scoreA !== "" && match.scoreB !== ""
-                            ? `${match.scoreA}-${match.scoreB}`
-                            : "VS"}
-                        </button>
-                      </td>
-                      <td style={{ textAlign: "center", padding: "8px" }}>
-                        {match.status}
-                      </td>
+              <div className="bam-public-schedule-table-wrap">
+                <table className="bam-public-schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Week</th>
+                      <th>Stage</th>
+                      <th>Match</th>
+                      <th>Score</th>
+                      <th>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {dashboardSchedule.map((match) => (
+                      <tr key={`public-schedule-${match.id}`}>
+                        <td>{match.week}</td>
+                        <td>{match.label}</td>
+                        <td>
+                          {match.teamA} vs {match.teamB}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPublicMatch(match)}
+                            aria-label={`View match details: ${match.teamA} vs ${match.teamB}, Week ${match.week}`}
+                            className="bam-public-schedule-table-score"
+                          >
+                            {match.scoreA !== "" && match.scoreB !== ""
+                              ? `${match.scoreA}-${match.scoreB}`
+                              : "VS"}
+                          </button>
+                        </td>
+                        <td>{match.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         ) : null}
