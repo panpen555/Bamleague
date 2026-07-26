@@ -27,6 +27,7 @@ import { auth } from "../firebase";
 import {
   uploadPlayerPhoto,
   uploadTeamLogo as uploadTeamLogoToCloud,
+  uploadLeagueAsset,
 } from "../storage";
 
 import "../styles/public-dashboard.css";
@@ -36,6 +37,39 @@ import {
   downloadLeagueBackup,
   clearLeagueBackup,
 } from "../services/cloud/backupService";
+
+const DEFAULT_PUBLIC_BRANDING = {
+  heroImageUrl: "",
+  followBannerImageUrl: "",
+  facebookUrl: "",
+  instagramUrl: "",
+  tiktokUrl: "",
+  youtubeUrl: "",
+  followKicker: "BAM LEAGUE",
+  followTitle: "Follow the league. Feel every game.",
+  followDescription:
+    "ติดตามตารางการแข่งขัน ผลล่าสุด อันดับ และผู้เล่นเด่นของ BAM League ได้จาก Public Dashboard",
+};
+
+const mergePublicBrandingDefaults = (savedPublicBranding) => {
+  const mergedBranding = {
+    ...DEFAULT_PUBLIC_BRANDING,
+    ...(savedPublicBranding &&
+    typeof savedPublicBranding === "object" &&
+    !Array.isArray(savedPublicBranding)
+      ? savedPublicBranding
+      : {}),
+  };
+
+  return Object.fromEntries(
+    Object.entries(DEFAULT_PUBLIC_BRANDING).map(([key, defaultValue]) => [
+      key,
+      typeof mergedBranding[key] === "string"
+        ? mergedBranding[key]
+        : defaultValue,
+    ]),
+  );
+};
 
 /*
 ======================================================
@@ -282,6 +316,19 @@ function Players() {
   const [seasonProjectName, setSeasonProjectName] = useState(() => {
     return localStorage.getItem("seasonProjectName") || "";
   });
+  const [publicBranding, setPublicBranding] = useState(() => {
+    const saved = localStorage.getItem("publicBranding");
+    if (!saved) return { ...DEFAULT_PUBLIC_BRANDING };
+
+    try {
+      const savedPublicBranding = JSON.parse(saved);
+      return mergePublicBrandingDefaults(savedPublicBranding);
+    } catch (error) {
+      return { ...DEFAULT_PUBLIC_BRANDING };
+    }
+  });
+  const [publicHeroImageError, setPublicHeroImageError] = useState(false);
+  const [publicFollowImageError, setPublicFollowImageError] = useState(false);
 
   const getDefaultSeasonProjectName = (
     type = competitionType,
@@ -304,6 +351,8 @@ function Players() {
   );
   const [selectedPublicTeam, setSelectedPublicTeam] = useState("");
   const [publicDashboardTab, setPublicDashboardTab] = useState("overview");
+  const [isPublicTeamsDirectoryOpen, setIsPublicTeamsDirectoryOpen] =
+    useState(false);
   const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
   const [selectedPublicMatch, setSelectedPublicMatch] = useState(null);
   const [cloudStatus, setCloudStatus] = useState("Saved");
@@ -423,6 +472,18 @@ function Players() {
   useEffect(() => {
     localStorage.setItem("seasonHistory", JSON.stringify(seasonHistory));
   }, [seasonHistory]);
+
+  useEffect(() => {
+    localStorage.setItem("publicBranding", JSON.stringify(publicBranding));
+  }, [publicBranding]);
+
+  useEffect(() => {
+    setPublicHeroImageError(false);
+  }, [publicBranding.heroImageUrl]);
+
+  useEffect(() => {
+    setPublicFollowImageError(false);
+  }, [publicBranding.followBannerImageUrl]);
 
   useEffect(() => {
     localStorage.setItem("matchRosters", JSON.stringify(matchRosters));
@@ -1029,6 +1090,76 @@ function Players() {
       delete updated[teamName];
       return updated;
     });
+  };
+
+  const handlePublicBrandingImageUpload = async (
+    brandingKey,
+    assetType,
+    event,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setCloudStatus("Uploading public branding...");
+      const imageUrl = await uploadLeagueAsset(file, assetType);
+      setPublicBranding((previousBranding) => ({
+        ...previousBranding,
+        [brandingKey]: imageUrl,
+      }));
+      setCloudStatus("Saved");
+    } catch (error) {
+      console.error("Public Branding Upload Error:", error);
+      alert(error.message || "Upload Public Branding image failed");
+      setCloudStatus("Upload failed");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const removePublicBrandingImage = (brandingKey) => {
+    setPublicBranding((previousBranding) => ({
+      ...previousBranding,
+      [brandingKey]: "",
+    }));
+  };
+
+  const savePublicBranding = () => {
+    const socialKeys = [
+      "facebookUrl",
+      "instagramUrl",
+      "tiktokUrl",
+      "youtubeUrl",
+    ];
+    const normalizedBranding = Object.fromEntries(
+      Object.entries(publicBranding).map(([key, value]) => [
+        key,
+        typeof value === "string" ? value.trim() : "",
+      ]),
+    );
+    const invalidSocialUrl = socialKeys.find((key) => {
+      const value = normalizedBranding[key];
+      if (!value) return false;
+
+      try {
+        const parsedUrl = new URL(value);
+        return !["http:", "https:"].includes(parsedUrl.protocol);
+      } catch (error) {
+        return true;
+      }
+    });
+
+    if (invalidSocialUrl) {
+      alert("Social URLs must start with http:// or https://");
+      return;
+    }
+
+    setPublicBranding(normalizedBranding);
+    localStorage.setItem(
+      "publicBranding",
+      JSON.stringify(normalizedBranding),
+    );
+    alert("Public Branding saved");
   };
 
   const uploadExistingPlayerPhoto = async (playerId, event) => {
@@ -5134,6 +5265,7 @@ function Players() {
       currentSeason,
       seasonProjectName,
       seasonHistory,
+      publicBranding,
       publishMeta,
       databaseMeta: {
         ...databaseMeta,
@@ -5234,6 +5366,7 @@ function Players() {
     setSeasonHistory(
       Array.isArray(data.seasonHistory) ? data.seasonHistory : [],
     );
+    setPublicBranding(mergePublicBrandingDefaults(data.publicBranding));
     if (data.publishMeta && typeof data.publishMeta === "object") {
       setPublishMeta(data.publishMeta);
     }
@@ -5768,6 +5901,7 @@ function Players() {
     currentSeason,
     seasonProjectName,
     seasonHistory,
+    publicBranding,
     publishMeta,
     databaseMeta: {
       ...databaseMeta,
@@ -7093,6 +7227,51 @@ function Players() {
         isCurrent: false,
       })),
     ];
+    const selectedPublicSeasonOption =
+      publicSeasonOptions.find(
+        (season) => String(season.id) === String(publicSeasonId),
+      ) || publicSeasonOptions[0];
+    const selectedDashboardSeasonTitle =
+      selectedPublicSeasonOption?.projectName || dashboardTitle;
+    const selectedSeasonTitleMatch = String(
+      selectedDashboardSeasonTitle,
+    ).match(/\b(3X3|5X5)\s+Season\s+(\d+)\b/i);
+    const selectedDashboardSeasonContext = selectedSeasonTitleMatch
+      ? `${selectedSeasonTitleMatch[1].toUpperCase()} · SEASON ${selectedSeasonTitleMatch[2]}`
+      : `${selectedPublicSeasonOption.competitionType || dashboardCompetitionType} · SEASON ${
+          selectedPublicSeasonOption.season || dashboardSeason
+        }`;
+    const getSafePublicSocialUrl = (value) => {
+      if (!value) return "";
+
+      try {
+        const parsedUrl = new URL(value);
+        return ["http:", "https:"].includes(parsedUrl.protocol)
+          ? parsedUrl.toString()
+          : "";
+      } catch (error) {
+        return "";
+      }
+    };
+    const publicSocialLinks = [
+      ["Facebook", publicBranding.facebookUrl],
+      ["Instagram", publicBranding.instagramUrl],
+      ["TikTok", publicBranding.tiktokUrl],
+      ["YouTube", publicBranding.youtubeUrl],
+    ].map(([label, url]) => [label, getSafePublicSocialUrl(url)]);
+    const hasPublicHeroImage =
+      Boolean(publicBranding.heroImageUrl.trim()) && !publicHeroImageError;
+    const hasPublicFollowImage =
+      Boolean(publicBranding.followBannerImageUrl.trim()) &&
+      !publicFollowImageError;
+    const publicFollowKicker =
+      publicBranding.followKicker.trim() ||
+      DEFAULT_PUBLIC_BRANDING.followKicker;
+    const publicFollowTitle =
+      publicBranding.followTitle.trim() || DEFAULT_PUBLIC_BRANDING.followTitle;
+    const publicFollowDescription =
+      publicBranding.followDescription.trim() ||
+      DEFAULT_PUBLIC_BRANDING.followDescription;
 
     const renderPublicTeamWithLogo = (teamName, size = 28) => (
       <span
@@ -7349,59 +7528,160 @@ function Players() {
     ];
 
     const renderPublicDashboardNav = () => (
-      <nav className="bam-public-tabs" aria-label="Public dashboard sections">
-        {publicDashboardTabs.map((tab) => {
-          const active = publicDashboardTab === tab.key;
+      <nav
+        className="bam-public-tabs"
+        aria-label="Public dashboard sections"
+        onMouseLeave={() => setIsPublicTeamsDirectoryOpen(false)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            setIsPublicTeamsDirectoryOpen(false);
+          }
+        }}
+      >
+        <div className="bam-public-nav-brand">
+          <strong>BAM LEAGUE</strong>
+          <span>{selectedDashboardSeasonContext}</span>
+        </div>
 
-          return (
-            <button
-              key={`public-dashboard-tab-${tab.key}`}
-              type="button"
-              onClick={() => {
-                setPublicDashboardTab(tab.key);
-                if (tab.key !== "teams") setSelectedPublicTeam("");
-              }}
-              className={`bam-public-tab${active ? " bam-public-tab-active" : ""}`}
-            >
-              <span className="bam-public-tab-icon">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+        <div className="bam-public-nav-links">
+          {publicDashboardTabs.map((tab) => {
+            const active = publicDashboardTab === tab.key;
+            const isTeamsTab = tab.key === "teams";
+
+            return (
+              <button
+                key={`public-dashboard-tab-${tab.key}`}
+                type="button"
+                aria-expanded={
+                  isTeamsTab ? isPublicTeamsDirectoryOpen : undefined
+                }
+                aria-controls={
+                  isTeamsTab ? "bam-public-teams-directory" : undefined
+                }
+                onMouseEnter={() => {
+                  if (isTeamsTab) setIsPublicTeamsDirectoryOpen(true);
+                }}
+                onFocus={() => {
+                  if (isTeamsTab) setIsPublicTeamsDirectoryOpen(true);
+                }}
+                onClick={() => {
+                  setPublicDashboardTab(tab.key);
+                  setIsPublicTeamsDirectoryOpen(
+                    isTeamsTab,
+                  );
+                  if (!isTeamsTab) setSelectedPublicTeam("");
+                }}
+                className={`bam-public-tab${active ? " bam-public-tab-active" : ""}`}
+              >
+                <span className="bam-public-tab-icon">{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="bam-public-nav-season">
+          <label
+            className="bam-public-season-label"
+            htmlFor="bam-public-season-select"
+          >
+            Season
+          </label>
+          <select
+            id="bam-public-season-select"
+            value={publicSeasonId}
+            onChange={(event) => {
+              setPublicSeasonId(event.target.value);
+              setSelectedPublicTeam("");
+              setSelectedPublicMatch(null);
+              setSelectedPublicPlayer(null);
+              closePlayerProfile();
+            }}
+            className="bam-public-season-select"
+          >
+            {publicSeasonOptions.map((season) => (
+              <option key={season.id} value={season.id}>
+                {season.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {isPublicTeamsDirectoryOpen ? (
+          <div
+            id="bam-public-teams-directory"
+            className="bam-public-teams-directory"
+          >
+            <div className="bam-public-teams-directory-heading">
+              <strong>Teams Directory</strong>
+              <span>{dashboardTeamRows.length} teams</span>
+            </div>
+            <div className="bam-public-teams-directory-grid">
+              {dashboardTeamRows.map((team) => (
+                <button
+                  key={`public-directory-${team.name}`}
+                  type="button"
+                  onClick={() => {
+                    setPublicDashboardTab("teams");
+                    setSelectedPublicTeam(team.name);
+                    setIsPublicTeamsDirectoryOpen(false);
+                  }}
+                  className="bam-public-directory-team"
+                >
+                  {dashboardTeamLogos[team.name] ? (
+                    <img
+                      src={dashboardTeamLogos[team.name]}
+                      alt=""
+                      width={32}
+                      height={32}
+                    />
+                  ) : (
+                    <span aria-hidden="true">🏀</span>
+                  )}
+                  <span>{team.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </nav>
     );
 
     return (
       <div className="bam-public-dashboard">
-        <header className="bam-public-hero">
+        {renderPublicDashboardNav()}
+
+        <header
+          className={`bam-public-hero${
+            hasPublicHeroImage ? " bam-public-hero-with-media" : ""
+          }`}
+        >
+          {hasPublicHeroImage ? (
+            <img
+              src={publicBranding.heroImageUrl}
+              alt="BAM League competition"
+              className="bam-public-hero-media"
+              onError={() => setPublicHeroImageError(true)}
+            />
+          ) : null}
           <div className="bam-public-hero-copy">
             <div className="bam-public-kicker">BAM League Public View</div>
-            <h1 className="bam-public-title">🏀 {dashboardTitle}</h1>
-          </div>
-
-          <div className="bam-public-season-card">
-            <label className="bam-public-season-label">เลือกดู Season</label>
-            <select
-              value={publicSeasonId}
-              onChange={(event) => {
-                setPublicSeasonId(event.target.value);
-                setSelectedPublicTeam("");
-                setSelectedPublicMatch(null);
-                setSelectedPublicPlayer(null);
-                closePlayerProfile();
-              }}
-              className="bam-public-season-select"
-            >
-              {publicSeasonOptions.map((season) => (
-                <option key={season.id} value={season.id}>
-                  {season.label}
-                </option>
-              ))}
-            </select>
+            <h1 className="bam-public-title">
+              🏀 {selectedDashboardSeasonTitle}
+            </h1>
+            <div className="bam-public-hero-metrics" aria-label="League totals">
+              <span>
+                <strong>{dashboardTeams.length}</strong> Teams
+              </span>
+              <span>
+                <strong>{dashboardPlayers.length}</strong> Players
+              </span>
+              <span>
+                <strong>{dashboardFinishedMatches}</strong> Finished
+              </span>
+            </div>
           </div>
         </header>
-
-        {renderPublicDashboardNav()}
 
         {publicDashboardTab === "overview" ? (
           <div className="bam-public-summary-grid">
@@ -7559,6 +7839,64 @@ function Players() {
               </>
             )}
           </div>
+        ) : null}
+
+        {publicDashboardTab === "overview" ? (
+          <aside
+            className={`bam-public-follow-panel${
+              hasPublicFollowImage
+                ? " bam-public-follow-panel-with-media"
+                : ""
+            }`}
+          >
+            {hasPublicFollowImage ? (
+              <img
+                src={publicBranding.followBannerImageUrl}
+                alt="BAM League community"
+                className="bam-public-follow-media"
+                loading="lazy"
+                onError={() => setPublicFollowImageError(true)}
+              />
+            ) : null}
+            <div className="bam-public-follow-content">
+              <span className="bam-public-follow-kicker">
+                {publicFollowKicker}
+              </span>
+              <h2>{publicFollowTitle}</h2>
+              <p>{publicFollowDescription}</p>
+              <div className="bam-public-follow-actions">
+                {publicSocialLinks.map(([label, url]) =>
+                  url ? (
+                    <a
+                      key={`public-social-${label}`}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Follow BAM League on ${label}`}
+                      className="bam-public-social-link"
+                    >
+                      {label}
+                    </a>
+                  ) : (
+                    <button
+                      key={`public-social-${label}`}
+                      type="button"
+                      disabled
+                      title="Coming soon"
+                      className="bam-public-social-link bam-public-social-link-disabled"
+                    >
+                      {label}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+            {!hasPublicFollowImage ? (
+              <div className="bam-public-follow-mark" aria-hidden="true">
+                BAM
+              </div>
+            ) : null}
+          </aside>
         ) : null}
 
         {publicDashboardTab === "schedule" ? (
@@ -8706,6 +9044,270 @@ function Players() {
               >
                 Current: {getCurrentSeasonTitle()} | Season {currentSeason}
               </div>
+            </div>
+
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                border: "1px solid #cbd5e1",
+                background: "white",
+                borderRadius: "10px",
+                padding: "14px",
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: "#0f172a" }}>
+                🎨 Public Dashboard Branding
+              </h3>
+              <p style={{ color: "#555", fontSize: "14px" }}>
+                Images upload through the existing league-assets Cloudinary
+                flow. Save branding, then use Upload or Safe Publish to include
+                it in the Cloud backup.
+              </p>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(280px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                {[
+                  {
+                    label: "Public Hero Image",
+                    key: "heroImageUrl",
+                    assetType: "public-hero",
+                    ratio: "16 / 6",
+                  },
+                  {
+                    label: "Follow Banner Image",
+                    key: "followBannerImageUrl",
+                    assetType: "follow-banner",
+                    ratio: "16 / 7",
+                  },
+                ].map((imageSetting) => (
+                  <div
+                    key={`public-branding-${imageSetting.key}`}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "8px",
+                      padding: "12px",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <strong>{imageSetting.label}</strong>
+                    <div
+                      style={{
+                        display: "grid",
+                        placeItems: "center",
+                        aspectRatio: imageSetting.ratio,
+                        margin: "10px 0",
+                        overflow: "hidden",
+                        border: "1px dashed #94a3b8",
+                        borderRadius: "8px",
+                        color: "#64748b",
+                        background: "white",
+                      }}
+                    >
+                      {publicBranding[imageSetting.key] ? (
+                        <img
+                          src={publicBranding[imageSetting.key]}
+                          alt={`${imageSetting.label} preview`}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        <span>No image selected</span>
+                      )}
+                    </div>
+                    <div
+                      style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}
+                    >
+                      <label
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          minHeight: "40px",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          color: "white",
+                          background: "#2563eb",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Upload {imageSetting.label}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(event) =>
+                            handlePublicBrandingImageUpload(
+                              imageSetting.key,
+                              imageSetting.assetType,
+                              event,
+                            )
+                          }
+                          style={{ display: "none" }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removePublicBrandingImage(imageSetting.key)
+                        }
+                        disabled={!publicBranding[imageSetting.key]}
+                        style={{
+                          minHeight: "40px",
+                          border: "1px solid #dc2626",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          color: "#991b1b",
+                          background: "#fef2f2",
+                          cursor: publicBranding[imageSetting.key]
+                            ? "pointer"
+                            : "not-allowed",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Remove {imageSetting.label}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: "16px",
+                  borderTop: "1px solid #e2e8f0",
+                  paddingTop: "14px",
+                }}
+              >
+                <h4 style={{ margin: "0 0 10px", color: "#0f172a" }}>
+                  Follow Banner Text
+                </h4>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(240px, 1fr))",
+                    gap: "10px",
+                  }}
+                >
+                  {[
+                    ["Kicker", "followKicker"],
+                    ["Title", "followTitle"],
+                  ].map(([label, key]) => (
+                    <label key={`public-branding-${key}`}>
+                      {label}
+                      <input
+                        type="text"
+                        value={publicBranding[key]}
+                        onChange={(event) =>
+                          setPublicBranding((previousBranding) => ({
+                            ...previousBranding,
+                            [key]: event.target.value,
+                          }))
+                        }
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          boxSizing: "border-box",
+                          marginTop: "6px",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "8px",
+                          padding: "9px",
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <label style={{ display: "block", marginTop: "10px" }}>
+                  Description
+                  <textarea
+                    value={publicBranding.followDescription}
+                    onChange={(event) =>
+                      setPublicBranding((previousBranding) => ({
+                        ...previousBranding,
+                        followDescription: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      boxSizing: "border-box",
+                      marginTop: "6px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "8px",
+                      padding: "9px",
+                      resize: "vertical",
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "10px",
+                  marginTop: "14px",
+                }}
+              >
+                {[
+                  ["Facebook URL", "facebookUrl"],
+                  ["Instagram URL", "instagramUrl"],
+                  ["TikTok URL", "tiktokUrl"],
+                  ["YouTube URL", "youtubeUrl"],
+                ].map(([label, key]) => (
+                  <label key={`public-branding-${key}`}>
+                    {label}
+                    <input
+                      type="url"
+                      value={publicBranding[key]}
+                      onChange={(event) =>
+                        setPublicBranding((previousBranding) => ({
+                          ...previousBranding,
+                          [key]: event.target.value,
+                        }))
+                      }
+                      placeholder="https://"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        boxSizing: "border-box",
+                        marginTop: "6px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "8px",
+                        padding: "9px",
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={savePublicBranding}
+                style={{
+                  minHeight: "44px",
+                  marginTop: "14px",
+                  border: 0,
+                  borderRadius: "8px",
+                  padding: "10px 16px",
+                  color: "white",
+                  background: "#0f172a",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Save Public Branding
+              </button>
             </div>
           </div>
 
