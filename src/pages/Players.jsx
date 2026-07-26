@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import CloudTools from "../components/cloud/CloudTools";
 import BackupRestoreTools from "../components/cloud/BackupRestoreTools";
 import SeasonManagementTools from "../components/season/SeasonManagementTools";
@@ -307,6 +307,11 @@ function Players() {
   const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
   const [selectedPublicMatch, setSelectedPublicMatch] = useState(null);
   const [cloudStatus, setCloudStatus] = useState("Saved");
+  const [publicCloudLoadState, setPublicCloudLoadState] = useState(() =>
+    isPublicOnlyRoute ? "loading" : "idle",
+  );
+  const [publicCloudRetryKey, setPublicCloudRetryKey] = useState(0);
+  const publicCloudLoadAttemptRef = useRef(null);
   const [adminUser, setAdminUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -3124,7 +3129,9 @@ function Players() {
       archivedData.playerStats && typeof archivedData.playerStats === "object"
         ? archivedData.playerStats
         : {};
-    const archivedPlayerId = String(publicProfileSeasonContext.archivedPlayerId);
+    const archivedPlayerId = String(
+      publicProfileSeasonContext.archivedPlayerId,
+    );
 
     const archivedPlayer = archivedPlayers.find(
       (player) => String(player.id) === archivedPlayerId,
@@ -3150,7 +3157,8 @@ function Players() {
 
     const currentPlayer = players.find(
       (player) =>
-        String(player.id) === String(publicProfileSeasonContext.currentPlayerId),
+        String(player.id) ===
+        String(publicProfileSeasonContext.currentPlayerId),
     );
     const basePlayer = archivedPlayer || currentPlayer || {};
 
@@ -3790,7 +3798,9 @@ function Players() {
                   boxShadow: "5px 5px 0 #6b7280",
                 }}
               >
-                {profileCardView === "career" ? `"${title}"` : `"${seasonViewLabel}"`}
+                {profileCardView === "career"
+                  ? `"${title}"`
+                  : `"${seasonViewLabel}"`}
               </div>
 
               {renderMangaSkillRadar(profile)}
@@ -3880,7 +3890,9 @@ function Players() {
                         color: "#555",
                       }}
                     >
-                      {profileCardView === "career" ? "LEGACY" : seasonViewLabel}
+                      {profileCardView === "career"
+                        ? "LEGACY"
+                        : seasonViewLabel}
                     </div>
                     <div style={{ fontSize: "36px", fontWeight: "1000" }}>
                       {profileCardView === "career" ? legacyScore : "SEASON"}
@@ -3978,7 +3990,9 @@ function Players() {
               >
                 {[
                   [
-                    profile.isSelectedSeasonProfile ? "selectedSeason" : "current",
+                    profile.isSelectedSeasonProfile
+                      ? "selectedSeason"
+                      : "current",
                     profile.isSelectedSeasonProfile
                       ? "Selected Season"
                       : "Current Season",
@@ -4081,7 +4095,9 @@ function Players() {
                         marginTop: "18px",
                       }}
                     >
-                      <h3 style={{ marginTop: 0 }}>📜 {seasonViewTitle} Match Log</h3>
+                      <h3 style={{ marginTop: 0 }}>
+                        📜 {seasonViewTitle} Match Log
+                      </h3>
                       {matchLogs.length === 0 ? (
                         <p style={{ color: "#666" }}>
                           ???????? Match Log ????????????
@@ -5238,6 +5254,29 @@ function Players() {
     setSelectedPublicMatch(null);
   };
 
+  useEffect(() => {
+    if (!isPublicOnlyRoute) return;
+    if (publicCloudLoadAttemptRef.current === publicCloudRetryKey) return;
+
+    publicCloudLoadAttemptRef.current = publicCloudRetryKey;
+    setPublicCloudLoadState("loading");
+
+    downloadLeagueBackup()
+      .then((cloudData) => {
+        if (!cloudData) {
+          setPublicCloudLoadState("empty");
+          return;
+        }
+
+        restoreLeagueData(cloudData);
+        setPublicCloudLoadState("ready");
+      })
+      .catch((error) => {
+        console.error("Public Cloud Download Error:", error);
+        setPublicCloudLoadState("error");
+      });
+  }, [isPublicOnlyRoute, publicCloudRetryKey]);
+
   const importLeagueBackup = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -5444,7 +5483,14 @@ function Players() {
   };
 
   const renderAdminAuthCard = () => (
-    <div style={{ border: "1px solid #c7d2fe", borderRadius: "14px", padding: "14px", background: "#eef2ff" }}>
+    <div
+      style={{
+        border: "1px solid #c7d2fe",
+        borderRadius: "14px",
+        padding: "14px",
+        background: "#eef2ff",
+      }}
+    >
       <h3 style={{ marginTop: 0, color: "#3730a3" }}>Admin Login</h3>
       <p style={{ marginTop: 0, color: "#4338ca", fontSize: "13px" }}>
         Use Google Sign-In to get the Firebase UID for Firestore Rules Phase 2
@@ -5452,10 +5498,25 @@ function Players() {
       {authLoading ? (
         <p style={{ color: "#555" }}>Checking login status...</p>
       ) : adminUser ? (
-        <div style={{ border: "1px solid #a5b4fc", borderRadius: "12px", padding: "10px", background: "white", marginBottom: "10px", wordBreak: "break-word" }}>
-          <div><strong>Name:</strong> {adminUser.displayName || "-"}</div>
-          <div><strong>Email:</strong> {adminUser.email || "-"}</div>
-          <div><strong>Firebase UID:</strong> {adminUser.uid}</div>
+        <div
+          style={{
+            border: "1px solid #a5b4fc",
+            borderRadius: "12px",
+            padding: "10px",
+            background: "white",
+            marginBottom: "10px",
+            wordBreak: "break-word",
+          }}
+        >
+          <div>
+            <strong>Name:</strong> {adminUser.displayName || "-"}
+          </div>
+          <div>
+            <strong>Email:</strong> {adminUser.email || "-"}
+          </div>
+          <div>
+            <strong>Firebase UID:</strong> {adminUser.uid}
+          </div>
         </div>
       ) : (
         <p style={{ color: "#7c2d12", fontSize: "13px" }}>
@@ -5466,11 +5527,38 @@ function Players() {
         <div style={{ color: "#b91c1c", marginBottom: "8px" }}>{authError}</div>
       ) : null}
       {adminUser ? (
-        <button type="button" onClick={signOutAdmin} style={{ width: "100%", padding: "10px", border: "none", borderRadius: "8px", background: "#334155", color: "white", fontWeight: "bold", cursor: "pointer" }}>
+        <button
+          type="button"
+          onClick={signOutAdmin}
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "none",
+            borderRadius: "8px",
+            background: "#334155",
+            color: "white",
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}
+        >
           Sign out
         </button>
       ) : (
-        <button type="button" onClick={signInAdminWithGoogle} disabled={authLoading} style={{ width: "100%", padding: "10px", border: "none", borderRadius: "8px", background: authLoading ? "#94a3b8" : "#2563eb", color: "white", fontWeight: "bold", cursor: authLoading ? "not-allowed" : "pointer" }}>
+        <button
+          type="button"
+          onClick={signInAdminWithGoogle}
+          disabled={authLoading}
+          style={{
+            width: "100%",
+            padding: "10px",
+            border: "none",
+            borderRadius: "8px",
+            background: authLoading ? "#94a3b8" : "#2563eb",
+            color: "white",
+            fontWeight: "bold",
+            cursor: authLoading ? "not-allowed" : "pointer",
+          }}
+        >
           Sign in with Google
         </button>
       )}
@@ -5648,7 +5736,9 @@ function Players() {
             color: "white",
             fontWeight: "bold",
             cursor:
-              isValidated && adminUser && !authLoading ? "pointer" : "not-allowed",
+              isValidated && adminUser && !authLoading
+                ? "pointer"
+                : "not-allowed",
           }}
         >
           🚀 Publish Validated Draft To Cloud
@@ -6507,9 +6597,7 @@ function Players() {
             {playerIdentity}
           </button>
         ) : (
-          <span className="bam-public-leader-identity">
-            {playerIdentity}
-          </span>
+          <span className="bam-public-leader-identity">{playerIdentity}</span>
         )}
         <strong className="bam-public-leader-value">{valueText}</strong>
       </div>
@@ -7390,7 +7478,8 @@ function Players() {
                             key={`public-position-${selectedPublicTeamData.name}-${pos}`}
                             className="bam-public-position-pill"
                           >
-                            {pos} {selectedPublicTeamData.positionSummary?.[pos] || 0}
+                            {pos}{" "}
+                            {selectedPublicTeamData.positionSummary?.[pos] || 0}
                           </span>
                         ))}
                       </div>
@@ -7686,7 +7775,9 @@ function Players() {
             <div className="bam-public-panel bam-public-leader-card">
               <h2 className="bam-public-panel-title">👑 MVP Race</h2>
               {dashboardMvpRace.length === 0 ? (
-                <p className="bam-public-empty-state bam-public-leader-empty">ยังไม่มีข้อมูล MVP</p>
+                <p className="bam-public-empty-state bam-public-leader-empty">
+                  ยังไม่มีข้อมูล MVP
+                </p>
               ) : (
                 dashboardMvpRace.map((player, index) =>
                   renderPublicPlayerRow(
@@ -7702,7 +7793,9 @@ function Players() {
             <div className="bam-public-panel bam-public-leader-card">
               <h2 className="bam-public-panel-title">🎯 Top Scorers</h2>
               {dashboardTopScorers.length === 0 ? (
-                <p className="bam-public-empty-state bam-public-leader-empty">ยังไม่มีข้อมูลคะแนนผู้เล่น</p>
+                <p className="bam-public-empty-state bam-public-leader-empty">
+                  ยังไม่มีข้อมูลคะแนนผู้เล่น
+                </p>
               ) : (
                 dashboardTopScorers.map((player, index) =>
                   renderPublicPlayerRow(
@@ -7795,7 +7888,9 @@ function Players() {
                 <div className="bam-public-match-detail-team-panel">
                   <div className="bam-public-match-detail-team-heading">
                     {renderPublicTeamWithLogo(teamName, 30)}
-                    <span>{rows.length} Player{rows.length === 1 ? "" : "s"}</span>
+                    <span>
+                      {rows.length} Player{rows.length === 1 ? "" : "s"}
+                    </span>
                   </div>
                   {rows.length === 0 ? (
                     <div className="bam-public-empty-state bam-public-match-detail-empty">
@@ -7896,13 +7991,19 @@ function Players() {
 
                     <div className="bam-public-match-detail-scoreboard">
                       <div className="bam-public-match-detail-team bam-public-match-detail-team-left">
-                        {renderPublicTeamWithLogo(selectedPublicMatch.teamA, 46)}
+                        {renderPublicTeamWithLogo(
+                          selectedPublicMatch.teamA,
+                          46,
+                        )}
                       </div>
                       <div className="bam-public-match-detail-score">
                         {matchScoreText}
                       </div>
                       <div className="bam-public-match-detail-team bam-public-match-detail-team-right">
-                        {renderPublicTeamWithLogo(selectedPublicMatch.teamB, 46)}
+                        {renderPublicTeamWithLogo(
+                          selectedPublicMatch.teamB,
+                          46,
+                        )}
                       </div>
                     </div>
 
@@ -7911,7 +8012,8 @@ function Players() {
                         <div className="bam-public-empty-icon">🏀</div>
                         <p>ยังไม่มีสถิติผู้เล่นของ Match นี้</p>
                         <p className="bam-public-empty-subtext">
-                          บันทึก Match Roster และ Player Stats ก่อน ข้อมูลจะแสดงที่นี่
+                          บันทึก Match Roster และ Player Stats ก่อน
+                          ข้อมูลจะแสดงที่นี่
                         </p>
                       </div>
                     ) : (
@@ -8295,6 +8397,30 @@ function Players() {
   };
 
   if (isPublicOnlyRoute || viewMode === "PUBLIC") {
+    if (isPublicOnlyRoute && publicCloudLoadState !== "ready") {
+      return (
+        <div className="bam-public-shell">
+          {publicCloudLoadState === "loading" ? (
+            <p>กำลังโหลดข้อมูล BAM League...</p>
+          ) : publicCloudLoadState === "empty" ? (
+            <p>ยังไม่มีข้อมูล Public Dashboard บน Cloud</p>
+          ) : (
+            <div>
+              <p>โหลดข้อมูลไม่สำเร็จ</p>
+              <button
+                type="button"
+                onClick={() =>
+                  setPublicCloudRetryKey((previousKey) => previousKey + 1)
+                }
+              >
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="bam-public-shell">
         {!isPublicOnlyRoute ? (
@@ -10326,15 +10452,16 @@ function Players() {
               (() => {
                 const profile = getSelectedPlayerProfile();
                 const selectedSeasonForProfile = publicProfileSeasonContext
-      ? seasonHistory.find(
-          (season) =>
-            String(season.id) === String(publicProfileSeasonContext.seasonId),
-        )
-      : null;
-    const matchLogs = getPlayerMatchLog(
-      profile,
-      selectedSeasonForProfile?.archivedData?.schedule || schedule,
-    );
+                  ? seasonHistory.find(
+                      (season) =>
+                        String(season.id) ===
+                        String(publicProfileSeasonContext.seasonId),
+                    )
+                  : null;
+                const matchLogs = getPlayerMatchLog(
+                  profile,
+                  selectedSeasonForProfile?.archivedData?.schedule || schedule,
+                );
 
                 return (
                   <div
