@@ -86,37 +86,138 @@ const getReplayImageUrl = (value) => {
   return /^https?:\/\//i.test(value) ? value : "";
 };
 
+const normalizeConfirmedReplaySnapshot = (snapshot, type) => {
+  const hasValidBase =
+    snapshot?.schemaVersion === LIVE_REPLAY_SCHEMA_VERSION &&
+    snapshot?.status === "confirmed" &&
+    snapshot?.sessionId &&
+    Array.isArray(snapshot?.teams) &&
+    Array.isArray(snapshot?.revealOrder);
+  const hasValidResult =
+    type === "draft"
+      ? snapshot?.teams?.every((team) => Array.isArray(team.players))
+      : Array.isArray(snapshot?.lockedSchedule) &&
+        typeof snapshot?.sourceDraftSessionId === "string";
+
+  if (!hasValidBase || !hasValidResult) return null;
+
+  const normalizedTeams =
+    type === "draft"
+      ? snapshot.teams.map((team) => ({
+          teamId: team.teamId,
+          teamName: String(team.teamName || ""),
+          teamLogo: getReplayImageUrl(team.teamLogo),
+          totalScore: Number(team.totalScore || 0),
+          players: team.players.map((player) => ({
+            id: player.id,
+            bamPlayerId: String(player.bamPlayerId || ""),
+            name: String(player.name || ""),
+            photoUrl: getReplayImageUrl(player.photoUrl),
+            pos1: String(player.pos1 || ""),
+            pos2: String(player.pos2 || ""),
+            tier: String(player.tier || ""),
+            rating: Number(player.rating || 0),
+            lockedGroupName: String(player.lockedGroupName || ""),
+          })),
+        }))
+      : snapshot.teams.map((team) => ({
+          teamId: team.teamId,
+          teamName: String(team.teamName || ""),
+          teamLogo: getReplayImageUrl(team.teamLogo),
+        }));
+
+  const normalized = {
+    schemaVersion: LIVE_REPLAY_SCHEMA_VERSION,
+    sessionId: String(snapshot.sessionId),
+    competitionType: snapshot.competitionType === "3X3" ? "3X3" : "5X5",
+    seasonTitle: String(snapshot.seasonTitle || ""),
+    confirmedAt: String(snapshot.confirmedAt || ""),
+    status: "confirmed",
+    teams: normalizedTeams,
+    revealOrder: snapshot.revealOrder.map((item) => ({ ...item })),
+    displayOnly: true,
+    replayVersion: 0,
+    roundCount:
+      type === "draft"
+        ? Math.max(0, ...normalizedTeams.map((team) => team.players.length))
+        : undefined,
+  };
+
+  if (type === "schedule") {
+    normalized.sourceDraftSessionId = String(snapshot.sourceDraftSessionId);
+    normalized.lockedSchedule = snapshot.lockedSchedule.map((match) => ({
+      ...match,
+    }));
+  }
+
+  return normalized;
+};
+
+const createConfirmedReplayBackupSnapshot = (normalized, type) => {
+  const baseSnapshot = {
+    schemaVersion: normalized.schemaVersion,
+    sessionId: normalized.sessionId,
+    competitionType: normalized.competitionType,
+    seasonTitle: normalized.seasonTitle,
+    confirmedAt: normalized.confirmedAt,
+    status: "confirmed",
+    teams: normalized.teams,
+    revealOrder: normalized.revealOrder,
+  };
+
+  return type === "draft"
+    ? baseSnapshot
+    : {
+        ...baseSnapshot,
+        sourceDraftSessionId: normalized.sourceDraftSessionId,
+        lockedSchedule: normalized.lockedSchedule,
+      };
+};
+
+const getConfirmedReplayBackupSnapshot = (
+  storageKey,
+  type,
+  fallbackSnapshot = null,
+) => {
+  const normalizedFallback = normalizeConfirmedReplaySnapshot(
+    fallbackSnapshot,
+    type,
+  );
+  if (normalizedFallback) {
+    return createConfirmedReplayBackupSnapshot(normalizedFallback, type);
+  }
+
+  const saved = localStorage.getItem(storageKey);
+  if (!saved) return null;
+
+  try {
+    const normalized = normalizeConfirmedReplaySnapshot(
+      JSON.parse(saved),
+      type,
+    );
+    if (!normalized) return null;
+
+    return createConfirmedReplayBackupSnapshot(normalized, type);
+  } catch (error) {
+    console.warn(`Unable to read confirmed ${type} replay backup:`, error);
+    return null;
+  }
+};
+
 const loadConfirmedReplaySnapshot = (storageKey, type) => {
   const saved = localStorage.getItem(storageKey);
   if (!saved) return null;
 
   try {
-    const snapshot = JSON.parse(saved);
-    const hasValidBase =
-      snapshot?.schemaVersion === LIVE_REPLAY_SCHEMA_VERSION &&
-      snapshot?.sessionId &&
-      Array.isArray(snapshot?.teams) &&
-      Array.isArray(snapshot?.revealOrder);
-    const hasValidResult =
-      type === "draft"
-        ? snapshot.teams.every((team) => Array.isArray(team.players))
-        : Array.isArray(snapshot.lockedSchedule);
-
-    if (!hasValidBase || !hasValidResult) {
+    const normalized = normalizeConfirmedReplaySnapshot(
+      JSON.parse(saved),
+      type,
+    );
+    if (!normalized) {
       localStorage.removeItem(storageKey);
       return null;
     }
-
-    return {
-      ...snapshot,
-      status: "confirmed",
-      displayOnly: true,
-      replayVersion: 0,
-      roundCount:
-        type === "draft"
-          ? Math.max(0, ...snapshot.teams.map((team) => team.players.length))
-          : undefined,
-    };
+    return normalized;
   } catch (error) {
     console.warn(`Ignoring invalid ${type} replay snapshot:`, error);
     localStorage.removeItem(storageKey);
@@ -2243,12 +2344,23 @@ function Players() {
   const handleStartLiveDraft = (replaceExisting = false) => {
     if (liveDraftStartGuardRef.current) return;
 
-    if (
-      replaceExisting &&
-      liveDraftSession &&
-      !window.confirm("ต้องการสร้าง Live Draft ใหม่และแทนที่ผลเดิมหรือไม่?")
-    ) {
-      return;
+    const hasExistingDraftData =
+      replaceExisting ||
+      Boolean(liveDraftSession) ||
+      Boolean(
+        getConfirmedReplayBackupSnapshot(LIVE_DRAFT_REPLAY_KEY, "draft"),
+      ) ||
+      teams.length > 0 ||
+      schedule.length > 0 ||
+      players.some((player) => player.available && player.teamName);
+
+    if (hasExistingDraftData) {
+      const confirmCreate = window.confirm(
+        "พบผล Draft/การจัดทีมเดิมอยู่\n\n" +
+          "การสร้าง Live Draft ใหม่จะสร้างผลจับทีมชุดใหม่ แต่ยังไม่เปลี่ยนข้อมูลจริงจนกว่าจะกด Confirm Draft Results\n\n" +
+          "ต้องการสร้าง Draft ใหม่หรือไม่?",
+      );
+      if (!confirmCreate) return;
     }
 
     liveDraftStartGuardRef.current = true;
@@ -2315,6 +2427,28 @@ function Players() {
         "ข้อมูลต้นทางเปลี่ยนแล้ว กรุณาปิด session และ Start Live Draft ใหม่",
       );
       return;
+    }
+
+    const previousConfirmedReplay = getConfirmedReplayBackupSnapshot(
+      LIVE_DRAFT_REPLAY_KEY,
+      "draft",
+    );
+    const isReplacingConfirmedReplay =
+      previousConfirmedReplay?.sessionId &&
+      previousConfirmedReplay.sessionId !== liveDraftSession.sessionId;
+    const hasActualTeamAssignments =
+      teams.length > 0 ||
+      schedule.length > 0 ||
+      players.some((player) => player.teamName);
+
+    if (hasActualTeamAssignments || isReplacingConfirmedReplay) {
+      const confirmOverwrite = window.confirm(
+        "กำลังแทนที่ผล Draft และการจัดทีมเดิม\n\n" +
+          "เมื่อยืนยัน ผู้เล่นจะถูกจัดเข้าทีมตามผล Draft ใหม่นี้\n" +
+          "Schedule Draw เดิมจะถูกทำเครื่องหมายว่าใช้กับ Draft เก่าและต้องสร้างใหม่\n\n" +
+          "ต้องการดำเนินการต่อหรือไม่?",
+      );
+      if (!confirmOverwrite) return;
     }
 
     liveDraftConfirmGuardRef.current = true;
@@ -5829,30 +5963,7 @@ function Players() {
   // ======================================================
 
   const exportLeagueBackup = () => {
-    const backupData = {
-      competitionType,
-      teamCount,
-      teamNames,
-      players,
-      teams,
-      schedule,
-      drafts,
-      matchRosters,
-      playerStats,
-      matchStatInputs,
-      teamLogos,
-      lockGroups,
-      seasonByType,
-      currentSeason,
-      seasonProjectName,
-      seasonHistory,
-      publicBranding,
-      publishMeta,
-      databaseMeta: {
-        ...databaseMeta,
-        version: CORE_DATABASE_VERSION,
-      },
-    };
+    const backupData = getAllBackupData();
 
     const backupFile = {
       app: "BAM_LEAGUE_SYSTEM",
@@ -5958,6 +6069,66 @@ function Players() {
         version: data.databaseMeta.version || CORE_DATABASE_VERSION,
       });
     }
+
+    if (!isPublicOnlyRoute) {
+      const restoreConfirmedReplay = ({
+        field,
+        type,
+        storageKey,
+        setSession,
+        setOpen,
+        setOpenMode,
+      }) => {
+        if (!Object.prototype.hasOwnProperty.call(data, field)) return;
+
+        const rawSnapshot = data[field];
+        if (rawSnapshot === null) {
+          setSession(null);
+          setOpen(false);
+          setOpenMode("resume");
+          localStorage.removeItem(storageKey);
+          return;
+        }
+
+        const normalized = normalizeConfirmedReplaySnapshot(rawSnapshot, type);
+        if (!normalized) {
+          console.warn(`Ignoring malformed backup field: ${field}`);
+          return;
+        }
+
+        setSession(normalized);
+        setOpen(false);
+        setOpenMode("resume");
+        try {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(
+              createConfirmedReplayBackupSnapshot(normalized, type),
+            ),
+          );
+        } catch (error) {
+          console.warn(`Unable to persist restored ${type} replay:`, error);
+        }
+      };
+
+      restoreConfirmedReplay({
+        field: "liveDraftConfirmedReplay",
+        type: "draft",
+        storageKey: LIVE_DRAFT_REPLAY_KEY,
+        setSession: setLiveDraftSession,
+        setOpen: setIsLiveDraftOpen,
+        setOpenMode: setDraftPresentationOpenMode,
+      });
+      restoreConfirmedReplay({
+        field: "liveScheduleConfirmedReplay",
+        type: "schedule",
+        storageKey: LIVE_SCHEDULE_REPLAY_KEY,
+        setSession: setLiveScheduleSession,
+        setOpen: setIsLiveScheduleOpen,
+        setOpenMode: setSchedulePresentationOpenMode,
+      });
+    }
+
     setSelectedLockPlayerIds([]);
     setLockGroupName("");
     setSelectedRosterMatchId("");
@@ -6484,6 +6655,16 @@ function Players() {
     seasonHistory,
     publicBranding,
     publishMeta,
+    liveDraftConfirmedReplay: getConfirmedReplayBackupSnapshot(
+      LIVE_DRAFT_REPLAY_KEY,
+      "draft",
+      liveDraftSession,
+    ),
+    liveScheduleConfirmedReplay: getConfirmedReplayBackupSnapshot(
+      LIVE_SCHEDULE_REPLAY_KEY,
+      "schedule",
+      liveScheduleSession,
+    ),
     databaseMeta: {
       ...databaseMeta,
       version: CORE_DATABASE_VERSION,
