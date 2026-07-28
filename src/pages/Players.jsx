@@ -21,6 +21,8 @@ import MvpRankingPanel from "../components/stats/MvpRankingPanel";
 import PlayerStatLeadersPanel from "../components/stats/PlayerStatLeadersPanel";
 import StatsCenterIntro from "../components/stats/StatsCenterIntro";
 import LeagueSetupCards from "../components/settings/LeagueSetupCards";
+import PublicHighlightCarousel from "../components/public/PublicHighlightCarousel";
+import PublicDashboardFooter from "../components/public/PublicDashboardFooter";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -55,26 +57,87 @@ const DEFAULT_PUBLIC_BRANDING = {
   followTitle: "Follow the league. Feel every game.",
   followDescription:
     "ติดตามตารางการแข่งขัน ผลล่าสุด อันดับ และผู้เล่นเด่นของ BAM League ได้จาก Public Dashboard",
+  highlightSlides: [],
+  highlightAutoplay: true,
+  highlightIntervalSeconds: 6,
 };
 
 const mergePublicBrandingDefaults = (savedPublicBranding) => {
-  const mergedBranding = {
-    ...DEFAULT_PUBLIC_BRANDING,
-    ...(savedPublicBranding &&
+  const source =
+    savedPublicBranding &&
     typeof savedPublicBranding === "object" &&
     !Array.isArray(savedPublicBranding)
       ? savedPublicBranding
-      : {}),
-  };
+      : {};
+  const stringFields = [
+    "heroImageUrl",
+    "followBannerImageUrl",
+    "facebookUrl",
+    "instagramUrl",
+    "tiktokUrl",
+    "youtubeUrl",
+    "followKicker",
+    "followTitle",
+    "followDescription",
+  ];
+  const mergedBranding = { ...DEFAULT_PUBLIC_BRANDING };
 
-  return Object.fromEntries(
-    Object.entries(DEFAULT_PUBLIC_BRANDING).map(([key, defaultValue]) => [
-      key,
-      typeof mergedBranding[key] === "string"
-        ? mergedBranding[key]
-        : defaultValue,
-    ]),
-  );
+  stringFields.forEach((key) => {
+    mergedBranding[key] =
+      typeof source[key] === "string"
+        ? source[key]
+        : DEFAULT_PUBLIC_BRANDING[key];
+  });
+
+  const sourceSlides = Array.isArray(source.highlightSlides)
+    ? source.highlightSlides
+    : /^https?:\/\//i.test(String(source.followBannerImageUrl || ""))
+      ? [
+          {
+            id: "legacy-follow-banner",
+            imageUrl: source.followBannerImageUrl,
+            altText: "BAM League highlight",
+          },
+        ]
+      : [];
+  const usedSlideIds = new Set();
+  mergedBranding.highlightSlides = sourceSlides
+    .map((slide, index) => {
+      if (!slide || typeof slide !== "object") return null;
+      const imageUrl =
+        typeof slide.imageUrl === "string" &&
+        /^https?:\/\//i.test(slide.imageUrl)
+          ? slide.imageUrl.trim()
+          : "";
+      if (!imageUrl) return null;
+
+      const preferredId = String(slide.id || `highlight-slide-${index + 1}`);
+      let id = preferredId;
+      let duplicateIndex = 2;
+      while (usedSlideIds.has(id)) {
+        id = `${preferredId}-${duplicateIndex}`;
+        duplicateIndex += 1;
+      }
+      usedSlideIds.add(id);
+
+      return {
+        id,
+        imageUrl,
+        altText:
+          typeof slide.altText === "string" ? slide.altText.trim() : "",
+      };
+    })
+    .filter(Boolean);
+  mergedBranding.highlightAutoplay =
+    typeof source.highlightAutoplay === "boolean"
+      ? source.highlightAutoplay
+      : DEFAULT_PUBLIC_BRANDING.highlightAutoplay;
+  const parsedInterval = Math.round(Number(source.highlightIntervalSeconds));
+  mergedBranding.highlightIntervalSeconds = Number.isFinite(parsedInterval)
+    ? Math.min(30, Math.max(3, parsedInterval))
+    : DEFAULT_PUBLIC_BRANDING.highlightIntervalSeconds;
+
+  return mergedBranding;
 };
 
 const LIVE_DRAFT_REPLAY_KEY = "bamLiveDraftConfirmedReplay";
@@ -499,7 +562,6 @@ function Players() {
     }
   });
   const [publicHeroImageError, setPublicHeroImageError] = useState(false);
-  const [publicFollowImageError, setPublicFollowImageError] = useState(false);
 
   const getDefaultSeasonProjectName = (
     type = competitionType,
@@ -651,10 +713,6 @@ function Players() {
   useEffect(() => {
     setPublicHeroImageError(false);
   }, [publicBranding.heroImageUrl]);
-
-  useEffect(() => {
-    setPublicFollowImageError(false);
-  }, [publicBranding.followBannerImageUrl]);
 
   useEffect(() => {
     localStorage.setItem("matchRosters", JSON.stringify(matchRosters));
@@ -1295,6 +1353,81 @@ function Players() {
     }));
   };
 
+  const addPublicHighlightSlide = () => {
+    const slideId = `highlight-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 7)}`;
+    setPublicBranding((previousBranding) => ({
+      ...previousBranding,
+      highlightSlides: [
+        ...(previousBranding.highlightSlides || []),
+        { id: slideId, imageUrl: "", altText: "" },
+      ],
+    }));
+  };
+
+  const updatePublicHighlightSlide = (slideId, updates) => {
+    setPublicBranding((previousBranding) => ({
+      ...previousBranding,
+      highlightSlides: (previousBranding.highlightSlides || []).map((slide) =>
+        slide.id === slideId ? { ...slide, ...updates } : slide,
+      ),
+    }));
+  };
+
+  const uploadPublicHighlightSlide = async (slideId, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setCloudStatus("Uploading public highlight...");
+      const imageUrl = await uploadLeagueAsset(
+        file,
+        `public-highlight-${slideId}`,
+      );
+      if (!/^https?:\/\//i.test(String(imageUrl || ""))) {
+        throw new Error("Highlight image must use an HTTP/HTTPS URL");
+      }
+      updatePublicHighlightSlide(slideId, { imageUrl });
+      setCloudStatus("Saved");
+    } catch (error) {
+      console.error("Public Highlight Upload Error:", error);
+      alert(error.message || "Upload Public Highlight image failed");
+      setCloudStatus("Upload failed");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const removePublicHighlightSlide = (slideId) => {
+    setPublicBranding((previousBranding) => ({
+      ...previousBranding,
+      highlightSlides: (previousBranding.highlightSlides || []).filter(
+        (slide) => slide.id !== slideId,
+      ),
+    }));
+  };
+
+  const movePublicHighlightSlide = (slideIndex, direction) => {
+    setPublicBranding((previousBranding) => {
+      const slides = [...(previousBranding.highlightSlides || [])];
+      const targetIndex = slideIndex + direction;
+      if (
+        slideIndex < 0 ||
+        targetIndex < 0 ||
+        slideIndex >= slides.length ||
+        targetIndex >= slides.length
+      ) {
+        return previousBranding;
+      }
+      [slides[slideIndex], slides[targetIndex]] = [
+        slides[targetIndex],
+        slides[slideIndex],
+      ];
+      return { ...previousBranding, highlightSlides: slides };
+    });
+  };
+
   const savePublicBranding = () => {
     const socialKeys = [
       "facebookUrl",
@@ -1302,12 +1435,13 @@ function Players() {
       "tiktokUrl",
       "youtubeUrl",
     ];
-    const normalizedBranding = Object.fromEntries(
+    const trimmedBranding = Object.fromEntries(
       Object.entries(publicBranding).map(([key, value]) => [
         key,
-        typeof value === "string" ? value.trim() : "",
+        typeof value === "string" ? value.trim() : value,
       ]),
     );
+    const normalizedBranding = mergePublicBrandingDefaults(trimmedBranding);
     const invalidSocialUrl = socialKeys.find((key) => {
       const value = normalizedBranding[key];
       if (!value) return false;
@@ -8023,9 +8157,11 @@ function Players() {
     ].map(([label, url]) => [label, getSafePublicSocialUrl(url)]);
     const hasPublicHeroImage =
       Boolean(publicBranding.heroImageUrl.trim()) && !publicHeroImageError;
-    const hasPublicFollowImage =
-      Boolean(publicBranding.followBannerImageUrl.trim()) &&
-      !publicFollowImageError;
+    const publicHighlightSlides = Array.isArray(
+      publicBranding.highlightSlides,
+    )
+      ? publicBranding.highlightSlides
+      : [];
     const publicFollowKicker =
       publicBranding.followKicker.trim() ||
       DEFAULT_PUBLIC_BRANDING.followKicker;
@@ -8602,59 +8738,11 @@ function Players() {
         ) : null}
 
         {publicDashboardTab === "overview" ? (
-          <aside
-            className={`bam-public-follow-panel${
-              hasPublicFollowImage ? " bam-public-follow-panel-with-media" : ""
-            }`}
-          >
-            {hasPublicFollowImage ? (
-              <img
-                src={publicBranding.followBannerImageUrl}
-                alt="BAM League community"
-                className="bam-public-follow-media"
-                loading="lazy"
-                onError={() => setPublicFollowImageError(true)}
-              />
-            ) : null}
-            <div className="bam-public-follow-content">
-              <span className="bam-public-follow-kicker">
-                {publicFollowKicker}
-              </span>
-              <h2>{publicFollowTitle}</h2>
-              <p>{publicFollowDescription}</p>
-              <div className="bam-public-follow-actions">
-                {publicSocialLinks.map(([label, url]) =>
-                  url ? (
-                    <a
-                      key={`public-social-${label}`}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Follow BAM League on ${label}`}
-                      className="bam-public-social-link"
-                    >
-                      {label}
-                    </a>
-                  ) : (
-                    <button
-                      key={`public-social-${label}`}
-                      type="button"
-                      disabled
-                      title="Coming soon"
-                      className="bam-public-social-link bam-public-social-link-disabled"
-                    >
-                      {label}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
-            {!hasPublicFollowImage ? (
-              <div className="bam-public-follow-mark" aria-hidden="true">
-                BAM
-              </div>
-            ) : null}
-          </aside>
+          <PublicHighlightCarousel
+            slides={publicHighlightSlides}
+            autoplay={publicBranding.highlightAutoplay}
+            intervalSeconds={publicBranding.highlightIntervalSeconds}
+          />
         ) : null}
 
         {publicDashboardTab === "schedule" ? (
@@ -9381,6 +9469,14 @@ function Players() {
               );
             })()
           : null}
+
+        <PublicDashboardFooter
+          kicker={publicFollowKicker}
+          title={publicFollowTitle}
+          description={publicFollowDescription}
+          socialLinks={publicSocialLinks}
+          onNavigate={openPublicDashboardTab}
+        />
       </div>
     );
   };
@@ -9713,12 +9809,6 @@ function Players() {
                     assetType: "public-hero",
                     ratio: "16 / 6",
                   },
-                  {
-                    label: "Follow Banner Image",
-                    key: "followBannerImageUrl",
-                    assetType: "follow-banner",
-                    ratio: "16 / 7",
-                  },
                 ].map((imageSetting) => (
                   <div
                     key={`public-branding-${imageSetting.key}`}
@@ -9811,6 +9901,221 @@ function Players() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: "16px",
+                  borderTop: "1px solid #e2e8f0",
+                  paddingTop: "14px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <h4 style={{ margin: 0, color: "#0f172a" }}>
+                    Public Highlight Slider
+                  </h4>
+                  <button type="button" onClick={addPublicHighlightSlide}>
+                    Add Slide
+                  </button>
+                </div>
+
+                {(publicBranding.highlightSlides || []).length === 0 ? (
+                  <p style={{ color: "#64748b" }}>
+                    No highlight slides. The Public carousel will stay hidden.
+                  </p>
+                ) : (
+                  (publicBranding.highlightSlides || []).map(
+                    (slide, slideIndex) => (
+                      <div
+                        key={slide.id}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "180px minmax(220px, 1fr)",
+                          gap: "12px",
+                          marginTop: "12px",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "10px",
+                          padding: "12px",
+                          background: "#f8fafc",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "grid",
+                            placeItems: "center",
+                            minHeight: "105px",
+                            overflow: "hidden",
+                            border: "1px dashed #94a3b8",
+                            borderRadius: "8px",
+                            background: "white",
+                            color: "#64748b",
+                          }}
+                        >
+                          {slide.imageUrl ? (
+                            <img
+                              src={slide.imageUrl}
+                              alt={slide.altText || "Highlight preview"}
+                              style={{
+                                width: "100%",
+                                height: "105px",
+                                objectFit: "cover",
+                              }}
+                            />
+                          ) : (
+                            <span>Upload image</span>
+                          )}
+                        </div>
+                        <div>
+                          <label>
+                            Alt Text
+                            <input
+                              type="text"
+                              value={slide.altText}
+                              onChange={(event) =>
+                                updatePublicHighlightSlide(slide.id, {
+                                  altText: event.target.value,
+                                })
+                              }
+                              style={{
+                                display: "block",
+                                width: "100%",
+                                boxSizing: "border-box",
+                                margin: "6px 0 10px",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: "8px",
+                                padding: "9px",
+                              }}
+                            />
+                          </label>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "7px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <label
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                minHeight: "38px",
+                                borderRadius: "7px",
+                                padding: "7px 10px",
+                                color: "white",
+                                background: "#2563eb",
+                                cursor: "pointer",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              Upload Image
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(event) =>
+                                  uploadPublicHighlightSlide(
+                                    slide.id,
+                                    event,
+                                  )
+                                }
+                                style={{ display: "none" }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                movePublicHighlightSlide(slideIndex, -1)
+                              }
+                              disabled={slideIndex === 0}
+                            >
+                              Move Up
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                movePublicHighlightSlide(slideIndex, 1)
+                              }
+                              disabled={
+                                slideIndex ===
+                                publicBranding.highlightSlides.length - 1
+                              }
+                            >
+                              Move Down
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removePublicHighlightSlide(slide.id)
+                              }
+                            >
+                              Remove Slide
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                  )
+                )}
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "18px",
+                    flexWrap: "wrap",
+                    marginTop: "14px",
+                  }}
+                >
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={publicBranding.highlightAutoplay}
+                      onChange={(event) =>
+                        setPublicBranding((previousBranding) => ({
+                          ...previousBranding,
+                          highlightAutoplay: event.target.checked,
+                        }))
+                      }
+                    />{" "}
+                    Autoplay
+                  </label>
+                  <label>
+                    Interval (3–30 seconds)
+                    <input
+                      type="number"
+                      min="3"
+                      max="30"
+                      step="1"
+                      value={publicBranding.highlightIntervalSeconds}
+                      onChange={(event) =>
+                        setPublicBranding((previousBranding) => ({
+                          ...previousBranding,
+                          highlightIntervalSeconds: Math.min(
+                            30,
+                            Math.max(
+                              3,
+                              Math.round(Number(event.target.value) || 6),
+                            ),
+                          ),
+                        }))
+                      }
+                      style={{
+                        width: "76px",
+                        marginLeft: "8px",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "7px",
+                        padding: "7px",
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
 
               <div

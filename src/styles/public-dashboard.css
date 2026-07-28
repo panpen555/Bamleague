@@ -2604,3 +2604,228 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+.bam-public-highlight-carousel {
+  position: relative;
+  min-height: 320px;
+  margin-top: 22px;
+  overflow: hidden;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  background: #07152f;
+  box-shadow: 0 14px 34px rgba(7, 21, 47, 0.2);
+}
+
+.bam-public-highlight-image {
+  display: block;
+  width: 100%;
+  height: clamp(320px, 42vw, 520px);
+  object-fit: cover;
+  object-position: center;
+}
+
+.bam-public-highlight-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(2, 11, 32, 0.08),
+    rgba(2, 11, 32, 0.04) 58%,
+    rgba(2, 11, 32, 0.58)
+  );
+}
+
+.bam-public-highlight-count {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(7, 21, 47, 0.78);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.bam-public-highlight-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  padding: 0;
+  color: #ffffff;
+  background: rgba(7, 21, 47, 0.72);
+  cursor: pointer;
+  font-size: 34px;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.bam-public-highlight-arrow:hover,
+.bam-public-highlight-arrow:focus-visible {
+  border-color: #f26a21;
+  background: #f26a21;
+  outline: 3px solid rgba(242, 106, 33, 0.35);
+  outline-offset: 2px;
+}
+
+.bam-public-highlight-arrow-prev {
+  left: 16px;
+}
+
+.bam-public-highlight-arrow-next {
+  right: 16px;
+}
+
+.bam-public-highlight-dots {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+
+.bam-public-highlight-dot {
+  width: 12px;
+  height: 12px;
+  min-height: 12px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+
+.bam-public-highlight-dot.is-active {
+  border-color: #f26a21;
+  background: #f26a21;
+}
+
+.bam-public-highlight-dot:focus-visible {
+  outline: 3px solid rgba(242, 106, 33, 0.45);
+  outline-offset: 3px;
+}
+
+.bam-public-footer {
+  margin-top: 28px;
+  overflow: hidden;
+  border-top: 5px solid #f26a21;
+  border-radius: 8px 8px 0 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, #030817, #07152f 55%, #0b1f41);
+  box-shadow: 0 -10px 30px rgba(7, 21, 47, 0.12);
+}
+
+.bam-public-footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(180px, 0.65fr) minmax(220px, 0.8fr);
+  gap: clamp(24px, 4vw, 48px);
+  padding: clamp(30px, 5vw, 54px);
+}
+
+.bam-public-footer h2,
+.bam-public-footer h3,
+.bam-public-footer p {
+  color: inherit;
+}
+
+.bam-public-footer-kicker {
+  color: #f7b58f;
+  font-size: 11px;
+  font-weight: 1000;
+  letter-spacing: 0.18em;
+}
+
+.bam-public-footer-brand h2 {
+  margin: 8px 0 10px;
+  font-size: clamp(26px, 3.5vw, 42px);
+  letter-spacing: -0.035em;
+}
+
+.bam-public-footer-brand p {
+  max-width: 650px;
+  margin: 0;
+  color: #c9d3e3;
+  line-height: 1.65;
+}
+
+.bam-public-footer h3 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.bam-public-footer-nav {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.bam-public-footer-nav button {
+  min-height: 38px;
+  border: 0;
+  padding: 5px 0;
+  color: #c9d3e3;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.bam-public-footer-nav button:hover,
+.bam-public-footer-nav button:focus-visible {
+  color: #f26a21;
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.bam-public-footer .bam-public-follow-actions {
+  margin-top: 0;
+}
+
+.bam-public-footer .bam-public-social-link {
+  width: 46px;
+  height: 46px;
+  min-height: 46px;
+  border-radius: 50%;
+  padding: 0;
+}
+
+.bam-public-footer-copyright {
+  padding: 16px clamp(30px, 5vw, 54px);
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+@media (max-width: 800px) {
+  .bam-public-footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bam-public-highlight-carousel,
+  .bam-public-highlight-image {
+    min-height: 260px;
+    height: 260px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bam-public-highlight-carousel *,
+  .bam-public-footer * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
