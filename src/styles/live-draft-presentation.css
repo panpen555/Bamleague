@@ -1,0 +1,657 @@
+.bam-live-presentation-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 120000;
+  display: none;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #020b20;
+}
+
+.bam-live-presentation-shell-open {
+  display: block;
+}
+
+.bam-live-presentation-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+}
+
+.bam-live-draft {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  min-width: 0;
+  overflow: auto;
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at 75% 15%, rgba(23, 64, 139, 0.62), transparent 34%),
+    linear-gradient(145deg, #020817 0%, #07152f 48%, #0b1f41 100%);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.bam-live-draft-open {
+  display: flex;
+  flex-direction: column;
+}
+
+.bam-live-draft-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 28px;
+  border-bottom: 3px solid #f26a21;
+  background: rgba(3, 12, 30, 0.94);
+  backdrop-filter: blur(12px);
+}
+
+.bam-live-draft-header h1 {
+  margin: 3px 0;
+  font-size: clamp(24px, 2.5vw, 42px);
+  line-height: 1;
+}
+
+.bam-live-draft-kicker,
+.bam-live-draft-meta {
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.bam-live-draft-status {
+  flex: 0 0 auto;
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  color: white;
+  background: #17408b;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bam-live-draft-status-live {
+  background: #c8102e;
+  box-shadow: 0 0 0 7px rgba(200, 16, 46, 0.2);
+}
+
+.bam-live-draft-status-completed,
+.bam-live-draft-status-confirmed {
+  background: #15803d;
+}
+
+.bam-live-draft-layout {
+  display: grid;
+  grid-template-columns: minmax(500px, 1.25fr) minmax(440px, 0.9fr);
+  gap: 22px;
+  flex: 1;
+  padding: 22px 28px;
+}
+
+.bam-live-draft-stage,
+.bam-live-draft-rosters {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 24px;
+  background: rgba(7, 21, 47, 0.76);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.35);
+}
+
+.bam-live-draft-stage {
+  position: relative;
+  display: grid;
+  min-height: 540px;
+  place-items: center;
+  overflow: hidden;
+  padding: 28px;
+}
+
+.bam-live-draft-stage::before {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border: 55px solid rgba(242, 106, 33, 0.09);
+  border-radius: 50%;
+  content: "";
+}
+
+.bam-live-draft-reveal,
+.bam-live-draft-ready {
+  position: relative;
+  z-index: 1;
+  width: min(660px, 100%);
+  text-align: center;
+}
+
+.bam-live-draft-reveal {
+  animation: bam-live-draft-reveal 700ms cubic-bezier(0.2, 0.85, 0.2, 1) both;
+}
+
+.bam-live-draft-team-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  color: #07152f;
+  background: #f8fafc;
+  font-size: 18px;
+}
+
+.bam-live-draft-team-lockup img,
+.bam-live-draft-roster-card header img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.bam-live-draft-player-card {
+  padding: 24px;
+  border: 3px solid #f26a21;
+  border-radius: 28px;
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.98), rgba(226, 232, 240, 0.95));
+  color: #0f172a;
+  box-shadow:
+    0 0 0 8px rgba(23, 64, 139, 0.35),
+    0 28px 80px rgba(0, 0, 0, 0.52);
+}
+
+.bam-live-draft-player-photo {
+  width: 210px;
+  height: 210px;
+  margin: 0 auto 16px;
+  overflow: hidden;
+  border: 7px solid white;
+  border-radius: 50%;
+  background: #dbeafe;
+  box-shadow: 0 0 0 5px #17408b;
+  font-size: 92px;
+  line-height: 210px;
+}
+
+.bam-live-draft-player-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bam-live-draft-pick-label {
+  color: #17408b;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+}
+
+.bam-live-draft-player-card h2 {
+  margin: 7px 0 2px;
+  font-size: clamp(38px, 5vw, 72px);
+  line-height: 0.98;
+}
+
+.bam-live-draft-player-id {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.bam-live-draft-player-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 17px;
+}
+
+.bam-live-draft-player-badges span {
+  padding: 7px 11px;
+  border-radius: 8px;
+  color: white;
+  background: #17408b;
+  font-weight: 800;
+}
+
+.bam-live-draft-ready > span {
+  display: block;
+  font-size: 100px;
+  animation: bam-live-draft-pulse 1.5s ease-in-out infinite;
+}
+
+.bam-live-draft-ready h2 {
+  margin: 8px 0;
+  font-size: clamp(38px, 4vw, 64px);
+}
+
+.bam-live-draft-ready p {
+  color: #cbd5e1;
+  font-size: 18px;
+}
+
+.bam-live-draft-rosters {
+  padding: 20px;
+}
+
+.bam-live-draft-rosters > h2 {
+  margin: 0 0 14px;
+}
+
+.bam-live-draft-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.bam-live-draft-roster-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.76);
+}
+
+.bam-live-draft-roster-card header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 9px;
+  border-bottom: 2px solid #f26a21;
+}
+
+.bam-live-draft-roster-card header div {
+  min-width: 0;
+}
+
+.bam-live-draft-roster-card header strong,
+.bam-live-draft-roster-card header small {
+  display: block;
+}
+
+.bam-live-draft-roster-card header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bam-live-draft-roster-card header small,
+.bam-live-draft-roster-card li small {
+  color: #94a3b8;
+}
+
+.bam-live-draft-roster-card ol {
+  margin: 10px 0 0;
+  padding-left: 24px;
+}
+
+.bam-live-draft-roster-card li {
+  padding: 5px 0;
+  color: #64748b;
+}
+
+.bam-live-draft-roster-card li span,
+.bam-live-draft-roster-card li small {
+  display: block;
+}
+
+.bam-live-draft-roster-card li.is-revealed {
+  color: white;
+}
+
+.bam-live-draft-source-warning {
+  margin: 0 28px 12px;
+  padding: 11px 14px;
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  color: #fee2e2;
+  background: rgba(153, 27, 27, 0.76);
+  font-weight: 800;
+}
+
+.bam-live-draft-controls {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 28px;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(3, 12, 30, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.bam-live-draft-controls button {
+  min-height: 44px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 9px;
+  color: white;
+  background: #17408b;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.bam-live-draft-controls button:hover:not(:disabled),
+.bam-live-draft-controls button:focus-visible {
+  border-color: #f26a21;
+  outline: 3px solid rgba(242, 106, 33, 0.4);
+  outline-offset: 2px;
+  transform: translateY(-1px);
+}
+
+.bam-live-draft-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bam-live-draft-controls .bam-live-draft-confirm {
+  margin-left: auto;
+  background: #15803d;
+}
+
+.bam-live-draft-skip-animation *,
+.bam-live-draft-skip-animation *::before,
+.bam-live-draft-skip-animation *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+@keyframes bam-live-draft-reveal {
+  0% {
+    opacity: 0;
+    filter: brightness(3);
+    transform: translateY(35px) scale(0.84);
+  }
+  45% {
+    opacity: 1;
+    filter: brightness(1.7);
+    transform: translateY(-8px) scale(1.035);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+    transform: none;
+  }
+}
+
+@keyframes bam-live-draft-pulse {
+  50% {
+    transform: scale(1.08) rotate(-4deg);
+  }
+}
+
+@media (max-width: 1050px) {
+  .bam-live-draft-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .bam-live-draft-header,
+  .bam-live-draft-layout,
+  .bam-live-draft-controls {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .bam-live-draft-roster-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bam-live-draft-player-photo {
+    width: 150px;
+    height: 150px;
+    font-size: 64px;
+    line-height: 150px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bam-live-draft *,
+  .bam-live-draft *::before,
+  .bam-live-draft *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.bam-live-schedule {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  min-width: 0;
+  overflow: auto;
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(242, 106, 33, 0.2), transparent 30%),
+    radial-gradient(circle at 82% 12%, rgba(23, 64, 139, 0.65), transparent 38%),
+    linear-gradient(145deg, #020817, #07152f 52%, #0b1f41);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.bam-live-schedule-open {
+  display: flex;
+  flex-direction: column;
+}
+
+.bam-live-schedule .bam-live-draft-header h1 {
+  margin: 3px 0;
+  font-size: clamp(24px, 2.5vw, 42px);
+  line-height: 1;
+}
+
+.bam-live-schedule-layout {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.25fr) minmax(420px, 0.8fr);
+  gap: 22px;
+  flex: 1;
+  padding: 22px 28px;
+}
+
+.bam-live-schedule-stage,
+.bam-live-schedule-board {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 24px;
+  background: rgba(7, 21, 47, 0.8);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.35);
+}
+
+.bam-live-schedule-stage {
+  display: grid;
+  min-height: 540px;
+  place-items: center;
+  overflow: hidden;
+  padding: 28px;
+}
+
+.bam-live-schedule-matchup {
+  width: min(760px, 100%);
+  text-align: center;
+  animation: bam-live-schedule-draw 700ms cubic-bezier(0.2, 0.85, 0.2, 1)
+    both;
+}
+
+.bam-live-schedule-round {
+  color: #93c5fd;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+}
+
+.bam-live-schedule-label {
+  display: inline-block;
+  margin: 12px 0 22px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  color: #07152f;
+  background: #f26a21;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bam-live-schedule-versus {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+}
+
+.bam-live-schedule-team {
+  display: flex;
+  min-width: 0;
+  min-height: 250px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+  color: #0f172a;
+  background: linear-gradient(150deg, #fff, #dbeafe);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.32);
+}
+
+.bam-live-schedule-team img,
+.bam-live-schedule-team > span {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  font-size: 78px;
+  line-height: 120px;
+}
+
+.bam-live-schedule-team strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(25px, 3vw, 44px);
+}
+
+.bam-live-schedule-vs {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  place-items: center;
+  border: 4px solid #f26a21;
+  border-radius: 50%;
+  color: white;
+  background: #07152f;
+  font-size: 25px;
+  font-weight: 1000;
+}
+
+.bam-live-schedule-pending {
+  margin-top: 20px;
+  color: #cbd5e1;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.bam-live-schedule-board {
+  max-height: 690px;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.bam-live-schedule-board > h2 {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  margin: -20px -20px 15px;
+  padding: 18px 20px 13px;
+  background: #07152f;
+}
+
+.bam-live-schedule-week {
+  margin-bottom: 15px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 13px;
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.bam-live-schedule-week h3 {
+  margin: 0 0 8px;
+  color: #f26a21;
+}
+
+.bam-live-schedule-week > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  color: #64748b;
+}
+
+.bam-live-schedule-week > div.is-revealed {
+  color: white;
+}
+
+.bam-live-schedule-week small {
+  color: #94a3b8;
+}
+
+@keyframes bam-live-schedule-draw {
+  0% {
+    opacity: 0;
+    filter: blur(12px) brightness(2.5);
+    transform: scale(0.82) rotateX(18deg);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0) brightness(1.5);
+    transform: scale(1.035);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
+@media (max-width: 1050px) {
+  .bam-live-schedule-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .bam-live-schedule-layout {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .bam-live-schedule-versus {
+    grid-template-columns: 1fr;
+  }
+
+  .bam-live-schedule-team {
+    min-height: 180px;
+  }
+
+  .bam-live-schedule-vs {
+    margin: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bam-live-schedule *,
+  .bam-live-schedule *::before,
+  .bam-live-schedule *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

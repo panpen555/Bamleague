@@ -10,6 +10,9 @@ import AdminHeader from "../components/admin/AdminHeader";
 import AdminNavigation from "../components/admin/AdminNavigation";
 import TeamDashboard from "../components/teams/TeamDashboard";
 import DraftHistory from "../components/drafts/DraftHistory";
+import LiveDraftPresentation from "../components/drafts/LiveDraftPresentation";
+import LiveSchedulePresentation from "../components/drafts/LiveSchedulePresentation";
+import LivePresentationShell from "../components/drafts/LivePresentationShell";
 import SchedulePanel from "../components/schedule/SchedulePanel";
 import MatchRosterModal from "../components/matches/MatchRosterModal";
 import MatchStatsModal from "../components/matches/MatchStatsModal";
@@ -33,6 +36,7 @@ import {
 } from "../storage";
 
 import "../styles/public-dashboard.css";
+import "../styles/live-draft-presentation.css";
 
 import {
   uploadLeagueBackup,
@@ -71,6 +75,53 @@ const mergePublicBrandingDefaults = (savedPublicBranding) => {
         : defaultValue,
     ]),
   );
+};
+
+const LIVE_DRAFT_REPLAY_KEY = "bamLiveDraftConfirmedReplay";
+const LIVE_SCHEDULE_REPLAY_KEY = "bamLiveScheduleConfirmedReplay";
+const LIVE_REPLAY_SCHEMA_VERSION = 1;
+
+const getReplayImageUrl = (value) => {
+  if (typeof value !== "string") return "";
+  return /^https?:\/\//i.test(value) ? value : "";
+};
+
+const loadConfirmedReplaySnapshot = (storageKey, type) => {
+  const saved = localStorage.getItem(storageKey);
+  if (!saved) return null;
+
+  try {
+    const snapshot = JSON.parse(saved);
+    const hasValidBase =
+      snapshot?.schemaVersion === LIVE_REPLAY_SCHEMA_VERSION &&
+      snapshot?.sessionId &&
+      Array.isArray(snapshot?.teams) &&
+      Array.isArray(snapshot?.revealOrder);
+    const hasValidResult =
+      type === "draft"
+        ? snapshot.teams.every((team) => Array.isArray(team.players))
+        : Array.isArray(snapshot.lockedSchedule);
+
+    if (!hasValidBase || !hasValidResult) {
+      localStorage.removeItem(storageKey);
+      return null;
+    }
+
+    return {
+      ...snapshot,
+      status: "confirmed",
+      displayOnly: true,
+      replayVersion: 0,
+      roundCount:
+        type === "draft"
+          ? Math.max(0, ...snapshot.teams.map((team) => team.players.length))
+          : undefined,
+    };
+  } catch (error) {
+    console.warn(`Ignoring invalid ${type} replay snapshot:`, error);
+    localStorage.removeItem(storageKey);
+    return null;
+  }
 };
 
 /*
@@ -140,10 +191,7 @@ function Players() {
   const validTiers = ["SSS+", "S+", "S-", "A+", "A-", "B+", "B-", "C"];
   const validPositions = ["PG", "SG", "SF", "PF", "C"];
   const defaultTeamCount = 4;
-  const teamCountOptions = Array.from(
-    { length: 10 },
-    (_, index) => index + 3,
-  );
+  const teamCountOptions = Array.from({ length: 10 }, (_, index) => index + 3);
   const createDefaultTeamNames = (count) =>
     Array.from(
       { length: count },
@@ -201,6 +249,22 @@ function Players() {
     const saved = localStorage.getItem("drafts");
     return saved ? JSON.parse(saved) : [];
   });
+  const [liveDraftSession, setLiveDraftSession] = useState(() =>
+    loadConfirmedReplaySnapshot(LIVE_DRAFT_REPLAY_KEY, "draft"),
+  );
+  const [isLiveDraftOpen, setIsLiveDraftOpen] = useState(false);
+  const [draftPresentationOpenMode, setDraftPresentationOpenMode] =
+    useState("resume");
+  const liveDraftStartGuardRef = useRef(false);
+  const liveDraftConfirmGuardRef = useRef(false);
+  const [liveScheduleSession, setLiveScheduleSession] = useState(() =>
+    loadConfirmedReplaySnapshot(LIVE_SCHEDULE_REPLAY_KEY, "schedule"),
+  );
+  const [isLiveScheduleOpen, setIsLiveScheduleOpen] = useState(false);
+  const [schedulePresentationOpenMode, setSchedulePresentationOpenMode] =
+    useState("resume");
+  const liveScheduleStartGuardRef = useRef(false);
+  const liveScheduleConfirmGuardRef = useRef(false);
 
   // ======================================================
   // 03. STATE: PLAYER FORM / PLAYER MANAGEMENT
@@ -1161,10 +1225,7 @@ function Players() {
     }
 
     setPublicBranding(normalizedBranding);
-    localStorage.setItem(
-      "publicBranding",
-      JSON.stringify(normalizedBranding),
-    );
+    localStorage.setItem("publicBranding", JSON.stringify(normalizedBranding));
     alert("Public Branding saved");
   };
 
@@ -1653,10 +1714,13 @@ function Players() {
     return blockedTiers.includes(newPlayer.tier);
   };
 
-  const getEliteWarning = (teamPlayers) => {
+  const getEliteWarning = (
+    teamPlayers,
+    draftCompetitionType = competitionType,
+  ) => {
     const hasSSS = teamPlayers.some((p) => p.tier === "SSS+");
 
-    if (competitionType === "3X3") {
+    if (draftCompetitionType === "3X3") {
       const hasBlockedTier = teamPlayers.some((p) =>
         ["SSS+", "S+", "S-", "A+"].includes(p.tier),
       );
@@ -1667,10 +1731,10 @@ function Players() {
     return hasSSS && hasS;
   };
 
-  const shuffleArray = (array) => {
+  const shuffleArray = (array, random = Math.random) => {
     const cloned = [...array];
     for (let i = cloned.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(random() * (i + 1));
       [cloned[i], cloned[j]] = [cloned[j], cloned[i]];
     }
     return cloned;
@@ -1688,7 +1752,7 @@ function Players() {
     return 8;
   };
 
-  const preparePlayersForDraft = (availablePlayers) => {
+  const preparePlayersForDraft = (availablePlayers, random = Math.random) => {
     const groups = {};
 
     availablePlayers.forEach((player) => {
@@ -1700,9 +1764,9 @@ function Players() {
     return Object.keys(groups)
       .sort((a, b) => Number(a) - Number(b))
       .flatMap((group) =>
-        shuffleArray(groups[group]).sort((a, b) => {
+        shuffleArray(groups[group], random).sort((a, b) => {
           const diff = getPlayerScore(b) - getPlayerScore(a);
-          if (Math.abs(diff) <= 5) return Math.random() - 0.5;
+          if (Math.abs(diff) <= 5) return random() - 0.5;
           return diff;
         }),
       );
@@ -1788,7 +1852,10 @@ function Players() {
     passing: teamPlayers.reduce((s, p) => s + Number(p.passing || 0), 0),
   });
 
-  const buildFinalTeams = (baseTeams) => {
+  const buildFinalTeams = (
+    baseTeams,
+    draftCompetitionType = competitionType,
+  ) => {
     return baseTeams.map((team) => {
       const positionSummary = getPositionSummary(team.players);
 
@@ -1798,20 +1865,28 @@ function Players() {
         skillTotals: getTeamSkillTotals(team.players),
         positionSummary,
         missingPositions: getMissingPositions(positionSummary),
-        eliteWarning: getEliteWarning(team.players),
+        eliteWarning: getEliteWarning(team.players, draftCompetitionType),
       };
     });
   };
 
-  const getDraftConflictPenalty = (teamPlayers, player) => {
-    if (competitionType === "3X3") {
+  const getDraftConflictPenalty = (
+    teamPlayers,
+    player,
+    draftCompetitionType = competitionType,
+  ) => {
+    if (draftCompetitionType === "3X3") {
       return has3x3TierConflict(teamPlayers, player) ? 10000 : 0;
     }
 
     return hasEliteConflict(teamPlayers, player) ? 10000 : 0;
   };
 
-  const getBestDraftTeam = (candidateTeams, player) => {
+  const getBestDraftTeam = (
+    candidateTeams,
+    player,
+    draftCompetitionType = competitionType,
+  ) => {
     return [...candidateTeams].sort((a, b) => {
       const aScore = calculateTeamScore(a.players);
       const bScore = calculateTeamScore(b.players);
@@ -1830,8 +1905,16 @@ function Players() {
         (bPos[player.pos1] === 0 ? 40 : 0) +
         (player.pos2 && bPos[player.pos2] === 0 ? 20 : 0);
 
-      const aElitePenalty = getDraftConflictPenalty(a.players, player);
-      const bElitePenalty = getDraftConflictPenalty(b.players, player);
+      const aElitePenalty = getDraftConflictPenalty(
+        a.players,
+        player,
+        draftCompetitionType,
+      );
+      const bElitePenalty = getDraftConflictPenalty(
+        b.players,
+        player,
+        draftCompetitionType,
+      );
 
       const aValue = aScore + aCount * 25 - aNeeds + aElitePenalty;
       const bValue = bScore + bCount * 25 - bNeeds + bElitePenalty;
@@ -1855,35 +1938,18 @@ function Players() {
   // 14. DRAFT ACTIONS
   // ======================================================
 
-  const generateTeams = () => {
-    // Draft Flow:
-    // 1) Filter available players and validate minimums.
-    // 2) Reset team names to neutral Team A/B/C... before drafting.
-    // 3) Place valid lock groups first.
-    // 4) Draft remaining players with rating, position, and elite-tier balance.
-    // 5) Build final team summaries and sync player teamName values.
-    const availablePlayers = players.filter((p) => p.available);
+  const buildSmartDraftResult = ({
+    sourcePlayers,
+    sourceTeamNames,
+    sourceLockGroups,
+    sourceCompetitionType,
+    random = Math.random,
+  }) => {
+    const availablePlayers = sourcePlayers
+      .filter((player) => player.available)
+      .map((player) => ({ ...player }));
 
-    if (availablePlayers.length < teamCount) {
-      alert(`ต้องมีผู้เล่นอย่างน้อย ${teamCount} คน`);
-      return;
-    }
-
-    const minPlayers = getMinPlayersPerGame();
-    if (availablePlayers.length < teamCount * minPlayers) {
-      const confirmGenerate = window.confirm(
-        `จำนวนผู้เล่นอาจไม่พอขั้นต่ำ ${minPlayers} คนต่อทีมสำหรับ ${competitionType}\n` +
-          `ผู้เล่น Available: ${availablePlayers.length} คน / ${teamCount} ทีม\n` +
-          "ต้องการสุ่มทีมต่อหรือไม่?",
-      );
-
-      if (!confirmGenerate) return;
-    }
-
-    // เริ่ม Draft ด้วยชื่อกลางก่อนเสมอ แล้วค่อยแก้ชื่อทีมหลังดราฟ
-    setTeamNames(defaultTeamNames);
-
-    const newTeams = defaultTeamNames.map((name) => ({
+    const newTeams = sourceTeamNames.map((name) => ({
       name,
       players: [],
       lockedGroupName: "",
@@ -1898,7 +1964,7 @@ function Players() {
 
     const usedPlayerIds = new Set();
 
-    const validLockGroups = lockGroups
+    const validLockGroups = sourceLockGroups
       .map((group) => ({
         ...group,
         players: (group.playerIds || [])
@@ -1938,7 +2004,7 @@ function Players() {
         lockedTeam: "",
       }));
 
-    const sortedPlayers = preparePlayersForDraft(remainingPlayers);
+    const sortedPlayers = preparePlayersForDraft(remainingPlayers, random);
 
     const unlockedDraftTeams = newTeams.filter((team) => !team.lockedGroupName);
     const draftCandidateTeams =
@@ -1963,13 +2029,57 @@ function Players() {
       const candidateTeams =
         availableTeams.length > 0 ? availableTeams : draftCandidateTeams;
 
-      const targetTeam = getBestDraftTeam(candidateTeams, player);
+      const targetTeam = getBestDraftTeam(
+        candidateTeams,
+        player,
+        sourceCompetitionType,
+      );
 
       if (!targetTeam) return;
       targetTeam.players.push(player);
     });
 
-    const finalTeams = buildFinalTeams(newTeams);
+    return buildFinalTeams(newTeams, sourceCompetitionType);
+  };
+
+  const prepareSmartDraftResult = () => {
+    const availablePlayers = players.filter((player) => player.available);
+
+    if (availablePlayers.length < teamCount) {
+      alert(`ต้องมีผู้เล่นอย่างน้อย ${teamCount} คน`);
+      return null;
+    }
+
+    const minPlayers = getMinPlayersPerGame();
+    if (availablePlayers.length < teamCount * minPlayers) {
+      const confirmGenerate = window.confirm(
+        `จำนวนผู้เล่นอาจไม่พอขั้นต่ำ ${minPlayers} คนต่อทีมสำหรับ ${competitionType}\n` +
+          `ผู้เล่น Available: ${availablePlayers.length} คน / ${teamCount} ทีม\n` +
+          "ต้องการสุ่มทีมต่อหรือไม่?",
+      );
+
+      if (!confirmGenerate) return null;
+    }
+
+    const sourceTeamNames = [...defaultTeamNames];
+    const resultTeams = buildSmartDraftResult({
+      sourcePlayers: players,
+      sourceTeamNames,
+      sourceLockGroups: lockGroups,
+      sourceCompetitionType: competitionType,
+      random: Math.random,
+    });
+
+    return {
+      teams: resultTeams,
+      teamNames: sourceTeamNames,
+    };
+  };
+
+  const applySmartDraftResult = (draftResult) => {
+    if (!draftResult?.teams?.length) return;
+
+    const finalTeams = draftResult.teams;
 
     const teamMap = {};
     finalTeams.forEach((team) => {
@@ -1978,6 +2088,7 @@ function Players() {
       });
     });
 
+    setTeamNames([...(draftResult.teamNames || defaultTeamNames)]);
     setTeams(finalTeams);
     setPlayers((prevPlayers) =>
       prevPlayers.map((player) =>
@@ -1989,6 +2100,243 @@ function Players() {
           : player,
       ),
     );
+  };
+
+  const generateTeams = () => {
+    const draftResult = prepareSmartDraftResult();
+    if (!draftResult) return;
+    applySmartDraftResult(draftResult);
+  };
+
+  const createLiveDraftSourceFingerprint = ({
+    sourcePlayers = players,
+    sourceCompetitionType = competitionType,
+    sourceTeamCount = teamCount,
+    sourceLockGroups = lockGroups,
+    sourceTeamNames = defaultTeamNames,
+  } = {}) => {
+    const availablePlayerIds = sourcePlayers
+      .filter((player) => player.available)
+      .map((player) => String(player.id))
+      .sort();
+    const availablePlayerDraftData = sourcePlayers
+      .filter((player) => player.available)
+      .map((player) => ({
+        id: String(player.id),
+        rating: getPlayerScore(player),
+        tier: String(player.tier || ""),
+        pos1: String(player.pos1 || ""),
+        pos2: String(player.pos2 || ""),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const normalizedLockGroups = sourceLockGroups
+      .map((group) => ({
+        name: String(group.name || ""),
+        playerIds: (group.playerIds || []).map(String).sort(),
+      }))
+      .sort((a, b) =>
+        `${a.name}:${a.playerIds.join(",")}`.localeCompare(
+          `${b.name}:${b.playerIds.join(",")}`,
+        ),
+      );
+
+    return JSON.stringify({
+      competitionType: sourceCompetitionType,
+      teamCount: sourceTeamCount,
+      availablePlayerIds,
+      availablePlayerDraftData,
+      lockGroups: normalizedLockGroups,
+      teamNames: sourceTeamNames.map(String),
+    });
+  };
+
+  const createLiveDraftSession = (draftResult) => {
+    const lockedResult = JSON.parse(JSON.stringify(draftResult));
+    const presentationTeams = lockedResult.teams.map((team, index) => ({
+      ...team,
+      teamId: `team-${index}`,
+      teamName: team.name,
+      teamLogo: teamLogos[team.name] || "",
+      players: (team.players || []).map((player) => ({
+        ...player,
+        rating: getPlayerScore(player),
+        photoUrl: player.photoUrl || "",
+      })),
+    }));
+    const maxRosterSize = Math.max(
+      0,
+      ...presentationTeams.map((team) => team.players.length),
+    );
+    const revealOrder = [];
+
+    for (let roundIndex = 0; roundIndex < maxRosterSize; roundIndex += 1) {
+      presentationTeams.forEach((team) => {
+        const player = team.players[roundIndex];
+        if (!player) return;
+        revealOrder.push({
+          round: roundIndex + 1,
+          teamId: team.teamId,
+          playerId: player.id,
+        });
+      });
+    }
+
+    return {
+      sessionId: `live-draft-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+      schemaVersion: LIVE_REPLAY_SCHEMA_VERSION,
+      competitionType,
+      seasonTitle: getCurrentSeasonTitle(),
+      teamCount,
+      teamNames: [...lockedResult.teamNames],
+      createdAt: new Date().toISOString(),
+      status: "ready",
+      sourceFingerprint: createLiveDraftSourceFingerprint({
+        sourceTeamNames: lockedResult.teamNames,
+      }),
+      draftResult: lockedResult,
+      teams: presentationTeams,
+      revealOrder,
+      roundCount: maxRosterSize,
+      confirmedAt: null,
+      replayVersion: 0,
+      displayOnly: false,
+    };
+  };
+
+  const persistConfirmedDraftReplay = (session) => {
+    const snapshot = {
+      schemaVersion: LIVE_REPLAY_SCHEMA_VERSION,
+      sessionId: session.sessionId,
+      competitionType: session.competitionType,
+      seasonTitle: session.seasonTitle,
+      confirmedAt: session.confirmedAt,
+      status: "confirmed",
+      teams: session.teams.map((team) => ({
+        teamId: team.teamId,
+        teamName: team.teamName,
+        teamLogo: getReplayImageUrl(team.teamLogo),
+        totalScore: team.totalScore,
+        players: team.players.map((player) => ({
+          id: player.id,
+          bamPlayerId: player.bamPlayerId || "",
+          name: player.name,
+          photoUrl: getReplayImageUrl(player.photoUrl),
+          pos1: player.pos1 || "",
+          pos2: player.pos2 || "",
+          tier: player.tier || "",
+          rating: player.rating,
+          lockedGroupName: player.lockedGroupName || "",
+        })),
+      })),
+      revealOrder: session.revealOrder.map((item) => ({ ...item })),
+    };
+
+    try {
+      localStorage.setItem(LIVE_DRAFT_REPLAY_KEY, JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn("Unable to persist confirmed Live Draft replay:", error);
+    }
+  };
+
+  const handleStartLiveDraft = (replaceExisting = false) => {
+    if (liveDraftStartGuardRef.current) return;
+
+    if (
+      replaceExisting &&
+      liveDraftSession &&
+      !window.confirm("ต้องการสร้าง Live Draft ใหม่และแทนที่ผลเดิมหรือไม่?")
+    ) {
+      return;
+    }
+
+    liveDraftStartGuardRef.current = true;
+    try {
+      const draftResult = prepareSmartDraftResult();
+      if (!draftResult) return;
+      const session = createLiveDraftSession(draftResult);
+      liveDraftConfirmGuardRef.current = false;
+      setLiveDraftSession(session);
+      setDraftPresentationOpenMode("replay");
+      setIsLiveDraftOpen(true);
+    } finally {
+      liveDraftStartGuardRef.current = false;
+    }
+  };
+
+  const handleResumeLiveDraft = () => {
+    if (!liveDraftSession) return;
+    setDraftPresentationOpenMode("resume");
+    setIsLiveDraftOpen(true);
+  };
+
+  const handleReplayConfirmedDraft = () => {
+    if (!liveDraftSession || liveDraftSession.status !== "confirmed") return;
+    setIsLiveScheduleOpen(false);
+    setDraftPresentationOpenMode("replay");
+    setLiveDraftSession((previousSession) => ({
+      ...previousSession,
+      replayVersion: Number(previousSession.replayVersion || 0) + 1,
+    }));
+    setIsLiveDraftOpen(true);
+  };
+
+  const handleOpenConfirmedDraftResults = () => {
+    if (!liveDraftSession || liveDraftSession.status !== "confirmed") return;
+    setIsLiveScheduleOpen(false);
+    setDraftPresentationOpenMode("results");
+    setIsLiveDraftOpen(true);
+  };
+
+  const handleExitLiveDraft = () => {
+    setIsLiveDraftOpen(false);
+  };
+
+  const isLiveDraftSourceChanged =
+    liveDraftSession && !liveDraftSession.displayOnly
+      ? liveDraftSession.sourceFingerprint !==
+        createLiveDraftSourceFingerprint({
+          sourceTeamNames: liveDraftSession.teamNames,
+        })
+      : false;
+
+  const handleConfirmLiveDraft = () => {
+    if (
+      !liveDraftSession ||
+      liveDraftSession.status === "confirmed" ||
+      liveDraftConfirmGuardRef.current
+    ) {
+      return;
+    }
+
+    if (isLiveDraftSourceChanged) {
+      alert(
+        "ข้อมูลต้นทางเปลี่ยนแล้ว กรุณาปิด session และ Start Live Draft ใหม่",
+      );
+      return;
+    }
+
+    liveDraftConfirmGuardRef.current = true;
+    applySmartDraftResult(liveDraftSession.draftResult);
+    const confirmedSession = {
+      ...liveDraftSession,
+      status: "confirmed",
+      confirmedAt: new Date().toISOString(),
+    };
+    setLiveDraftSession(confirmedSession);
+    persistConfirmedDraftReplay(confirmedSession);
+
+    if (
+      liveScheduleSession &&
+      liveScheduleSession.sourceDraftSessionId !== confirmedSession.sessionId
+    ) {
+      setLiveScheduleSession(null);
+      setIsLiveScheduleOpen(false);
+      setSchedulePresentationOpenMode("resume");
+      liveScheduleConfirmGuardRef.current = false;
+      localStorage.removeItem(LIVE_SCHEDULE_REPLAY_KEY);
+    }
   };
 
   // ======================================================
@@ -2336,11 +2684,11 @@ function Players() {
     localStorage.removeItem("matchStatInputs");
   };
 
-  const shuffleScheduleTeamNames = (teamNames) => {
+  const shuffleScheduleTeamNames = (teamNames, random = Math.random) => {
     const shuffledNames = [...teamNames];
 
     for (let index = shuffledNames.length - 1; index > 0; index -= 1) {
-      const randomIndex = Math.floor(Math.random() * (index + 1));
+      const randomIndex = Math.floor(random() * (index + 1));
       [shuffledNames[index], shuffledNames[randomIndex]] = [
         shuffledNames[randomIndex],
         shuffledNames[index],
@@ -2350,20 +2698,8 @@ function Players() {
     return shuffledNames;
   };
 
-  const createSchedule = () => {
-    // Schedule Flow:
-    // 1) Validate enough generated teams.
-    // 2) Build a round-robin league schedule.
-    // 3) Append playoff placeholders based on team count.
-    // 4) Reset selected roster/stat match to avoid stale selections.
-    if (teams.length < 3) {
-      alert("กรุณา Generate Teams อย่างน้อย 3 ทีมก่อน");
-      return;
-    }
-
-    resetScheduleDependentData();
-
-    const names = shuffleScheduleTeamNames(teams.map((team) => team.name));
+  const buildScheduleResult = ({ sourceTeamNames, random = Math.random }) => {
+    const names = shuffleScheduleTeamNames(sourceTeamNames, random);
     const roundRobinNames =
       names.length % 2 === 0 ? [...names] : [...names, "BYE"];
     const totalRounds = roundRobinNames.length - 1;
@@ -2463,7 +2799,246 @@ function Players() {
       );
     }
 
-    setSchedule(newSchedule);
+    return newSchedule;
+  };
+
+  const prepareScheduleResult = () => {
+    if (teams.length < 3) {
+      alert("กรุณา Generate Teams อย่างน้อย 3 ทีมก่อน");
+      return null;
+    }
+
+    return buildScheduleResult({
+      sourceTeamNames: teams.map((team) => team.name),
+      random: Math.random,
+    });
+  };
+
+  const applyScheduleResult = (scheduleResult) => {
+    if (!Array.isArray(scheduleResult)) return;
+    resetScheduleDependentData();
+    setSchedule(scheduleResult);
+  };
+
+  const createSchedule = () => {
+    const scheduleResult = prepareScheduleResult();
+    if (!scheduleResult) return;
+    applyScheduleResult(scheduleResult);
+  };
+
+  const createLiveScheduleSourceFingerprint = (sourceTeams = teams) =>
+    JSON.stringify(
+      sourceTeams.map((team) => ({
+        name: String(team.name || ""),
+        playerIds: (team.players || [])
+          .map((player) => String(player.id))
+          .sort(),
+      })),
+    );
+
+  const createLiveScheduleSession = (scheduleResult) => ({
+    sessionId: `live-schedule-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
+    schemaVersion: LIVE_REPLAY_SCHEMA_VERSION,
+    createdAt: new Date().toISOString(),
+    status: "ready",
+    sourceDraftSessionId: liveDraftSession?.sessionId || "",
+    competitionType,
+    seasonTitle: getCurrentSeasonTitle(),
+    teams: teams.map((team, index) => ({
+      teamId: `team-${index}`,
+      teamName: team.name,
+      teamLogo: teamLogos[team.name] || "",
+    })),
+    lockedSchedule: JSON.parse(JSON.stringify(scheduleResult)),
+    revealOrder: scheduleResult.map((match) => ({ matchId: match.id })),
+    sourceFingerprint: createLiveScheduleSourceFingerprint(),
+    replayVersion: 0,
+    confirmedAt: null,
+    displayOnly: false,
+  });
+
+  const persistConfirmedScheduleReplay = (session) => {
+    const snapshot = {
+      schemaVersion: LIVE_REPLAY_SCHEMA_VERSION,
+      sessionId: session.sessionId,
+      competitionType: session.competitionType,
+      seasonTitle: session.seasonTitle,
+      confirmedAt: session.confirmedAt,
+      status: "confirmed",
+      sourceDraftSessionId: session.sourceDraftSessionId,
+      teams: session.teams.map((team) => ({
+        teamId: team.teamId,
+        teamName: team.teamName,
+        teamLogo: getReplayImageUrl(team.teamLogo),
+      })),
+      lockedSchedule: session.lockedSchedule.map((match) => ({ ...match })),
+      revealOrder: session.revealOrder.map((item) => ({ ...item })),
+    };
+
+    try {
+      localStorage.setItem(LIVE_SCHEDULE_REPLAY_KEY, JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn("Unable to persist confirmed Schedule replay:", error);
+    }
+  };
+
+  const invalidateStaleLiveScheduleSession = () => {
+    setLiveScheduleSession(null);
+    setIsLiveScheduleOpen(false);
+    setSchedulePresentationOpenMode("resume");
+    liveScheduleConfirmGuardRef.current = false;
+    localStorage.removeItem(LIVE_SCHEDULE_REPLAY_KEY);
+  };
+
+  const isLiveScheduleBoundToCurrentDraft = Boolean(
+    liveScheduleSession &&
+      liveDraftSession?.status === "confirmed" &&
+      liveScheduleSession.sourceDraftSessionId === liveDraftSession.sessionId,
+  );
+
+  const handleStartLiveSchedule = (replaceExisting = false) => {
+    if (liveScheduleStartGuardRef.current) return;
+    if (!liveDraftSession || liveDraftSession.status !== "confirmed") {
+      alert("กรุณา Confirm Live Draft ก่อน Start Schedule Draw");
+      return;
+    }
+
+    if (
+      replaceExisting &&
+      liveScheduleSession &&
+      !window.confirm("ต้องการสร้าง Schedule Draw ใหม่และแทนที่ผลเดิมหรือไม่?")
+    ) {
+      return;
+    }
+
+    liveScheduleStartGuardRef.current = true;
+    try {
+      const scheduleResult = prepareScheduleResult();
+      if (!scheduleResult) return;
+      const session = createLiveScheduleSession(scheduleResult);
+      liveScheduleConfirmGuardRef.current = false;
+      setLiveScheduleSession(session);
+      setIsLiveDraftOpen(false);
+      setSchedulePresentationOpenMode("replay");
+      setIsLiveScheduleOpen(true);
+    } finally {
+      liveScheduleStartGuardRef.current = false;
+    }
+  };
+
+  const handleOpenOrStartLiveSchedule = () => {
+    setIsLiveDraftOpen(false);
+    if (!isLiveScheduleBoundToCurrentDraft) {
+      if (liveScheduleSession) {
+        invalidateStaleLiveScheduleSession();
+        alert("Draft เปลี่ยนแล้ว กรุณา Start New Schedule Draw");
+      }
+      handleStartLiveSchedule(false);
+      return;
+    }
+
+    setSchedulePresentationOpenMode(
+      liveScheduleSession.status === "confirmed" ? "results" : "resume",
+    );
+    setIsLiveScheduleOpen(true);
+  };
+
+  const handleReplayConfirmedSchedule = () => {
+    if (!liveScheduleSession || liveScheduleSession.status !== "confirmed") {
+      return;
+    }
+    if (!isLiveScheduleBoundToCurrentDraft) {
+      invalidateStaleLiveScheduleSession();
+      alert("Draft เปลี่ยนแล้ว กรุณา Start New Schedule Draw");
+      return;
+    }
+    setSchedulePresentationOpenMode("replay");
+    setLiveScheduleSession((previousSession) => ({
+      ...previousSession,
+      replayVersion: Number(previousSession.replayVersion || 0) + 1,
+    }));
+    setIsLiveDraftOpen(false);
+    setIsLiveScheduleOpen(true);
+  };
+
+  const handleExitLiveSchedule = () => {
+    setIsLiveScheduleOpen(false);
+  };
+
+  const handleBackToDraftResults = () => {
+    setIsLiveScheduleOpen(false);
+    handleOpenConfirmedDraftResults();
+  };
+
+  const handleBackToScheduleDraw = () => {
+    if (!isLiveScheduleBoundToCurrentDraft) {
+      if (liveScheduleSession) {
+        invalidateStaleLiveScheduleSession();
+        alert("Draft เปลี่ยนแล้ว กรุณา Start New Schedule Draw");
+      }
+      return;
+    }
+    setIsLiveDraftOpen(false);
+    setSchedulePresentationOpenMode(
+      liveScheduleSession.status === "confirmed" ? "results" : "resume",
+    );
+    setIsLiveScheduleOpen(true);
+  };
+
+  const isLiveScheduleSourceChanged =
+    liveScheduleSession && !liveScheduleSession.displayOnly
+      ? liveScheduleSession.sourceFingerprint !==
+        createLiveScheduleSourceFingerprint()
+      : false;
+
+  const handleConfirmLiveSchedule = () => {
+    if (
+      !liveScheduleSession ||
+      liveScheduleSession.status === "confirmed" ||
+      liveScheduleConfirmGuardRef.current
+    ) {
+      return;
+    }
+
+    if (!isLiveScheduleBoundToCurrentDraft) {
+      invalidateStaleLiveScheduleSession();
+      alert("Draft เปลี่ยนแล้ว กรุณา Start New Schedule Draw");
+      return;
+    }
+
+    if (isLiveScheduleSourceChanged) {
+      alert(
+        "ข้อมูลทีมต้นทางเปลี่ยนแล้ว กรุณาปิด session และ Start Schedule Draw ใหม่",
+      );
+      return;
+    }
+
+    const hasDependentMatchData =
+      schedule.length > 0 ||
+      Object.keys(matchRosters).length > 0 ||
+      Object.keys(playerStats).length > 0 ||
+      Object.keys(matchStatInputs).length > 0 ||
+      Boolean(selectedFinalsMvpId);
+    if (
+      hasDependentMatchData &&
+      !window.confirm(
+        "Confirm Schedule จะล้าง Schedule เดิม, Match Rosters, Player Stats, Match Stat Inputs และ Finals MVP selection ต้องการดำเนินการต่อหรือไม่?",
+      )
+    ) {
+      return;
+    }
+
+    liveScheduleConfirmGuardRef.current = true;
+    applyScheduleResult(liveScheduleSession.lockedSchedule);
+    const confirmedSession = {
+      ...liveScheduleSession,
+      status: "confirmed",
+      confirmedAt: new Date().toISOString(),
+    };
+    setLiveScheduleSession(confirmedSession);
+    persistConfirmedScheduleReplay(confirmedSession);
   };
 
   const updateMatchScore = (id, field, value) => {
@@ -7239,9 +7814,9 @@ function Players() {
       ) || publicSeasonOptions[0];
     const selectedDashboardSeasonTitle =
       selectedPublicSeasonOption?.projectName || dashboardTitle;
-    const selectedSeasonTitleMatch = String(
-      selectedDashboardSeasonTitle,
-    ).match(/\b(3X3|5X5)\s+Season\s+(\d+)\b/i);
+    const selectedSeasonTitleMatch = String(selectedDashboardSeasonTitle).match(
+      /\b(3X3|5X5)\s+Season\s+(\d+)\b/i,
+    );
     const selectedDashboardSeasonContext = selectedSeasonTitleMatch
       ? `${selectedSeasonTitleMatch[1].toUpperCase()} · SEASON ${selectedSeasonTitleMatch[2]}`
       : `${selectedPublicSeasonOption.competitionType || dashboardCompetitionType} · SEASON ${
@@ -7572,9 +8147,7 @@ function Players() {
                 }}
                 onClick={() => {
                   setPublicDashboardTab(tab.key);
-                  setIsPublicTeamsDirectoryOpen(
-                    isTeamsTab,
-                  );
+                  setIsPublicTeamsDirectoryOpen(isTeamsTab);
                   if (!isTeamsTab) setSelectedPublicTeam("");
                 }}
                 className={`bam-public-tab${active ? " bam-public-tab-active" : ""}`}
@@ -7850,9 +8423,7 @@ function Players() {
         {publicDashboardTab === "overview" ? (
           <aside
             className={`bam-public-follow-panel${
-              hasPublicFollowImage
-                ? " bam-public-follow-panel-with-media"
-                : ""
+              hasPublicFollowImage ? " bam-public-follow-panel-with-media" : ""
             }`}
           >
             {hasPublicFollowImage ? (
@@ -8950,8 +9521,7 @@ function Players() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(280px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                   gap: "14px",
                 }}
               >
@@ -9075,8 +9645,7 @@ function Players() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns:
-                      "repeat(auto-fit, minmax(240px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
                     gap: "10px",
                   }}
                 >
@@ -9136,8 +9705,7 @@ function Players() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(220px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                   gap: "10px",
                   marginTop: "14px",
                 }}
@@ -9266,6 +9834,89 @@ function Players() {
             >
               Generate {teamCount} Teams
             </button>
+
+            {!liveDraftSession ? (
+              <button
+                type="button"
+                onClick={() => handleStartLiveDraft(false)}
+                style={{ marginRight: "8px", marginBottom: "8px" }}
+              >
+                🎥 Start Live Draft
+              </button>
+            ) : liveDraftSession.status !== "confirmed" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleResumeLiveDraft}
+                  style={{ marginRight: "8px", marginBottom: "8px" }}
+                >
+                  ▶ Resume Live Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStartLiveDraft(true)}
+                  style={{ marginRight: "8px", marginBottom: "8px" }}
+                >
+                  🔄 Create New Live Draft
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleReplayConfirmedDraft}
+                  style={{ marginRight: "8px", marginBottom: "8px" }}
+                >
+                  ▶ Replay Confirmed Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenOrStartLiveSchedule}
+                  style={{ marginRight: "8px", marginBottom: "8px" }}
+                >
+                  {isLiveScheduleBoundToCurrentDraft
+                    ? "📅 Back to Schedule Draw"
+                    : "📅 Start New Schedule Draw"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStartLiveDraft(true)}
+                  style={{ marginRight: "8px", marginBottom: "8px" }}
+                >
+                  🔄 Create New Live Draft
+                </button>
+                {isLiveScheduleBoundToCurrentDraft &&
+                  liveScheduleSession?.status === "confirmed" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleReplayConfirmedSchedule}
+                      style={{ marginRight: "8px", marginBottom: "8px" }}
+                    >
+                      ▶ Replay Confirmed Schedule
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartLiveSchedule(true)}
+                      style={{ marginRight: "8px", marginBottom: "8px" }}
+                    >
+                      🔄 Create New Schedule Draw
+                    </button>
+                  </>
+                )}
+                {isLiveScheduleBoundToCurrentDraft &&
+                  liveScheduleSession &&
+                  liveScheduleSession.status !== "confirmed" && (
+                    <button
+                      type="button"
+                      onClick={handleOpenOrStartLiveSchedule}
+                      style={{ marginRight: "8px", marginBottom: "8px" }}
+                    >
+                      ▶ Resume Schedule Draw
+                    </button>
+                  )}
+              </>
+            )}
 
             <button
               type="button"
@@ -11084,6 +11735,54 @@ function Players() {
         renameDraft={renameDraft}
         deleteDraft={deleteDraft}
       />
+
+      <LivePresentationShell
+        open={isLiveDraftOpen || isLiveScheduleOpen}
+        activeView={isLiveScheduleOpen ? "schedule" : "draft"}
+        onEscape={
+          isLiveScheduleOpen ? handleExitLiveSchedule : handleExitLiveDraft
+        }
+      >
+        {({
+          isFullscreen,
+          onEnterFullscreen,
+          onExitFullscreen,
+        }) => (
+          <>
+            <LiveDraftPresentation
+              open={isLiveDraftOpen}
+              openMode={draftPresentationOpenMode}
+              session={liveDraftSession}
+              sourceChanged={isLiveDraftSourceChanged}
+              onClose={handleExitLiveDraft}
+              onConfirm={handleConfirmLiveDraft}
+              onStartSchedule={handleOpenOrStartLiveSchedule}
+              hasScheduleSession={isLiveScheduleBoundToCurrentDraft}
+              onBackToSchedule={handleBackToScheduleDraw}
+              onReplay={handleReplayConfirmedDraft}
+              onCreateNew={() => handleStartLiveDraft(true)}
+              isFullscreen={isFullscreen}
+              onEnterFullscreen={onEnterFullscreen}
+              onExitFullscreen={onExitFullscreen}
+            />
+
+            <LiveSchedulePresentation
+              open={isLiveScheduleOpen}
+              openMode={schedulePresentationOpenMode}
+              session={liveScheduleSession}
+              sourceChanged={isLiveScheduleSourceChanged}
+              onClose={handleExitLiveSchedule}
+              onConfirm={handleConfirmLiveSchedule}
+              onBackToDraft={handleBackToDraftResults}
+              onReplay={handleReplayConfirmedSchedule}
+              onCreateNew={() => handleStartLiveSchedule(true)}
+              isFullscreen={isFullscreen}
+              onEnterFullscreen={onEnterFullscreen}
+              onExitFullscreen={onExitFullscreen}
+            />
+          </>
+        )}
+      </LivePresentationShell>
 
       {renderPlayerProfileModal()}
     </div>
