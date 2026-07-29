@@ -4493,7 +4493,11 @@ function Players() {
           boxShadow: "8px 8px 0 #111",
         }}
       >
-        <svg viewBox="0 0 300 340" width="100%" style={{ display: "block" }}>
+        <svg
+          viewBox="-45 -20 390 360"
+          width="100%"
+          style={{ display: "block", overflow: "visible" }}
+        >
           <defs>
             <pattern
               id="mangaGrid"
@@ -4510,10 +4514,10 @@ function Players() {
             </pattern>
           </defs>
           <rect
-            x="0"
-            y="0"
-            width="300"
-            height="340"
+            x="-45"
+            y="-20"
+            width="390"
+            height="360"
             fill="url(#mangaGrid)"
             opacity="0.35"
           />
@@ -4548,10 +4552,25 @@ function Players() {
           {skills.map((skill, index) => {
             const angle =
               (-90 + index * (360 / skills.length)) * (Math.PI / 180);
-            const labelRadius = 137;
-            const gradeRadius = 108;
-            const x = center + Math.cos(angle) * labelRadius;
-            const y = center + Math.sin(angle) * labelRadius;
+            const labelRadius = 165;
+            const gradeRadius = 110;
+            const labelX = center + Math.cos(angle) * labelRadius;
+            const labelY =
+              index === 0
+                ? 2
+                : center + Math.sin(angle) * labelRadius;
+            const labelTextAnchor =
+              skill.key === "passing"
+                ? "start"
+                : skill.key === "insideScoring"
+                  ? "end"
+                  : "middle";
+            const x =
+              skill.key === "passing"
+                ? labelX - 23
+                : skill.key === "insideScoring"
+                  ? labelX + 23
+                  : labelX;
             const gx = center + Math.cos(angle) * gradeRadius;
             const gy = center + Math.sin(angle) * gradeRadius;
 
@@ -4567,8 +4586,8 @@ function Players() {
                 />
                 <text
                   x={x}
-                  y={y}
-                  textAnchor="middle"
+                  y={labelY}
+                  textAnchor={labelTextAnchor}
                   dominantBaseline="middle"
                   fontSize="15"
                   fontWeight="900"
