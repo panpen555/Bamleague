@@ -45,6 +45,17 @@ import {
   downloadLeagueBackup,
   clearLeagueBackup,
 } from "../services/cloud/backupService";
+import {
+  assembleSchemaV3LogicalBackup,
+  downloadSchemaV3Season,
+} from "../services/cloud/schemaV3Service";
+import {
+  createSchemaV3MigrationPlan,
+  detectCloudSchemaVersion,
+  estimateFirestorePayloadBytes,
+  normalizeSchemaV3SeasonDocument,
+} from "../services/cloud/schemaV3Mapper";
+import { SCHEMA_V3 } from "../config/firebase";
 
 const DEFAULT_PUBLIC_BRANDING = {
   heroImageUrl: "",
@@ -593,6 +604,18 @@ function Players() {
   );
   const [publicCloudRetryKey, setPublicCloudRetryKey] = useState(0);
   const publicCloudLoadAttemptRef = useRef(null);
+  const [cloudSchemaVersion, setCloudSchemaVersion] = useState(2);
+  const [schemaV3SeasonIndex, setSchemaV3SeasonIndex] = useState([]);
+  const [schemaV3SeasonCache, setSchemaV3SeasonCache] = useState({});
+  const schemaV3SeasonCacheRef = useRef({});
+  const schemaV3SeasonRequestsRef = useRef(new Map());
+  const schemaV3FullHistoryRequestRef = useRef(null);
+  const [schemaV3SelectedSeasonState, setSchemaV3SelectedSeasonState] =
+    useState("idle");
+  const [schemaV3HistoryState, setSchemaV3HistoryState] = useState("idle");
+  const [schemaV3HistoryError, setSchemaV3HistoryError] = useState("");
+  const [schemaV3MigrationPreview, setSchemaV3MigrationPreview] =
+    useState(null);
   const [adminUser, setAdminUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -5324,18 +5347,24 @@ function Players() {
   };
 
   const renderPlayerProfileModal = () => {
+    if (!selectedProfilePlayerId) return null;
+    const isSchemaV3HistoryPending =
+      cloudSchemaVersion === SCHEMA_V3 &&
+      schemaV3HistoryState !== "ready";
     const profile = getSelectedPlayerProfile();
-    if (!selectedProfilePlayerId || !profile) return null;
+    if (!profile && !isSchemaV3HistoryPending) return null;
     const selectedSeasonForProfile = publicProfileSeasonContext
       ? seasonHistory.find(
           (season) =>
             String(season.id) === String(publicProfileSeasonContext.seasonId),
         )
       : null;
-    const matchLogs = getPlayerMatchLog(
-      profile,
-      selectedSeasonForProfile?.archivedData?.schedule || schedule,
-    );
+    const matchLogs = profile
+      ? getPlayerMatchLog(
+          profile,
+          selectedSeasonForProfile?.archivedData?.schedule || schedule,
+        )
+      : [];
 
     return (
       <div
@@ -5384,7 +5413,39 @@ function Players() {
           >
             ×
           </button>
-          {renderMangaPlayerProfileCard(profile, matchLogs)}
+          {cloudSchemaVersion === SCHEMA_V3 &&
+          schemaV3HistoryState !== "ready" ? (
+            <div
+              style={{
+                clear: "both",
+                border: "3px solid #111",
+                borderRadius: "18px",
+                padding: "24px",
+                background: "white",
+                boxShadow: "6px 6px 0 #111",
+                color: "#111",
+              }}
+            >
+              {schemaV3HistoryState === "error" ? (
+                <>
+                  <p>{schemaV3HistoryError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      schemaV3FullHistoryRequestRef.current = null;
+                      ensureAllSeasonsLoaded().catch(() => {});
+                    }}
+                  >
+                    Retry Season History
+                  </button>
+                </>
+              ) : (
+                <p>กำลังโหลด Season History สำหรับ Player Career...</p>
+              )}
+            </div>
+          ) : (
+            renderMangaPlayerProfileCard(profile, matchLogs)
+          )}
         </div>
       </div>
     );
@@ -6357,6 +6418,75 @@ function Players() {
     setSelectedPublicMatch(null);
   };
 
+  const loadSchemaV3SeasonById = async (documentId) => {
+    const normalizedDocumentId = String(documentId || "").trim();
+    if (!normalizedDocumentId) {
+      throw new Error("Schema V3 season document ID is missing.");
+    }
+
+    if (schemaV3SeasonCacheRef.current[normalizedDocumentId]) {
+      return schemaV3SeasonCacheRef.current[normalizedDocumentId];
+    }
+
+    if (schemaV3SeasonRequestsRef.current.has(normalizedDocumentId)) {
+      return schemaV3SeasonRequestsRef.current.get(normalizedDocumentId);
+    }
+
+    const request = downloadSchemaV3Season(normalizedDocumentId)
+      .then((seasonDocument) => {
+        const seasonRecord = normalizeSchemaV3SeasonDocument(
+          seasonDocument,
+          normalizedDocumentId,
+        );
+        const nextCache = {
+          ...schemaV3SeasonCacheRef.current,
+          [normalizedDocumentId]: seasonRecord,
+        };
+        schemaV3SeasonCacheRef.current = nextCache;
+        setSchemaV3SeasonCache(nextCache);
+        return seasonRecord;
+      })
+      .finally(() => {
+        schemaV3SeasonRequestsRef.current.delete(normalizedDocumentId);
+      });
+
+    schemaV3SeasonRequestsRef.current.set(normalizedDocumentId, request);
+    return request;
+  };
+
+  const ensureAllSeasonsLoaded = async () => {
+    if (cloudSchemaVersion !== SCHEMA_V3) return seasonHistory;
+    if (schemaV3FullHistoryRequestRef.current) {
+      return schemaV3FullHistoryRequestRef.current;
+    }
+
+    setSchemaV3HistoryState("loading");
+    setSchemaV3HistoryError("");
+
+    const request = Promise.all(
+      schemaV3SeasonIndex.map((entry) =>
+        loadSchemaV3SeasonById(entry.documentId),
+      ),
+    )
+      .then((fullHistory) => {
+        setSeasonHistory(fullHistory);
+        setSchemaV3HistoryState("ready");
+        return fullHistory;
+      })
+      .catch((error) => {
+        console.error("Schema V3 Full History Load Error:", error);
+        setSchemaV3HistoryState("error");
+        setSchemaV3HistoryError(
+          "โหลด Season History ไม่ครบ จึงยังไม่แสดง Career/Hall of Fame",
+        );
+        schemaV3FullHistoryRequestRef.current = null;
+        throw error;
+      });
+
+    schemaV3FullHistoryRequestRef.current = request;
+    return request;
+  };
+
   useEffect(() => {
     if (!isPublicOnlyRoute) return;
     if (publicCloudLoadAttemptRef.current === publicCloudRetryKey) return;
@@ -6371,6 +6501,28 @@ function Players() {
           return;
         }
 
+        const detectedSchema = detectCloudSchemaVersion(cloudData);
+        if (detectedSchema === SCHEMA_V3) {
+          const seasonIndex = cloudData.data.seasonIndex;
+          schemaV3SeasonCacheRef.current = {};
+          schemaV3SeasonRequestsRef.current.clear();
+          schemaV3FullHistoryRequestRef.current = null;
+          setCloudSchemaVersion(SCHEMA_V3);
+          setSchemaV3SeasonIndex(seasonIndex);
+          setSchemaV3SeasonCache({});
+          setSchemaV3HistoryState(
+            seasonIndex.length === 0 ? "ready" : "idle",
+          );
+          setSchemaV3HistoryError("");
+        } else {
+          setCloudSchemaVersion(detectedSchema);
+          setSchemaV3SeasonIndex([]);
+          setSchemaV3SeasonCache({});
+          schemaV3SeasonCacheRef.current = {};
+          setSchemaV3HistoryState("ready");
+          setSchemaV3HistoryError("");
+        }
+
         restoreLeagueData(cloudData);
         setPublicCloudLoadState("ready");
       })
@@ -6379,6 +6531,66 @@ function Players() {
         setPublicCloudLoadState("error");
       });
   }, [isPublicOnlyRoute, publicCloudRetryKey]);
+
+  useEffect(() => {
+    if (
+      !isPublicOnlyRoute ||
+      cloudSchemaVersion !== SCHEMA_V3 ||
+      publicSeasonId === "CURRENT"
+    ) {
+      setSchemaV3SelectedSeasonState("idle");
+      return undefined;
+    }
+
+    const indexEntry = schemaV3SeasonIndex.find(
+      (entry) => String(entry.documentId) === String(publicSeasonId),
+    );
+    if (!indexEntry) {
+      setSchemaV3SelectedSeasonState("error");
+      return undefined;
+    }
+    if (schemaV3SeasonCacheRef.current[indexEntry.documentId]) {
+      setSchemaV3SelectedSeasonState("ready");
+      return undefined;
+    }
+
+    let isCurrentRequest = true;
+    setSchemaV3SelectedSeasonState("loading");
+    loadSchemaV3SeasonById(indexEntry.documentId)
+      .then(() => {
+        if (isCurrentRequest) setSchemaV3SelectedSeasonState("ready");
+      })
+      .catch((error) => {
+        console.error("Schema V3 Season Load Error:", error);
+        if (isCurrentRequest) setSchemaV3SelectedSeasonState("error");
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [
+    cloudSchemaVersion,
+    isPublicOnlyRoute,
+    publicSeasonId,
+    schemaV3SeasonIndex,
+  ]);
+
+  useEffect(() => {
+    if (
+      cloudSchemaVersion !== SCHEMA_V3 ||
+      !selectedProfilePlayerId ||
+      schemaV3HistoryState === "ready" ||
+      schemaV3HistoryState === "loading"
+    ) {
+      return;
+    }
+
+    ensureAllSeasonsLoaded().catch(() => {});
+  }, [
+    cloudSchemaVersion,
+    schemaV3HistoryState,
+    selectedProfilePlayerId,
+  ]);
 
   const importLeagueBackup = async (event) => {
     const file = event.target.files[0];
@@ -6889,6 +7101,149 @@ function Players() {
     },
   });
 
+  const analyzeSchemaV3Migration = () => {
+    try {
+      const logicalBackup = getAllBackupData();
+      const plan = createSchemaV3MigrationPlan(logicalBackup);
+      setSchemaV3MigrationPreview({
+        ...plan,
+        sourcePayloadBytes: estimateFirestorePayloadBytes(logicalBackup),
+        error: "",
+      });
+    } catch (error) {
+      setSchemaV3MigrationPreview({
+        error: error.message || "Unable to analyze Schema V3 migration.",
+      });
+    }
+  };
+
+  const renderSchemaV3MigrationPreviewCard = () => {
+    const preview = schemaV3MigrationPreview;
+    const validation = preview?.validation;
+    const replaySize = validation?.documents?.find(
+      (document) => document.label === "adminReplay",
+    );
+    const mainSize = validation?.documents?.find(
+      (document) => document.label === "main",
+    );
+
+    return (
+      <div
+        style={{
+          border: "1px solid #bfdbfe",
+          borderRadius: "14px",
+          padding: "14px",
+          background: "#eff6ff",
+        }}
+      >
+        <h3 style={{ marginTop: 0, color: "#1e3a8a" }}>
+          Schema V3 Migration Preview
+        </h3>
+        <p style={{ marginTop: 0, color: "#334155", fontSize: "13px" }}>
+          Read-only analysis จาก logical backup ใน memory ไม่มี Firestore
+          write, stage, promote หรือ cleanup
+        </p>
+        <button
+          type="button"
+          onClick={analyzeSchemaV3Migration}
+          style={{
+            width: "100%",
+            minHeight: "44px",
+            border: "none",
+            borderRadius: "8px",
+            background: "#17408b",
+            color: "white",
+            fontWeight: "bold",
+            cursor: "pointer",
+          }}
+        >
+          Analyze Schema V3 Migration
+        </button>
+
+        {preview?.error ? (
+          <p style={{ color: "#b91c1c", fontWeight: "bold" }}>
+            Blocked: {preview.error}
+          </p>
+        ) : validation ? (
+          <div style={{ marginTop: "12px", fontSize: "13px" }}>
+            <p>
+              Detected schema: <strong>V{preview.detectedSchema}</strong>
+              <br />
+              Current logical payload:{" "}
+              <strong>{preview.sourcePayloadBytes.toLocaleString()} B</strong>
+              <br />
+              Planned V3 main:{" "}
+              <strong>{mainSize?.bytes.toLocaleString() || 0} B</strong>
+              <br />
+              Seasons: <strong>{validation.seasonCount}</strong>
+              <br />
+              Replay document:{" "}
+              <strong>
+                {preview.replayDocument?.liveDraftConfirmedReplay ||
+                preview.replayDocument?.liveScheduleConfirmedReplay
+                  ? "Present"
+                  : "Empty"}{" "}
+                ({replaySize?.bytes.toLocaleString() || 0} B)
+              </strong>
+              <br />
+              Status:{" "}
+              <strong
+                style={{ color: validation.ready ? "#15803d" : "#b91c1c" }}
+              >
+                {validation.ready ? "Ready" : "Blocked"}
+              </strong>
+            </p>
+
+            {preview.seasonDocuments.length > 0 ? (
+              <div style={{ maxHeight: "220px", overflowY: "auto" }}>
+                {preview.seasonDocuments.map((seasonDocument) => {
+                  const size = validation.documents.find(
+                    (document) =>
+                      document.label === seasonDocument.documentId,
+                  );
+                  return (
+                    <div
+                      key={seasonDocument.documentId}
+                      style={{
+                        borderTop: "1px solid #bfdbfe",
+                        padding: "6px 0",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      <strong>{seasonDocument.documentId}</strong>
+                      <br />
+                      {size?.bytes.toLocaleString() || 0} B
+                      {size?.blocker
+                        ? " · BLOCKED"
+                        : size?.warning
+                          ? " · WARNING"
+                          : ""}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {validation.warnings.length > 0 ? (
+              <ul style={{ color: "#92400e" }}>
+                {validation.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+            {validation.errors.length > 0 ? (
+              <ul style={{ color: "#b91c1c" }}>
+                {validation.errors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   const uploadToCloud = async () => {
     if (!requireAdminLogin("Upload To Cloud")) return;
 
@@ -6927,7 +7282,37 @@ function Players() {
         return;
       }
 
-      restoreLeagueData(cloudData);
+      const detectedSchema = detectCloudSchemaVersion(cloudData);
+      if (detectedSchema === SCHEMA_V3 && !adminUser) {
+        setCloudStatus("Login Required");
+        alert(
+          "Schema V3 Admin Download ต้อง Google Sign-In เพื่ออ่าน confirmed replay",
+        );
+        return;
+      }
+
+      const logicalBackup =
+        detectedSchema === SCHEMA_V3
+          ? await assembleSchemaV3LogicalBackup(cloudData, {
+              includeAdminReplay: true,
+            })
+          : cloudData;
+
+      restoreLeagueData(logicalBackup);
+      setCloudSchemaVersion(detectedSchema);
+      if (detectedSchema === SCHEMA_V3) {
+        const fullHistory = logicalBackup.data?.seasonHistory || [];
+        const hydratedCache = Object.fromEntries(
+          cloudData.data.seasonIndex.map((entry, index) => [
+            entry.documentId,
+            fullHistory[index],
+          ]),
+        );
+        setSchemaV3SeasonIndex(cloudData.data.seasonIndex);
+        setSchemaV3SeasonCache(hydratedCache);
+        schemaV3SeasonCacheRef.current = hydratedCache;
+        setSchemaV3HistoryState("ready");
+      }
       setCloudStatus("Cloud Downloaded");
       alert("Download From Cloud สำเร็จ");
     } catch (error) {
@@ -7726,9 +8111,11 @@ function Players() {
     const selectedHistorySeason =
       publicSeasonId === "CURRENT"
         ? null
-        : seasonHistory.find(
-            (season) => String(season.id) === String(publicSeasonId),
-          );
+        : isPublicOnlyRoute && cloudSchemaVersion === SCHEMA_V3
+          ? schemaV3SeasonCache[publicSeasonId] || null
+          : seasonHistory.find(
+              (season) => String(season.id) === String(publicSeasonId),
+            );
 
     const isHistoryView = Boolean(selectedHistorySeason);
     const archivedData = selectedHistorySeason?.archivedData || {};
@@ -8287,6 +8674,36 @@ function Players() {
       ],
     ];
 
+    const publicHistorySeasonOptions =
+      isPublicOnlyRoute && cloudSchemaVersion === SCHEMA_V3
+        ? schemaV3SeasonIndex.map((season) => ({
+            id: String(season.documentId),
+            label:
+              season.projectName ||
+              `${season.competitionType || "5X5"} Season ${
+                season.season || 1
+              }`,
+            projectName:
+              season.projectName ||
+              `${season.competitionType || "5X5"} Season ${
+                season.season || 1
+              }`,
+            competitionType: season.competitionType || "5X5",
+            season: season.season || 1,
+            champion: season.champion || "-",
+            closedAtText: season.closedAtText || "-",
+            isCurrent: false,
+          }))
+        : seasonHistory.map((season) => ({
+            id: String(season.id),
+            label: getSeasonHistoryTitle(season),
+            projectName: getSeasonHistoryTitle(season),
+            competitionType: season.competitionType || "5X5",
+            season: season.season || 1,
+            champion: season.champion || "-",
+            closedAtText: season.closedAtText || "-",
+            isCurrent: false,
+          }));
     const publicSeasonOptions = [
       {
         id: "CURRENT",
@@ -8298,16 +8715,7 @@ function Players() {
         closedAtText: "ยังไม่ปิด Season",
         isCurrent: true,
       },
-      ...seasonHistory.map((season) => ({
-        id: String(season.id),
-        label: getSeasonHistoryTitle(season),
-        projectName: getSeasonHistoryTitle(season),
-        competitionType: season.competitionType || "5X5",
-        season: season.season || 1,
-        champion: season.champion || "-",
-        closedAtText: season.closedAtText || "-",
-        isCurrent: false,
-      })),
+      ...publicHistorySeasonOptions,
     ];
     const selectedPublicSeasonOption =
       publicSeasonOptions.find(
@@ -9821,6 +10229,44 @@ function Players() {
       );
     }
 
+    if (
+      isPublicOnlyRoute &&
+      cloudSchemaVersion === SCHEMA_V3 &&
+      publicSeasonId !== "CURRENT" &&
+      schemaV3SelectedSeasonState !== "ready"
+    ) {
+      return (
+        <div className="bam-public-shell">
+          {schemaV3SelectedSeasonState === "loading" ||
+          schemaV3SelectedSeasonState === "idle" ? (
+            <p>กำลังโหลดข้อมูล Season ที่เลือก...</p>
+          ) : (
+            <div>
+              <p>โหลด Season History ที่เลือกไม่สำเร็จหรือข้อมูลไม่ครบ</p>
+              <button
+                type="button"
+                onClick={() => {
+                  schemaV3SeasonRequestsRef.current.delete(publicSeasonId);
+                  setSchemaV3SelectedSeasonState("loading");
+                  loadSchemaV3SeasonById(publicSeasonId)
+                    .then(() => setSchemaV3SelectedSeasonState("ready"))
+                    .catch(() => setSchemaV3SelectedSeasonState("error"));
+                }}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={() => setPublicSeasonId("CURRENT")}
+              >
+                Back to Current Season
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="bam-public-shell">
         {!isPublicOnlyRoute ? (
@@ -9918,6 +10364,7 @@ function Players() {
             />
 
             {renderSafeCloudPublishCard()}
+            {renderSchemaV3MigrationPreviewCard()}
 
             <CloudTools
               cloudStatus={cloudStatus}
