@@ -123,8 +123,7 @@ const mergePublicBrandingDefaults = (savedPublicBranding) => {
       return {
         id,
         imageUrl,
-        altText:
-          typeof slide.altText === "string" ? slide.altText.trim() : "",
+        altText: typeof slide.altText === "string" ? slide.altText.trim() : "",
       };
     })
     .filter(Boolean);
@@ -3162,8 +3161,8 @@ function Players() {
 
   const isLiveScheduleBoundToCurrentDraft = Boolean(
     liveScheduleSession &&
-      liveDraftSession?.status === "confirmed" &&
-      liveScheduleSession.sourceDraftSessionId === liveDraftSession.sessionId,
+    liveDraftSession?.status === "confirmed" &&
+    liveScheduleSession.sourceDraftSessionId === liveDraftSession.sessionId,
   );
 
   const handleStartLiveSchedule = (replaceExisting = false) => {
@@ -5086,17 +5085,50 @@ function Players() {
                         <table
                           style={{
                             width: "100%",
+                            tableLayout: "fixed",
                             borderCollapse: "collapse",
                             fontSize: "13px",
                           }}
                         >
+                          <colgroup>
+                            <col style={{ width: "10%" }} />
+                            <col style={{ width: "36%" }} />
+                            <col style={{ width: "18%" }} />
+                            <col style={{ width: "18%" }} />
+                            <col style={{ width: "18%" }} />
+                          </colgroup>
                           <thead>
                             <tr>
-                              <th>W</th>
-                              <th>OPP</th>
-                              <th>PTS</th>
-                              <th>REB</th>
-                              <th>AST</th>
+                              <th
+                                style={{
+                                  boxSizing: "border-box",
+                                  padding: "8px 6px",
+                                  textAlign: "center",
+                                }}
+                              >
+                                W
+                              </th>
+                              <th
+                                style={{
+                                  boxSizing: "border-box",
+                                  padding: "8px 6px",
+                                  textAlign: "left",
+                                }}
+                              >
+                                OPP
+                              </th>
+                              {["PTS", "REB", "AST"].map((label) => (
+                                <th
+                                  key={`manga-log-heading-${label}`}
+                                  style={{
+                                    boxSizing: "border-box",
+                                    padding: "8px 6px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  {label}
+                                </th>
+                              ))}
                             </tr>
                           </thead>
                           <tbody>
@@ -5105,11 +5137,44 @@ function Players() {
                                 key={`manga-log-${profile.playerId}-${log.matchId}`}
                                 style={{ borderTop: "1px solid #ddd" }}
                               >
-                                <td>{log.week}</td>
-                                <td>{log.opponent}</td>
-                                <td>{log.appearance ? log.pts : "-"}</td>
-                                <td>{log.appearance ? log.reb : "-"}</td>
-                                <td>{log.appearance ? log.ast : "-"}</td>
+                                <td
+                                  style={{
+                                    boxSizing: "border-box",
+                                    padding: "8px 6px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  {log.week}
+                                </td>
+                                <td
+                                  title={log.opponent}
+                                  style={{
+                                    boxSizing: "border-box",
+                                    padding: "8px 6px",
+                                    overflow: "hidden",
+                                    textAlign: "left",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {log.opponent}
+                                </td>
+                                {[
+                                  log.appearance ? log.pts : "-",
+                                  log.appearance ? log.reb : "-",
+                                  log.appearance ? log.ast : "-",
+                                ].map((value, index) => (
+                                  <td
+                                    key={`manga-log-${log.matchId}-stat-${index}`}
+                                    style={{
+                                      boxSizing: "border-box",
+                                      padding: "8px 6px",
+                                      textAlign: "center",
+                                    }}
+                                  >
+                                    {value}
+                                  </td>
+                                ))}
                               </tr>
                             ))}
                           </tbody>
@@ -7736,17 +7801,43 @@ function Players() {
         .replace(/\s+/g, " ");
 
     const resolvePublicProfileTarget = (stat) => {
-      if (!stat?.playerId) return null;
-
-      if (!isHistoryView) {
-        return {
-          currentPlayerId: String(stat.playerId),
-          archivedPlayerId: "",
-          isHistorical: false,
-        };
-      }
+      if (!stat) return null;
 
       const bamPlayerId = String(stat.bamPlayerId || "").trim();
+      const playerId = String(stat.playerId || stat.id || "").trim();
+      const normalizedName = normalizePublicPlayerName(
+        stat.playerName || stat.name,
+      );
+
+      if (!isHistoryView) {
+        const currentPlayerByBamId = bamPlayerId
+          ? players.find(
+              (player) => String(player.bamPlayerId || "") === bamPlayerId,
+            )
+          : null;
+        const currentPlayerById = playerId
+          ? players.find((player) => String(player.id) === playerId)
+          : null;
+        const currentNameMatches = normalizedName
+          ? players.filter(
+              (player) =>
+                normalizePublicPlayerName(player.name) === normalizedName,
+            )
+          : [];
+        const currentPlayer =
+          currentPlayerByBamId ||
+          currentPlayerById ||
+          (currentNameMatches.length === 1 ? currentNameMatches[0] : null);
+
+        return currentPlayer
+          ? {
+              currentPlayerId: String(currentPlayer.id),
+              archivedPlayerId: "",
+              isHistorical: false,
+            }
+          : null;
+      }
+
       if (bamPlayerId) {
         const currentPlayerByBamId = players.find(
           (player) => String(player.bamPlayerId || "") === bamPlayerId,
@@ -7755,13 +7846,13 @@ function Players() {
         if (currentPlayerByBamId) {
           return {
             currentPlayerId: String(currentPlayerByBamId.id),
-            archivedPlayerId: String(stat.playerId),
+            archivedPlayerId: playerId,
             isHistorical: true,
           };
         }
       }
 
-      const legacyPlayerId = String(stat.playerId || "").trim();
+      const legacyPlayerId = playerId;
       if (legacyPlayerId) {
         const currentPlayerByLegacyId = players.find(
           (player) => String(player.id) === legacyPlayerId,
@@ -7798,9 +7889,6 @@ function Players() {
         }
       }
 
-      const normalizedName = normalizePublicPlayerName(
-        stat.playerName || stat.name,
-      );
       if (!normalizedName) return null;
 
       const currentNameMatches = players.filter(
@@ -7810,7 +7898,7 @@ function Players() {
       return currentNameMatches.length === 1
         ? {
             currentPlayerId: String(currentNameMatches[0].id),
-            archivedPlayerId: String(stat.playerId),
+            archivedPlayerId: playerId,
             isHistorical: true,
           }
         : null;
@@ -8032,6 +8120,30 @@ function Players() {
     const dashboardAssistLeader = getDashboardStatLeader("ast");
     const dashboardDefenseLeader = getDashboardDefenseLeader();
 
+    const getHistoricalAwardPlayerSource = (
+      playerName,
+      storedPlayerId = "",
+    ) => {
+      const normalizedStoredId = String(storedPlayerId || "").trim();
+      if (normalizedStoredId) {
+        const exactIdSource = dashboardPlayerStatRows.find(
+          (stat) =>
+            String(stat.bamPlayerId || "") === normalizedStoredId ||
+            String(stat.playerId || "") === normalizedStoredId,
+        );
+        if (exactIdSource) return exactIdSource;
+      }
+
+      const normalizedName = normalizePublicPlayerName(playerName);
+      if (!normalizedName) return null;
+      const nameMatches = dashboardPlayerStatRows.filter(
+        (stat) =>
+          normalizePublicPlayerName(stat.playerName || stat.name) ===
+          normalizedName,
+      );
+      return nameMatches.length === 1 ? nameMatches[0] : null;
+    };
+
     const dashboardAwards = isHistoryView
       ? {
           champion: selectedHistorySeason?.champion || "-",
@@ -8053,6 +8165,34 @@ function Players() {
           reboundValue: dashboardReboundLeader?.reb || 0,
           assistValue: dashboardAssistLeader?.ast || 0,
           defenseValue: dashboardDefenseLeader?.defenseScore || 0,
+          regularSeasonMvpTarget: getHistoricalAwardPlayerSource(
+            selectedHistorySeason?.regularSeasonMvp ||
+              selectedHistorySeason?.mvp,
+            selectedHistorySeason?.regularSeasonMvpPlayerId ||
+              selectedHistorySeason?.mvpPlayerId,
+          ),
+          finalsMvpTarget: getHistoricalAwardPlayerSource(
+            selectedHistorySeason?.finalsMvp,
+            selectedHistorySeason?.finalsMvpPlayerId ||
+              selectedHistorySeason?.finalsMvpAward?.playerId,
+          ),
+          topScorerTarget: getHistoricalAwardPlayerSource(
+            selectedHistorySeason?.topScorer,
+            selectedHistorySeason?.topScorerPlayerId,
+          ),
+          reboundLeaderTarget:
+            dashboardReboundLeader ||
+            getHistoricalAwardPlayerSource(
+              selectedHistorySeason?.reboundLeader,
+              selectedHistorySeason?.reboundLeaderPlayerId,
+            ),
+          assistLeaderTarget:
+            dashboardAssistLeader ||
+            getHistoricalAwardPlayerSource(
+              selectedHistorySeason?.assistLeader,
+              selectedHistorySeason?.assistLeaderPlayerId,
+            ),
+          defenseLeaderTarget: dashboardDefenseLeader || null,
         }
       : {
           champion: currentAwards.champion || "-",
@@ -8068,15 +8208,39 @@ function Players() {
           reboundValue: currentAwards.reboundLeader?.reb || 0,
           assistValue: currentAwards.assistLeader?.ast || 0,
           defenseValue: dashboardDefenseLeader?.defenseScore || 0,
+          regularSeasonMvpTarget: currentAwards.regularSeasonMvp || null,
+          finalsMvpTarget: currentAwards.finalsMvp || null,
+          topScorerTarget: currentAwards.topScorer || null,
+          reboundLeaderTarget: currentAwards.reboundLeader || null,
+          assistLeaderTarget: currentAwards.assistLeader || null,
+          defenseLeaderTarget: dashboardDefenseLeader || null,
         };
 
     const dashboardAwardRows = [
       ["🏆", "Champion", dashboardAwards.champion],
       ["🥈", "Runner Up", dashboardAwards.runnerUp],
       ["🥉", "3rd Place", dashboardAwards.thirdPlace],
-      ["👑", "Regular Season MVP", dashboardAwards.regularSeasonMvp],
-      ["🏅", "Finals MVP", dashboardAwards.finalsMvp],
-      ["🎯", "Top Scorer", dashboardAwards.topScorer],
+      [
+        "👑",
+        "Regular Season MVP",
+        dashboardAwards.regularSeasonMvp,
+        "",
+        dashboardAwards.regularSeasonMvpTarget,
+      ],
+      [
+        "🏅",
+        "Finals MVP",
+        dashboardAwards.finalsMvp,
+        "",
+        dashboardAwards.finalsMvpTarget,
+      ],
+      [
+        "🎯",
+        "Top Scorer",
+        dashboardAwards.topScorer,
+        "",
+        dashboardAwards.topScorerTarget,
+      ],
       [
         "💪",
         "Best Rebounder",
@@ -8084,12 +8248,14 @@ function Players() {
         dashboardAwards.reboundValue
           ? `${dashboardAwards.reboundValue} REB`
           : "",
+        dashboardAwards.reboundLeaderTarget,
       ],
       [
         "🧠",
         "Best Assist",
         dashboardAwards.assistLeader,
         dashboardAwards.assistValue ? `${dashboardAwards.assistValue} AST` : "",
+        dashboardAwards.assistLeaderTarget,
       ],
       [
         "🛡️",
@@ -8098,6 +8264,7 @@ function Players() {
         dashboardAwards.defenseValue
           ? `${dashboardAwards.defenseValue} STL+BLK`
           : "",
+        dashboardAwards.defenseLeaderTarget,
       ],
     ];
 
@@ -8157,9 +8324,7 @@ function Players() {
     ].map(([label, url]) => [label, getSafePublicSocialUrl(url)]);
     const hasPublicHeroImage =
       Boolean(publicBranding.heroImageUrl.trim()) && !publicHeroImageError;
-    const publicHighlightSlides = Array.isArray(
-      publicBranding.highlightSlides,
-    )
+    const publicHighlightSlides = Array.isArray(publicBranding.highlightSlides)
       ? publicBranding.highlightSlides
       : [];
     const publicFollowKicker =
@@ -8867,35 +9032,59 @@ function Players() {
             <div className="bam-public-panel bam-public-awards-panel">
               <h2 className="bam-public-panel-title">🏆 Current Awards</h2>
               <div className="bam-public-awards-grid">
-                {dashboardAwardRows.map(([icon, label, value, detail]) => {
-                  const isFeaturedAward = [
-                    "Champion",
-                    "Regular Season MVP",
-                    "Top Scorer",
-                  ].includes(label);
+                {dashboardAwardRows.map(
+                  ([icon, label, value, detail, playerSource]) => {
+                    const isFeaturedAward = [
+                      "Champion",
+                      "Regular Season MVP",
+                      "Top Scorer",
+                    ].includes(label);
+                    const profileTarget = playerSource
+                      ? resolvePublicProfileTarget(playerSource)
+                      : null;
+                    const AwardRow = profileTarget ? "button" : "div";
 
-                  return (
-                    <div
-                      key={`public-award-${label}`}
-                      className={`bam-public-award-row${
-                        isFeaturedAward ? " bam-public-award-row-featured" : ""
-                      }`}
-                    >
-                      <strong className="bam-public-award-label">
-                        <span className="bam-public-award-icon">{icon}</span>
-                        {label}
-                      </strong>
-                      <span className="bam-public-award-value">
-                        {value || "-"}
-                        {detail ? (
-                          <span className="bam-public-award-detail">
-                            ({detail})
-                          </span>
-                        ) : null}
-                      </span>
-                    </div>
-                  );
-                })}
+                    return (
+                      <AwardRow
+                        key={`public-award-${label}`}
+                        {...(profileTarget
+                          ? {
+                              type: "button",
+                              onClick: () =>
+                                openPublicPlayerProfile(playerSource),
+                              "aria-label": `Open player profile for ${
+                                value ||
+                                playerSource.playerName ||
+                                playerSource.name
+                              }`,
+                            }
+                          : {})}
+                        className={`bam-public-award-row${
+                          isFeaturedAward
+                            ? " bam-public-award-row-featured"
+                            : ""
+                        }${
+                          profileTarget
+                            ? " bam-public-award-row-interactive"
+                            : ""
+                        }`}
+                      >
+                        <strong className="bam-public-award-label">
+                          <span className="bam-public-award-icon">{icon}</span>
+                          {label}
+                        </strong>
+                        <span className="bam-public-award-value">
+                          {value || "-"}
+                          {detail ? (
+                            <span className="bam-public-award-detail">
+                              ({detail})
+                            </span>
+                          ) : null}
+                        </span>
+                      </AwardRow>
+                    );
+                  },
+                )}
               </div>
             </div>
 
@@ -10020,10 +10209,7 @@ function Players() {
                                 type="file"
                                 accept="image/*"
                                 onChange={(event) =>
-                                  uploadPublicHighlightSlide(
-                                    slide.id,
-                                    event,
-                                  )
+                                  uploadPublicHighlightSlide(slide.id, event)
                                 }
                                 style={{ display: "none" }}
                               />
@@ -10373,23 +10559,23 @@ function Players() {
                 </button>
                 {isLiveScheduleBoundToCurrentDraft &&
                   liveScheduleSession?.status === "confirmed" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleReplayConfirmedSchedule}
-                      style={{ marginRight: "8px", marginBottom: "8px" }}
-                    >
-                      ▶ Replay Confirmed Schedule
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartLiveSchedule(true)}
-                      style={{ marginRight: "8px", marginBottom: "8px" }}
-                    >
-                      🔄 Create New Schedule Draw
-                    </button>
-                  </>
-                )}
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleReplayConfirmedSchedule}
+                        style={{ marginRight: "8px", marginBottom: "8px" }}
+                      >
+                        ▶ Replay Confirmed Schedule
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStartLiveSchedule(true)}
+                        style={{ marginRight: "8px", marginBottom: "8px" }}
+                      >
+                        🔄 Create New Schedule Draw
+                      </button>
+                    </>
+                  )}
                 {isLiveScheduleBoundToCurrentDraft &&
                   liveScheduleSession &&
                   liveScheduleSession.status !== "confirmed" && (
@@ -12229,11 +12415,7 @@ function Players() {
           isLiveScheduleOpen ? handleExitLiveSchedule : handleExitLiveDraft
         }
       >
-        {({
-          isFullscreen,
-          onEnterFullscreen,
-          onExitFullscreen,
-        }) => (
+        {({ isFullscreen, onEnterFullscreen, onExitFullscreen }) => (
           <>
             <LiveDraftPresentation
               open={isLiveDraftOpen}

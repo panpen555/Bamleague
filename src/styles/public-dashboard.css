@@ -446,6 +446,7 @@
 .bam-public-award-row {
   display: flex;
   min-width: 0;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -453,6 +454,19 @@
   border-radius: 16px;
   padding: 11px 12px;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.bam-public-award-row-interactive {
+  min-height: 44px;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.bam-public-award-row-interactive:focus-visible {
+  outline: 3px solid #f26a21;
+  outline-offset: 2px;
 }
 
 .bam-public-award-row-featured {
