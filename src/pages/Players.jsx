@@ -645,6 +645,7 @@ function Players() {
   const [schemaV3StagedPlan, setSchemaV3StagedPlan] = useState(null);
   const schemaV3MigrationLockRef = useRef(false);
   const cloudWriteOperationLockRef = useRef(false);
+  const localBackupExportReadyRef = useRef(false);
   const [adminUser, setAdminUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -6297,6 +6298,15 @@ function Players() {
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
+    localBackupExportReadyRef.current = true;
+  };
+
+  const requireLocalBackupExport = (operationName) => {
+    if (localBackupExportReadyRef.current) return true;
+    alert(
+      `กรุณากด Export All Data ก่อน ${operationName} เพื่อเก็บ Local Backup ล่าสุด`,
+    );
+    return false;
   };
 
   const restoreLeagueData = (rawData) => {
@@ -6910,6 +6920,7 @@ function Players() {
   );
   const safePublishToCloud = async () => {
     if (!requireAdminLogin("Safe Publish To Cloud")) return;
+    if (!requireLocalBackupExport("Safe Publish To Cloud")) return;
     if (cloudWriteOperationLockRef.current) return;
 
     const report = getLocalDraftValidationReport();
@@ -6985,6 +6996,7 @@ function Players() {
 
       setCloudSchemaVersion(detectedSchema);
       setCloudStatus("Cloud Published");
+      localBackupExportReadyRef.current = false;
       alert("Safe Publish to Cloud สำเร็จ");
     } catch (error) {
       console.error("Safe Publish Error:", error);
@@ -7310,6 +7322,7 @@ function Players() {
 
   const stageSchemaV3Documents = async () => {
     if (!requireAdminLogin("Stage Schema V3 Documents")) return;
+    if (!requireLocalBackupExport("Stage Schema V3 Documents")) return;
     if (schemaV3MigrationLockRef.current || !schemaV3RecoveryArtifact) return;
 
     schemaV3MigrationLockRef.current = true;
@@ -7411,6 +7424,7 @@ function Players() {
       }));
 
       await runSchemaV3Verification(plan);
+      localBackupExportReadyRef.current = false;
     } catch (error) {
       console.error("Schema V3 Stage Error:", error);
       setSchemaV3MigrationOperation((previous) => ({
@@ -7450,6 +7464,7 @@ function Players() {
 
   const promoteVerifiedSchemaV3Main = async () => {
     if (!requireAdminLogin("Promote Schema V3 Main")) return;
+    if (!requireLocalBackupExport("Promote Schema V3 Main")) return;
     if (
       schemaV3MigrationLockRef.current ||
       schemaV3MigrationOperation.status !== "Verified"
@@ -7480,6 +7495,7 @@ function Players() {
         status: "Promoted",
         error: "",
       }));
+      localBackupExportReadyRef.current = false;
     } catch (error) {
       console.error("Schema V3 Promotion Error:", error);
       setSchemaV3MigrationOperation((previous) => ({
@@ -7494,6 +7510,7 @@ function Players() {
 
   const rollbackSchemaV3Main = async () => {
     if (!requireAdminLogin("Rollback to Schema V2 Main")) return;
+    if (!requireLocalBackupExport("Rollback to Schema V2 Main")) return;
     if (
       schemaV3MigrationLockRef.current ||
       cloudSchemaVersion !== SCHEMA_V3
@@ -7523,6 +7540,7 @@ function Players() {
         status: "Rolled Back",
         error: "",
       }));
+      localBackupExportReadyRef.current = false;
     } catch (error) {
       console.error("Schema V2 Rollback Error:", error);
       setSchemaV3MigrationOperation((previous) => ({
@@ -7818,6 +7836,7 @@ function Players() {
 
   const uploadToCloud = async () => {
     if (!requireAdminLogin("Upload To Cloud")) return;
+    if (!requireLocalBackupExport("Upload To Cloud")) return;
     if (cloudWriteOperationLockRef.current) return;
 
     const confirmUpload = window.confirm(
@@ -7842,6 +7861,7 @@ function Players() {
 
       setCloudSchemaVersion(detectedSchema);
       setCloudStatus("Cloud Uploaded");
+      localBackupExportReadyRef.current = false;
       alert("Upload To Cloud สำเร็จ");
     } catch (error) {
       console.error("Upload To Cloud Error:", error);
@@ -7853,6 +7873,7 @@ function Players() {
   };
 
   const downloadFromCloud = async () => {
+    if (!requireLocalBackupExport("Download From Cloud")) return;
     const confirmDownload = window.confirm(
       "ต้องการ Download ข้อมูลจาก Cloud ใช่ไหม?\n\nข้อมูลในเครื่องปัจจุบันจะถูกเขียนทับ",
     );
@@ -7901,6 +7922,7 @@ function Players() {
         setSchemaV3HistoryState("ready");
       }
       setCloudStatus("Cloud Downloaded");
+      localBackupExportReadyRef.current = false;
       alert("Download From Cloud สำเร็จ");
     } catch (error) {
       console.error("Download From Cloud Error:", error);
@@ -7911,6 +7933,7 @@ function Players() {
 
   const clearCloudData = async () => {
     if (!requireAdminLogin("Clear Cloud Data")) return;
+    if (!requireLocalBackupExport("Clear Cloud Data")) return;
     if (cloudWriteOperationLockRef.current) return;
 
     cloudWriteOperationLockRef.current = true;
@@ -7955,6 +7978,7 @@ function Players() {
       }
       setCloudSchemaVersion(null);
       setCloudStatus("Cloud Cleared");
+      localBackupExportReadyRef.current = false;
       alert("ลบข้อมูลบน Cloud สำเร็จ");
     } catch (error) {
       console.error("Clear Cloud Error:", error);

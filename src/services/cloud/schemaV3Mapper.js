@@ -393,11 +393,26 @@ export const normalizeSchemaV3SeasonDocument = (
     );
   }
 
+  const expectedChecksum = String(seasonDocument.payloadChecksum || "");
+  const checksumPayload = { ...seasonDocument };
+  delete checksumPayload.payloadChecksum;
+  if (
+    !expectedChecksum ||
+    createPayloadChecksum(checksumPayload) !== expectedChecksum
+  ) {
+    throw new Error(
+      `Schema V3 season document checksum mismatch: ${
+        expectedDocumentId || seasonDocument.documentId || "unknown"
+      }`,
+    );
+  }
+
   const normalized = { ...seasonDocument };
   const originalSeasonId = normalized.originalSeasonId;
   delete normalized.schemaVersion;
   delete normalized.documentId;
   delete normalized.originalSeasonId;
+  delete normalized.payloadChecksum;
 
   return deepSanitizeForFirestore({
     ...normalized,

@@ -10,6 +10,7 @@ import {
   detectCloudSchemaVersion,
   mergeSchemaV3SeasonIndexes,
   normalizeLegacyBackup,
+  normalizeSchemaV3SeasonDocument,
   normalizeSchemaV3Backup,
   validateRecoverySource,
   validateSchemaV3Plan,
@@ -145,6 +146,25 @@ describe("Schema V3 mapper", () => {
     expect(assembled.data.players).toEqual([{ id: "p1" }]);
     expect(assembled.data.seasonHistory).toHaveLength(1);
     expect(assembled.data.liveDraftConfirmedReplay.sessionId).toBe("draft-1");
+    expect(assembled.data.seasonHistory[0].payloadChecksum).toBeUndefined();
+  });
+
+  test("verifies season checksum and removes storage metadata from logical data", () => {
+    const [entry] = createSchemaV3SeasonDocuments([createSeason()]);
+    const normalized = normalizeSchemaV3SeasonDocument(
+      entry.data,
+      entry.documentId,
+    );
+
+    expect(normalized.payloadChecksum).toBeUndefined();
+    expect(normalized.documentId).toBeUndefined();
+    expect(normalized.schemaVersion).toBeUndefined();
+    expect(() =>
+      normalizeSchemaV3SeasonDocument(
+        { ...entry.data, projectName: "Tampered" },
+        entry.documentId,
+      ),
+    ).toThrow(/checksum mismatch/i);
   });
 
   test("recursively removes image data URLs from archived and branding data", () => {
