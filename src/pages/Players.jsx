@@ -71,6 +71,11 @@ import {
   validateRecoverySource,
 } from "../services/cloud/schemaV3Mapper";
 import { SCHEMA_V3 } from "../config/firebase";
+import {
+  buildScheduleResult,
+  groupPublicScheduleInSavedOrder,
+  validateManualScheduleChanges,
+} from "../services/schedule/scheduleService";
 
 const DEFAULT_PUBLIC_BRANDING = {
   heroImageUrl: "",
@@ -3004,124 +3009,6 @@ function Players() {
     localStorage.removeItem("matchStatInputs");
   };
 
-  const shuffleScheduleTeamNames = (teamNames, random = Math.random) => {
-    const shuffledNames = [...teamNames];
-
-    for (let index = shuffledNames.length - 1; index > 0; index -= 1) {
-      const randomIndex = Math.floor(random() * (index + 1));
-      [shuffledNames[index], shuffledNames[randomIndex]] = [
-        shuffledNames[randomIndex],
-        shuffledNames[index],
-      ];
-    }
-
-    return shuffledNames;
-  };
-
-  const buildScheduleResult = ({ sourceTeamNames, random = Math.random }) => {
-    const names = shuffleScheduleTeamNames(sourceTeamNames, random);
-    const roundRobinNames =
-      names.length % 2 === 0 ? [...names] : [...names, "BYE"];
-    const totalRounds = roundRobinNames.length - 1;
-    const matchesPerRound = roundRobinNames.length / 2;
-    const rotated = [...roundRobinNames];
-    const newSchedule = [];
-    let matchId = 1;
-
-    for (let round = 1; round <= totalRounds; round += 1) {
-      for (let matchIndex = 0; matchIndex < matchesPerRound; matchIndex += 1) {
-        const teamA = rotated[matchIndex];
-        const teamB = rotated[rotated.length - 1 - matchIndex];
-
-        if (teamA !== "BYE" && teamB !== "BYE") {
-          newSchedule.push({
-            id: matchId,
-            week: round,
-            label: "League",
-            teamA,
-            teamB,
-            scoreA: "",
-            scoreB: "",
-            status: "Pending",
-          });
-          matchId += 1;
-        }
-      }
-
-      const fixedTeam = rotated[0];
-      const restTeams = rotated.slice(1);
-      restTeams.unshift(restTeams.pop());
-      rotated.splice(0, rotated.length, fixedTeam, ...restTeams);
-    }
-
-    const playoffStartWeek = totalRounds + 1;
-
-    if (names.length === 3) {
-      newSchedule.push({
-        id: matchId,
-        week: playoffStartWeek,
-        label: "Final",
-        playoffType: "final_1v2",
-        teamA: "Rank 1",
-        teamB: "Rank 2",
-        scoreA: "",
-        scoreB: "",
-        status: "Pending",
-      });
-    }
-
-    if (names.length >= 4) {
-      newSchedule.push(
-        {
-          id: matchId,
-          week: playoffStartWeek,
-          label: "Semi Final",
-          playoffType: "sf1",
-          teamA: "Rank 1",
-          teamB: "Rank 4",
-          scoreA: "",
-          scoreB: "",
-          status: "Pending",
-        },
-        {
-          id: matchId + 1,
-          week: playoffStartWeek,
-          label: "Semi Final",
-          playoffType: "sf2",
-          teamA: "Rank 2",
-          teamB: "Rank 3",
-          scoreA: "",
-          scoreB: "",
-          status: "Pending",
-        },
-        {
-          id: matchId + 2,
-          week: playoffStartWeek + 1,
-          label: "3rd Place",
-          playoffType: "third_place",
-          teamA: "Loser SF1",
-          teamB: "Loser SF2",
-          scoreA: "",
-          scoreB: "",
-          status: "Pending",
-        },
-        {
-          id: matchId + 3,
-          week: playoffStartWeek + 1,
-          label: "Final",
-          playoffType: "final",
-          teamA: "Winner SF1",
-          teamB: "Winner SF2",
-          scoreA: "",
-          scoreB: "",
-          status: "Pending",
-        },
-      );
-    }
-
-    return newSchedule;
-  };
-
   const prepareScheduleResult = () => {
     if (teams.length < 3) {
       alert("กรุณา Generate Teams อย่างน้อย 3 ทีมก่อน");
@@ -3144,6 +3031,23 @@ function Players() {
     const scheduleResult = prepareScheduleResult();
     if (!scheduleResult) return;
     applyScheduleResult(scheduleResult);
+  };
+
+  const saveManualSchedule = (manualSchedule) => {
+    const validation = validateManualScheduleChanges(
+      schedule,
+      manualSchedule,
+      { matchRosters, playerStats, matchStatInputs },
+    );
+    if (!validation.valid) {
+      return {
+        saved: false,
+        error: validation.errors.join("\n"),
+      };
+    }
+
+    setSchedule(manualSchedule.map((match) => ({ ...match })));
+    return { saved: true, error: "" };
   };
 
   const createLiveScheduleSourceFingerprint = (sourceTeams = teams) =>
@@ -9562,24 +9466,8 @@ function Players() {
       return "DRAW";
     };
 
-    const publicScheduleByWeek = dashboardSchedule
-      .slice()
-      .sort((a, b) => {
-        if (Number(a.week || 0) !== Number(b.week || 0)) {
-          return Number(a.week || 0) - Number(b.week || 0);
-        }
-        return Number(a.id || 0) - Number(b.id || 0);
-      })
-      .reduce((groups, match) => {
-        const weekKey = match.week || "-";
-        if (!groups[weekKey]) groups[weekKey] = [];
-        groups[weekKey].push(match);
-        return groups;
-      }, {});
-
-    const publicScheduleWeeks = Object.keys(publicScheduleByWeek).sort(
-      (a, b) => Number(a || 0) - Number(b || 0),
-    );
+    const publicScheduleGroups =
+      groupPublicScheduleInSavedOrder(dashboardSchedule);
 
     const getDashboardMatchStatRows = (match) => {
       if (!match) return [];
@@ -9990,21 +9878,23 @@ function Players() {
               </div>
             ) : (
               <div className="bam-public-week-list">
-                {publicScheduleWeeks.map((week) => (
+                {publicScheduleGroups.map((group) => (
                   <div
-                    key={`public-schedule-week-${week}`}
+                    key={`public-schedule-week-${group.key}`}
                     className="bam-public-week-card"
                   >
                     <div className="bam-public-week-header">
-                      <span className="bam-public-week-title">Week {week}</span>
+                      <span className="bam-public-week-title">
+                        Week {group.week}
+                      </span>
                       <span className="bam-public-week-count">
-                        {publicScheduleByWeek[week].length} Match
-                        {publicScheduleByWeek[week].length > 1 ? "es" : ""}
+                        {group.matches.length} Match
+                        {group.matches.length > 1 ? "es" : ""}
                       </span>
                     </div>
 
                     <div className="bam-public-match-list">
-                      {publicScheduleByWeek[week].map((match) => {
+                      {group.matches.map((match) => {
                         const winner = getPublicMatchWinner(match);
                         const isFinished = match.status === "Finished";
                         const isTeamAWinner = winner === match.teamA;
@@ -10043,6 +9933,7 @@ function Players() {
                               <div
                                 className={`bam-public-match-stage${stageClassName}`}
                               >
+                                #{match.displayOrder} ·{" "}
                                 {match.label || "League"}
                               </div>
                               <button
@@ -12209,6 +12100,10 @@ function Players() {
         teams={teams}
         schedule={schedule}
         createSchedule={createSchedule}
+        saveManualSchedule={saveManualSchedule}
+        matchRosters={matchRosters}
+        playerStats={playerStats}
+        matchStatInputs={matchStatInputs}
         updatePlayoffTeams={updatePlayoffTeams}
         clearSchedule={clearSchedule}
         updateMatchScore={updateMatchScore}
