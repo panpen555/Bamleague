@@ -47,13 +47,24 @@ import {
 } from "../services/cloud/backupService";
 import {
   assembleSchemaV3LogicalBackup,
+  downloadSchemaV2RecoveryDocument,
+  downloadSchemaV3Main,
+  downloadSchemaV3MigrationState,
   downloadSchemaV3Season,
+  stageSchemaV3ReplayDocument,
+  stageSchemaV3SeasonDocuments,
+  verifySchemaV3Staging,
+  writeSchemaV2RecoveryDocument,
+  writeSchemaV3MigrationState,
 } from "../services/cloud/schemaV3Service";
 import {
+  createSchemaV2RecoveryArtifact,
   createSchemaV3MigrationPlan,
   detectCloudSchemaVersion,
   estimateFirestorePayloadBytes,
+  FIRESTORE_BLOCK_BYTES,
   normalizeSchemaV3SeasonDocument,
+  validateRecoverySource,
 } from "../services/cloud/schemaV3Mapper";
 import { SCHEMA_V3 } from "../config/firebase";
 
@@ -616,6 +627,19 @@ function Players() {
   const [schemaV3HistoryError, setSchemaV3HistoryError] = useState("");
   const [schemaV3MigrationPreview, setSchemaV3MigrationPreview] =
     useState(null);
+  const [schemaV3MigrationOperation, setSchemaV3MigrationOperation] = useState({
+    status: "Not analyzed",
+    error: "",
+    warnings: [],
+    stagedCount: 0,
+    verifiedCount: 0,
+    replayStatus: "Not staged",
+  });
+  const [schemaV3RecoveryArtifact, setSchemaV3RecoveryArtifact] =
+    useState(null);
+  const [schemaV3RecoveryFilename, setSchemaV3RecoveryFilename] = useState("");
+  const [schemaV3StagedPlan, setSchemaV3StagedPlan] = useState(null);
+  const schemaV3MigrationLockRef = useRef(false);
   const [adminUser, setAdminUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -7110,10 +7134,294 @@ function Players() {
         sourcePayloadBytes: estimateFirestorePayloadBytes(logicalBackup),
         error: "",
       });
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: plan.validation.ready ? "Ready" : "Blocked",
+        error: plan.validation.errors.join(" "),
+        warnings: plan.validation.warnings,
+      }));
     } catch (error) {
       setSchemaV3MigrationPreview({
         error: error.message || "Unable to analyze Schema V3 migration.",
       });
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Blocked",
+        error: error.message || "Unable to analyze Schema V3 migration.",
+      }));
+    }
+  };
+
+  const createRecoveryFilename = (date = new Date()) => {
+    const timestamp = date
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace("T", "-")
+      .slice(0, 15);
+    return `bam-league-schema-v2-recovery-${timestamp}.json`;
+  };
+
+  const downloadJsonFile = (filename, data) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadLegacyCloudRecoveryBackup = async () => {
+    if (!requireAdminLogin("Download Legacy Cloud Recovery Backup")) return;
+    if (schemaV3MigrationLockRef.current) return;
+
+    schemaV3MigrationLockRef.current = true;
+    setSchemaV3MigrationOperation((previous) => ({
+      ...previous,
+      status: "Backing up",
+      error: "",
+    }));
+
+    try {
+      const cloudMain = await downloadSchemaV3Main();
+      if (!cloudMain) {
+        throw new Error("ไม่พบ /bamLeague/main บน Cloud");
+      }
+      if (detectCloudSchemaVersion(cloudMain) === SCHEMA_V3) {
+        throw new Error("Cloud main เป็น Schema V3 แล้ว จึงไม่สร้าง V2 recovery");
+      }
+
+      const recoveryArtifact = createSchemaV2RecoveryArtifact(cloudMain);
+      const filename = createRecoveryFilename();
+      downloadJsonFile(filename, recoveryArtifact);
+      setSchemaV3RecoveryArtifact(recoveryArtifact);
+      setSchemaV3RecoveryFilename(filename);
+      setSchemaV3StagedPlan(null);
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Ready",
+        error: "",
+        stagedCount: 0,
+        verifiedCount: 0,
+        replayStatus: "Not staged",
+      }));
+    } catch (error) {
+      console.error("Schema V2 Recovery Download Error:", error);
+      setSchemaV3RecoveryArtifact(null);
+      setSchemaV3RecoveryFilename("");
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Failed",
+        error: error.message || "Download recovery backup failed.",
+      }));
+    } finally {
+      schemaV3MigrationLockRef.current = false;
+    }
+  };
+
+  const createMigrationStateDocument = (plan, status, verification = null) => ({
+    schemaVersion: SCHEMA_V3,
+    status,
+    sourceChecksum: plan.sourceChecksum,
+    sourceUpdatedAt: schemaV3RecoveryArtifact?.sourceUpdatedAt || "",
+    expectedSeasonCount: plan.seasonDocuments.length,
+    expectedSeasonIds: plan.seasonDocuments.map(
+      (seasonDocument) => seasonDocument.documentId,
+    ),
+    seasonChecksums: Object.fromEntries(
+      plan.seasonDocuments.map((seasonDocument) => [
+        seasonDocument.documentId,
+        seasonDocument.data.payloadChecksum,
+      ]),
+    ),
+    replayChecksum: plan.replayDocument.payloadChecksum,
+    stagedAt: new Date().toISOString(),
+    verifiedAt: status === "verified" ? new Date().toISOString() : "",
+    verification: verification
+      ? {
+          expectedSeasonCount: verification.expectedSeasonCount,
+          stagedSeasonCount: verification.stagedSeasonCount,
+          verifiedSeasonCount: verification.verifiedSeasonCount,
+          replayVerified: verification.replayVerified,
+        }
+      : null,
+  });
+
+  const runSchemaV3Verification = async (plan) => {
+    setSchemaV3MigrationOperation((previous) => ({
+      ...previous,
+      status: "Verifying",
+      error: "",
+    }));
+    const verification = await verifySchemaV3Staging(plan);
+
+    if (!verification.verified) {
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Blocked",
+        error: verification.errors.join(" "),
+        stagedCount: verification.stagedSeasonCount,
+        verifiedCount: verification.verifiedSeasonCount,
+        replayStatus: verification.replayVerified ? "Verified" : "Mismatch",
+      }));
+      return verification;
+    }
+
+    await writeSchemaV3MigrationState(
+      createMigrationStateDocument(plan, "verified", verification),
+    );
+    setSchemaV3MigrationOperation((previous) => ({
+      ...previous,
+      status: "Verified",
+      error: "",
+      stagedCount: verification.stagedSeasonCount,
+      verifiedCount: verification.verifiedSeasonCount,
+      replayStatus: "Verified",
+    }));
+    return verification;
+  };
+
+  const stageSchemaV3Documents = async () => {
+    if (!requireAdminLogin("Stage Schema V3 Documents")) return;
+    if (schemaV3MigrationLockRef.current || !schemaV3RecoveryArtifact) return;
+
+    schemaV3MigrationLockRef.current = true;
+    try {
+      const freshCloudMain = await downloadSchemaV3Main();
+      if (!freshCloudMain) throw new Error("ไม่พบ /bamLeague/main บน Cloud");
+      if (detectCloudSchemaVersion(freshCloudMain) === SCHEMA_V3) {
+        throw new Error("Stage ถูก block เพราะ Cloud main เป็น Schema V3 แล้ว");
+      }
+
+      const recoveryCheck = validateRecoverySource(
+        schemaV3RecoveryArtifact,
+        freshCloudMain,
+      );
+      if (!recoveryCheck.matches) throw new Error(recoveryCheck.error);
+
+      const plan = createSchemaV3MigrationPlan(freshCloudMain);
+      if (!plan.validation.ready) {
+        throw new Error(plan.validation.errors.join(" "));
+      }
+      const recoveryBytes = estimateFirestorePayloadBytes(
+        schemaV3RecoveryArtifact,
+      );
+      if (recoveryBytes >= FIRESTORE_BLOCK_BYTES) {
+        throw new Error(
+          `Cloud recovery document ถูก block ที่ ${recoveryBytes} bytes`,
+        );
+      }
+
+      const existingMigration = await downloadSchemaV3MigrationState();
+      if (
+        existingMigration?.status === "verified" &&
+        existingMigration.sourceChecksum === plan.sourceChecksum
+      ) {
+        setSchemaV3StagedPlan(plan);
+        setSchemaV3MigrationOperation((previous) => ({
+          ...previous,
+          status: "Verified",
+          error: "",
+          stagedCount: plan.seasonDocuments.length,
+          verifiedCount: plan.seasonDocuments.length,
+          replayStatus: "Verified",
+        }));
+        return;
+      }
+      if (
+        existingMigration?.sourceChecksum &&
+        existingMigration.sourceChecksum !== plan.sourceChecksum
+      ) {
+        throw new Error(
+          "Source checksum ไม่ตรงกับ migration state เดิม ต้องตรวจและดาวน์โหลด recovery ใหม่",
+        );
+      }
+
+      const warningText =
+        plan.validation.warnings.length > 0
+          ? `\n\nWarnings:\n- ${plan.validation.warnings.join("\n- ")}`
+          : "";
+      const confirmed = window.confirm(
+        "กำลังเขียน Season และ Admin documents สำหรับ Schema V3\n\n" +
+          "ขั้นตอนนี้ยังไม่เปลี่ยน /bamLeague/main และ Public Dashboard ยังใช้ข้อมูล Legacy เดิม\n\n" +
+          `ต้องการดำเนินการต่อหรือไม่?${warningText}`,
+      );
+      if (!confirmed) return;
+
+      setSchemaV3StagedPlan(plan);
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Backing up",
+        error: "",
+        warnings: plan.validation.warnings,
+      }));
+
+      await writeSchemaV2RecoveryDocument(schemaV3RecoveryArtifact);
+      const recoveryReadBack = await downloadSchemaV2RecoveryDocument();
+      if (
+        recoveryReadBack?.sourceChecksum !==
+        schemaV3RecoveryArtifact.sourceChecksum
+      ) {
+        throw new Error("Cloud recovery read-back checksum ไม่ตรง");
+      }
+
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Staging",
+      }));
+      const stageResult = await stageSchemaV3SeasonDocuments(
+        plan.seasonDocuments,
+      );
+      await stageSchemaV3ReplayDocument(plan.replayDocument);
+      await writeSchemaV3MigrationState(
+        createMigrationStateDocument(plan, "staged"),
+      );
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Staging",
+        stagedCount: stageResult.stagedCount,
+        replayStatus: "Staged",
+      }));
+
+      await runSchemaV3Verification(plan);
+    } catch (error) {
+      console.error("Schema V3 Stage Error:", error);
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Failed",
+        error: error.message || "Schema V3 staging failed.",
+      }));
+    } finally {
+      schemaV3MigrationLockRef.current = false;
+    }
+  };
+
+  const verifyStagedSchemaV3Documents = async () => {
+    if (!requireAdminLogin("Verify Staged Documents")) return;
+    if (schemaV3MigrationLockRef.current || !schemaV3StagedPlan) return;
+
+    schemaV3MigrationLockRef.current = true;
+    try {
+      const freshCloudMain = await downloadSchemaV3Main();
+      const recoveryCheck = validateRecoverySource(
+        schemaV3RecoveryArtifact,
+        freshCloudMain,
+      );
+      if (!recoveryCheck.matches) throw new Error(recoveryCheck.error);
+      await runSchemaV3Verification(schemaV3StagedPlan);
+    } catch (error) {
+      console.error("Schema V3 Verify Error:", error);
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Failed",
+        error: error.message || "Schema V3 verification failed.",
+      }));
+    } finally {
+      schemaV3MigrationLockRef.current = false;
     }
   };
 
@@ -7126,6 +7434,22 @@ function Players() {
     const mainSize = validation?.documents?.find(
       (document) => document.label === "main",
     );
+    const operationStatus = schemaV3MigrationOperation.status;
+    const isOperationRunning = [
+      "Backing up",
+      "Staging",
+      "Verifying",
+    ].includes(operationStatus);
+    const canStage =
+      Boolean(adminUser) &&
+      Boolean(schemaV3RecoveryArtifact) &&
+      Boolean(validation?.ready) &&
+      !isOperationRunning;
+    const canVerify =
+      Boolean(adminUser) &&
+      Boolean(schemaV3RecoveryArtifact) &&
+      Boolean(schemaV3StagedPlan) &&
+      !isOperationRunning;
 
     return (
       <div
@@ -7146,19 +7470,107 @@ function Players() {
         <button
           type="button"
           onClick={analyzeSchemaV3Migration}
+          disabled={!adminUser || isOperationRunning}
           style={{
             width: "100%",
             minHeight: "44px",
             border: "none",
             borderRadius: "8px",
-            background: "#17408b",
+            background:
+              adminUser && !isOperationRunning ? "#17408b" : "#94a3b8",
             color: "white",
             fontWeight: "bold",
-            cursor: "pointer",
+            cursor:
+              adminUser && !isOperationRunning ? "pointer" : "not-allowed",
           }}
         >
           Analyze Schema V3 Migration
         </button>
+
+        <button
+          type="button"
+          onClick={downloadLegacyCloudRecoveryBackup}
+          disabled={!adminUser || isOperationRunning}
+          style={{
+            width: "100%",
+            minHeight: "44px",
+            marginTop: "8px",
+            border: "none",
+            borderRadius: "8px",
+            background:
+              adminUser && !isOperationRunning ? "#0f766e" : "#94a3b8",
+            color: "white",
+            fontWeight: "bold",
+            cursor:
+              adminUser && !isOperationRunning ? "pointer" : "not-allowed",
+          }}
+        >
+          Download Legacy Cloud Recovery Backup
+        </button>
+
+        <button
+          type="button"
+          onClick={stageSchemaV3Documents}
+          disabled={!canStage}
+          style={{
+            width: "100%",
+            minHeight: "44px",
+            marginTop: "8px",
+            border: "none",
+            borderRadius: "8px",
+            background: canStage ? "#c2410c" : "#94a3b8",
+            color: "white",
+            fontWeight: "bold",
+            cursor: canStage ? "pointer" : "not-allowed",
+          }}
+        >
+          Stage Schema V3 Documents
+        </button>
+
+        <button
+          type="button"
+          onClick={verifyStagedSchemaV3Documents}
+          disabled={!canVerify}
+          style={{
+            width: "100%",
+            minHeight: "44px",
+            marginTop: "8px",
+            border: "none",
+            borderRadius: "8px",
+            background: canVerify ? "#7e22ce" : "#94a3b8",
+            color: "white",
+            fontWeight: "bold",
+            cursor: canVerify ? "pointer" : "not-allowed",
+          }}
+        >
+          Verify Staged Documents
+        </button>
+
+        <div style={{ marginTop: "12px", fontSize: "13px" }}>
+          Status: <strong>{operationStatus}</strong>
+          <br />
+          Source checksum:{" "}
+          <strong>
+            {schemaV3RecoveryArtifact?.sourceChecksum
+              ? `${schemaV3RecoveryArtifact.sourceChecksum.slice(0, 16)}...`
+              : "-"}
+          </strong>
+          <br />
+          Recovery file: <strong>{schemaV3RecoveryFilename || "-"}</strong>
+          <br />
+          Staged / Verified:{" "}
+          <strong>
+            {schemaV3MigrationOperation.stagedCount} /{" "}
+            {schemaV3MigrationOperation.verifiedCount}
+          </strong>
+          <br />
+          Replay: <strong>{schemaV3MigrationOperation.replayStatus}</strong>
+        </div>
+        {schemaV3MigrationOperation.error ? (
+          <p style={{ color: "#b91c1c", fontWeight: "bold" }}>
+            {schemaV3MigrationOperation.error}
+          </p>
+        ) : null}
 
         {preview?.error ? (
           <p style={{ color: "#b91c1c", fontWeight: "bold" }}>

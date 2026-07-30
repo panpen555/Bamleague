@@ -3,12 +3,16 @@ import {
   createSchemaV3MainPayload,
   createSchemaV3MigrationPlan,
   createSchemaV3SeasonDocuments,
+  createSchemaV2RecoveryArtifact,
+  createPayloadChecksum,
   createSeasonDocumentId,
   deepSanitizeForFirestore,
   detectCloudSchemaVersion,
   normalizeLegacyBackup,
   normalizeSchemaV3Backup,
+  validateRecoverySource,
   validateSchemaV3Plan,
+  verifySchemaV3StagingSnapshot,
 } from "./schemaV3Mapper";
 
 global.TextEncoder = TextEncoder;
@@ -213,5 +217,124 @@ describe("Schema V3 mapper", () => {
     });
     expect(plan.validation.ready).toBe(true);
     expect(plan.seasonDocuments).toHaveLength(1);
+  });
+
+  test("creates deterministic checksums and changes them with source data", () => {
+    const source = { beta: false, alpha: 0 };
+    expect(createPayloadChecksum(source)).toBe(
+      createPayloadChecksum({ alpha: 0, beta: false }),
+    );
+    expect(createPayloadChecksum(source)).not.toBe(
+      createPayloadChecksum({ alpha: 1, beta: false }),
+    );
+  });
+
+  test("recovery metadata excludes authentication material", () => {
+    const recovery = createSchemaV2RecoveryArtifact(
+      {
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        data: {
+          players: [],
+          accessToken: "secret-access",
+          nested: {
+            refresh_token: "secret-refresh",
+            uid: "secret-uid",
+          },
+        },
+      },
+      "2026-01-02T00:00:00.000Z",
+    );
+    const serialized = JSON.stringify(recovery);
+
+    expect(serialized).not.toContain("secret-access");
+    expect(serialized).not.toContain("secret-refresh");
+    expect(serialized).not.toContain("secret-uid");
+    expect(recovery.sourceUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  test("rebuilding the same stage plan is idempotent", () => {
+    const backup = {
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      data: {
+        seasonHistory: [createSeason()],
+      },
+    };
+    const firstPlan = createSchemaV3MigrationPlan(backup);
+    const secondPlan = createSchemaV3MigrationPlan(backup);
+
+    expect(firstPlan.sourceChecksum).toBe(secondPlan.sourceChecksum);
+    expect(firstPlan.seasonDocuments).toEqual(secondPlan.seasonDocuments);
+    expect(firstPlan.replayDocument).toEqual(secondPlan.replayDocument);
+  });
+
+  test("verification fails for missing and extra staged seasons", () => {
+    const plan = createSchemaV3MigrationPlan({
+      seasonHistory: [createSeason()],
+    });
+    const recoveryDocument = { sourceChecksum: plan.sourceChecksum };
+    const missing = verifySchemaV3StagingSnapshot(plan, {
+      recoveryDocument,
+      seasonDocuments: [],
+      replayDocument: plan.replayDocument,
+    });
+    const extra = verifySchemaV3StagingSnapshot(plan, {
+      recoveryDocument,
+      seasonDocuments: [
+        ...plan.seasonDocuments,
+        {
+          documentId: "v3_5x5_extra",
+          data: {
+            schemaVersion: 3,
+            documentId: "v3_5x5_extra",
+            payloadChecksum: "extra",
+          },
+        },
+      ],
+      replayDocument: plan.replayDocument,
+    });
+
+    expect(missing.verified).toBe(false);
+    expect(missing.missingIds).toHaveLength(1);
+    expect(extra.verified).toBe(false);
+    expect(extra.extraIds).toEqual(["v3_5x5_extra"]);
+  });
+
+  test("verification preserves replay sourceDraftSessionId", () => {
+    const plan = createSchemaV3MigrationPlan({
+      seasonHistory: [],
+      liveDraftConfirmedReplay: { sessionId: "draft-1" },
+      liveScheduleConfirmedReplay: {
+        sessionId: "schedule-1",
+        sourceDraftSessionId: "draft-1",
+      },
+    });
+    const verification = verifySchemaV3StagingSnapshot(plan, {
+      recoveryDocument: { sourceChecksum: plan.sourceChecksum },
+      seasonDocuments: [],
+      replayDocument: plan.replayDocument,
+    });
+
+    expect(
+      plan.replayDocument.liveScheduleConfirmedReplay.sourceDraftSessionId,
+    ).toBe("draft-1");
+    expect(verification.verified).toBe(true);
+  });
+
+  test("blocks staging when the recovery source no longer matches", () => {
+    const original = {
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      data: { players: [{ id: 1 }] },
+    };
+    const changed = {
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      data: { players: [{ id: 2 }] },
+    };
+    const recovery = createSchemaV2RecoveryArtifact(
+      original,
+      "2026-01-03T00:00:00.000Z",
+    );
+
+    expect(validateRecoverySource(recovery, original).matches).toBe(true);
+    expect(validateRecoverySource(recovery, changed).matches).toBe(false);
   });
 });

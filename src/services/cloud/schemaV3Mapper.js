@@ -26,6 +26,29 @@ const stableHash = (value) => {
   return (hash >>> 0).toString(36);
 };
 
+const canonicalizeForChecksum = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeForChecksum);
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((result, key) => {
+        result[key] = canonicalizeForChecksum(value[key]);
+        return result;
+      }, {});
+  }
+  return value;
+};
+
+export const createPayloadChecksum = (value) => {
+  const sanitized = deepSanitizeForFirestore(value);
+  const canonical = JSON.stringify(canonicalizeForChecksum(sanitized));
+  const forwardHash = stableHash(canonical);
+  const reverseHash = stableHash(canonical.split("").reverse().join(""));
+  return `bam-fnv1a-${forwardHash}${reverseHash}`;
+};
+
 export const deepSanitizeForFirestore = (value) => {
   const ancestors = new WeakSet();
 
@@ -70,6 +93,82 @@ export const deepSanitizeForFirestore = (value) => {
   };
 
   return visit(value);
+};
+
+const RECOVERY_SECRET_KEYS = new Set([
+  "accesstoken",
+  "refreshtoken",
+  "idtoken",
+  "credential",
+  "credentials",
+  "authtoken",
+  "serviceaccount",
+  "privatekey",
+]);
+
+const removeRecoveryCredentials = (value) => {
+  if (Array.isArray(value)) return value.map(removeRecoveryCredentials);
+  if (!value || typeof value !== "object") return value;
+
+  return Object.entries(value).reduce((result, [key, item]) => {
+    const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    if (
+      RECOVERY_SECRET_KEYS.has(normalizedKey) ||
+      normalizedKey === "uid" ||
+      normalizedKey === "auth"
+    ) {
+      return result;
+    }
+    result[key] = removeRecoveryCredentials(item);
+    return result;
+  }, {});
+};
+
+export const createSchemaV2RecoveryArtifact = (
+  cloudPayload,
+  exportedAt = new Date().toISOString(),
+) => {
+  const detectedSchema = detectCloudSchemaVersion(cloudPayload);
+  if (detectedSchema === SCHEMA_V3) {
+    throw new Error("Recovery backup is blocked because Cloud main is already V3.");
+  }
+
+  const sanitizedPayload = removeRecoveryCredentials(
+    deepSanitizeForFirestore(cloudPayload),
+  );
+  const sourceChecksum = createPayloadChecksum(sanitizedPayload);
+
+  return {
+    format: "BAM_SCHEMA_V2_RECOVERY_V1",
+    sourceSchemaVersion: detectedSchema,
+    sourceUpdatedAt: String(cloudPayload?.updatedAt || ""),
+    sourceChecksum,
+    exportedAt,
+    payload: sanitizedPayload,
+  };
+};
+
+export const validateRecoverySource = (recoveryArtifact, cloudPayload) => {
+  if (!recoveryArtifact || typeof recoveryArtifact !== "object") {
+    return { matches: false, error: "Recovery backup has not been downloaded." };
+  }
+
+  const currentArtifact = createSchemaV2RecoveryArtifact(
+    cloudPayload,
+    recoveryArtifact.exportedAt,
+  );
+  const matches =
+    recoveryArtifact.sourceChecksum === currentArtifact.sourceChecksum &&
+    String(recoveryArtifact.sourceUpdatedAt || "") ===
+      String(currentArtifact.sourceUpdatedAt || "");
+
+  return {
+    matches,
+    currentChecksum: currentArtifact.sourceChecksum,
+    error: matches
+      ? ""
+      : "Cloud main changed after the recovery download. Download a new recovery backup.",
+  };
 };
 
 export const estimateFirestorePayloadBytes = (value) => {
@@ -200,20 +299,24 @@ export const createSchemaV3MainPayload = (logicalBackup = {}) => {
 export const createSchemaV3SeasonDocuments = (seasonHistory = []) =>
   (Array.isArray(seasonHistory) ? seasonHistory : []).map((seasonRecord) => {
     const indexEntry = createSeasonIndexEntry(seasonRecord);
+    const seasonDocument = deepSanitizeForFirestore({
+      ...seasonRecord,
+      schemaVersion: SCHEMA_V3,
+      documentId: indexEntry.documentId,
+      originalSeasonId: indexEntry.originalSeasonId,
+    });
     return {
       documentId: indexEntry.documentId,
-      data: deepSanitizeForFirestore({
-        ...seasonRecord,
-        schemaVersion: SCHEMA_V3,
-        documentId: indexEntry.documentId,
-        originalSeasonId: indexEntry.originalSeasonId,
-      }),
+      data: {
+        ...seasonDocument,
+        payloadChecksum: createPayloadChecksum(seasonDocument),
+      },
     };
   });
 
 export const createSchemaV3ReplayDocument = (logicalBackup = {}) => {
   const logicalData = normalizeLegacyBackup(logicalBackup);
-  return deepSanitizeForFirestore({
+  const replayDocument = deepSanitizeForFirestore({
     schemaVersion: SCHEMA_V3,
     updatedAt: logicalBackup.updatedAt || "",
     liveDraftConfirmedReplay:
@@ -221,6 +324,10 @@ export const createSchemaV3ReplayDocument = (logicalBackup = {}) => {
     liveScheduleConfirmedReplay:
       logicalData.liveScheduleConfirmedReplay ?? null,
   });
+  return {
+    ...replayDocument,
+    payloadChecksum: createPayloadChecksum(replayDocument),
+  };
 };
 
 const normalizeSeasonDocumentList = (seasonDocuments) => {
@@ -392,6 +499,119 @@ export const validateSchemaV3Plan = (plan = {}) => {
   };
 };
 
+const withoutPayloadChecksum = (value) => {
+  const clone = { ...(value || {}) };
+  delete clone.payloadChecksum;
+  return clone;
+};
+
+export const verifySchemaV3StagingSnapshot = (
+  plan,
+  {
+    recoveryDocument,
+    seasonDocuments = [],
+    replayDocument,
+  } = {},
+) => {
+  const errors = [];
+  const expectedDocuments = Array.isArray(plan?.seasonDocuments)
+    ? plan.seasonDocuments
+    : [];
+  const actualDocuments = Array.isArray(seasonDocuments)
+    ? seasonDocuments
+    : [];
+  const expectedById = new Map(
+    expectedDocuments.map((entry) => [entry.documentId, entry.data]),
+  );
+  const actualById = new Map(
+    actualDocuments.map((entry) => [
+      entry.documentId || entry.data?.documentId,
+      entry.data || entry,
+    ]),
+  );
+  const expectedIds = [...expectedById.keys()].sort();
+  const actualIds = [...actualById.keys()].filter(Boolean).sort();
+  const missingIds = expectedIds.filter((id) => !actualById.has(id));
+  const extraIds = actualIds.filter((id) => !expectedById.has(id));
+
+  if (missingIds.length > 0) {
+    errors.push(`Missing staged season documents: ${missingIds.join(", ")}`);
+  }
+  if (extraIds.length > 0) {
+    errors.push(`Extra staged season documents: ${extraIds.join(", ")}`);
+  }
+
+  expectedById.forEach((expected, documentId) => {
+    const actual = actualById.get(documentId);
+    if (!actual) return;
+
+    [
+      "originalSeasonId",
+      "competitionType",
+      "season",
+      "projectName",
+    ].forEach((field) => {
+      if (String(actual[field] ?? "") !== String(expected[field] ?? "")) {
+        errors.push(`${documentId} field mismatch: ${field}`);
+      }
+    });
+
+    const actualChecksum = createPayloadChecksum(
+      withoutPayloadChecksum(actual),
+    );
+    if (
+      actual.payloadChecksum !== expected.payloadChecksum ||
+      actualChecksum !== expected.payloadChecksum
+    ) {
+      errors.push(`${documentId} checksum mismatch.`);
+    }
+  });
+
+  if (
+    !recoveryDocument ||
+    recoveryDocument.sourceChecksum !== plan?.sourceChecksum
+  ) {
+    errors.push("Recovery document checksum mismatch.");
+  }
+
+  const expectedReplay = plan?.replayDocument || {};
+  let replayVerified = true;
+  if (!replayDocument) {
+    errors.push("Admin replay document is missing.");
+    replayVerified = false;
+  } else {
+    const actualReplayChecksum = createPayloadChecksum(
+      withoutPayloadChecksum(replayDocument),
+    );
+    if (
+      replayDocument.payloadChecksum !== expectedReplay.payloadChecksum ||
+      actualReplayChecksum !== expectedReplay.payloadChecksum
+    ) {
+      errors.push("Admin replay document checksum mismatch.");
+      replayVerified = false;
+    }
+    const expectedSourceDraftSessionId =
+      expectedReplay.liveScheduleConfirmedReplay?.sourceDraftSessionId || "";
+    const actualSourceDraftSessionId =
+      replayDocument.liveScheduleConfirmedReplay?.sourceDraftSessionId || "";
+    if (actualSourceDraftSessionId !== expectedSourceDraftSessionId) {
+      errors.push("Replay sourceDraftSessionId mismatch.");
+      replayVerified = false;
+    }
+  }
+
+  return {
+    verified: errors.length === 0,
+    errors,
+    expectedSeasonCount: expectedIds.length,
+    stagedSeasonCount: actualIds.length,
+    verifiedSeasonCount: expectedIds.filter((id) => actualById.has(id)).length,
+    missingIds,
+    extraIds,
+    replayVerified,
+  };
+};
+
 export const createSchemaV3MigrationPlan = (logicalBackup = {}) => {
   const logicalData = normalizeLegacyBackup(logicalBackup);
   const mainPayload = createSchemaV3MainPayload(logicalBackup);
@@ -401,6 +621,7 @@ export const createSchemaV3MigrationPlan = (logicalBackup = {}) => {
   const replayDocument = createSchemaV3ReplayDocument(logicalBackup);
   const plan = {
     detectedSchema: detectCloudSchemaVersion(logicalBackup),
+    sourceChecksum: createPayloadChecksum(logicalBackup),
     mainPayload,
     seasonDocuments,
     replayDocument,
