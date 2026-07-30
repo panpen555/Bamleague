@@ -8,6 +8,7 @@ import {
   createSeasonDocumentId,
   deepSanitizeForFirestore,
   detectCloudSchemaVersion,
+  mergeSchemaV3SeasonIndexes,
   normalizeLegacyBackup,
   normalizeSchemaV3Backup,
   validateRecoverySource,
@@ -47,6 +48,25 @@ describe("Schema V3 mapper", () => {
     expect(createSeasonDocumentId(fiveOnFive)).not.toBe(
       createSeasonDocumentId(threeOnThree),
     );
+  });
+
+  test("merges local season index over matching Cloud entries without losing Cloud-only history", () => {
+    const merged = mergeSchemaV3SeasonIndexes(
+      [
+        { documentId: "v3_5x5_1", projectName: "Cloud 1" },
+        { documentId: "v3_5x5_2", projectName: "Cloud 2" },
+      ],
+      [
+        { documentId: "v3_5x5_2", projectName: "Local 2" },
+        { documentId: "v3_5x5_3", projectName: "Local 3" },
+      ],
+    );
+
+    expect(merged).toEqual([
+      { documentId: "v3_5x5_1", projectName: "Cloud 1" },
+      { documentId: "v3_5x5_2", projectName: "Local 2" },
+      { documentId: "v3_5x5_3", projectName: "Local 3" },
+    ]);
   });
 
   test("blocks duplicate season document IDs", () => {

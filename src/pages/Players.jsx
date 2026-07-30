@@ -47,15 +47,19 @@ import {
 } from "../services/cloud/backupService";
 import {
   assembleSchemaV3LogicalBackup,
+  clearSchemaV3Backup,
   downloadSchemaV2RecoveryDocument,
   downloadSchemaV3Main,
   downloadSchemaV3MigrationState,
   downloadSchemaV3Season,
+  promoteSchemaV3Main,
+  rollbackToSchemaV2Main,
   stageSchemaV3ReplayDocument,
   stageSchemaV3SeasonDocuments,
   verifySchemaV3Staging,
   writeSchemaV2RecoveryDocument,
   writeSchemaV3MigrationState,
+  uploadSchemaV3Backup,
 } from "../services/cloud/schemaV3Service";
 import {
   createSchemaV2RecoveryArtifact,
@@ -640,6 +644,7 @@ function Players() {
   const [schemaV3RecoveryFilename, setSchemaV3RecoveryFilename] = useState("");
   const [schemaV3StagedPlan, setSchemaV3StagedPlan] = useState(null);
   const schemaV3MigrationLockRef = useRef(false);
+  const cloudWriteOperationLockRef = useRef(false);
   const [adminUser, setAdminUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -6905,6 +6910,7 @@ function Players() {
   );
   const safePublishToCloud = async () => {
     if (!requireAdminLogin("Safe Publish To Cloud")) return;
+    if (cloudWriteOperationLockRef.current) return;
 
     const report = getLocalDraftValidationReport();
 
@@ -6934,9 +6940,11 @@ function Players() {
 
     if (!confirmPublish) return;
 
+    cloudWriteOperationLockRef.current = true;
     try {
       setCloudStatus("Publishing.");
-      await uploadLeagueBackup({
+      const publishedAt = new Date();
+      const backupPayload = {
         ...getAllBackupData(),
         publishMeta: {
           ...publishMeta,
@@ -6947,10 +6955,20 @@ function Players() {
           issues: report.issues,
           warnings: report.warnings,
           summary: report.summary,
-          lastPublishedAt: new Date().toISOString(),
-          lastPublishedText: new Date().toLocaleString(),
+          lastPublishedAt: publishedAt.toISOString(),
+          lastPublishedText: publishedAt.toLocaleString(),
         },
-      });
+      };
+      const freshCloudMain = await downloadSchemaV3Main();
+      const detectedSchema = freshCloudMain
+        ? detectCloudSchemaVersion(freshCloudMain)
+        : 2;
+
+      if (detectedSchema === SCHEMA_V3) {
+        await uploadSchemaV3Backup(backupPayload);
+      } else {
+        await uploadLeagueBackup(backupPayload);
+      }
 
       setPublishMeta((prevMeta) => ({
         ...prevMeta,
@@ -6961,10 +6979,11 @@ function Players() {
         issues: report.issues,
         warnings: report.warnings,
         summary: report.summary,
-        lastPublishedAt: new Date().toISOString(),
-        lastPublishedText: new Date().toLocaleString(),
+        lastPublishedAt: publishedAt.toISOString(),
+        lastPublishedText: publishedAt.toLocaleString(),
       }));
 
+      setCloudSchemaVersion(detectedSchema);
       setCloudStatus("Cloud Published");
       alert("Safe Publish to Cloud สำเร็จ");
     } catch (error) {
@@ -7149,6 +7168,8 @@ function Players() {
         status: "Blocked",
         error: error.message || "Unable to analyze Schema V3 migration.",
       }));
+    } finally {
+      cloudWriteOperationLockRef.current = false;
     }
   };
 
@@ -7194,6 +7215,8 @@ function Players() {
       if (detectCloudSchemaVersion(cloudMain) === SCHEMA_V3) {
         throw new Error("Cloud main เป็น Schema V3 แล้ว จึงไม่สร้าง V2 recovery");
       }
+      setCloudSchemaVersion(2);
+      setCloudStatus("Cloud Schema: V2");
 
       const recoveryArtifact = createSchemaV2RecoveryArtifact(cloudMain);
       const filename = createRecoveryFilename();
@@ -7425,6 +7448,93 @@ function Players() {
     }
   };
 
+  const promoteVerifiedSchemaV3Main = async () => {
+    if (!requireAdminLogin("Promote Schema V3 Main")) return;
+    if (
+      schemaV3MigrationLockRef.current ||
+      schemaV3MigrationOperation.status !== "Verified"
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "กำลังเปลี่ยน /bamLeague/main จาก Schema V2 เป็น Schema V3\n\n" +
+        "Season documents และ Admin replay ผ่านการ Verify แล้ว\n" +
+        "Recovery Backup ยังคงถูกเก็บไว้\n\n" +
+        "ต้องการ Promote Schema V3 หรือไม่?",
+    );
+    if (!confirmed) return;
+
+    schemaV3MigrationLockRef.current = true;
+    setSchemaV3MigrationOperation((previous) => ({
+      ...previous,
+      status: "Promoting",
+      error: "",
+    }));
+    try {
+      await promoteSchemaV3Main();
+      setCloudSchemaVersion(SCHEMA_V3);
+      setCloudStatus("Cloud Schema: V3");
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Promoted",
+        error: "",
+      }));
+    } catch (error) {
+      console.error("Schema V3 Promotion Error:", error);
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Failed",
+        error: error.message || "Schema V3 promotion failed.",
+      }));
+    } finally {
+      schemaV3MigrationLockRef.current = false;
+    }
+  };
+
+  const rollbackSchemaV3Main = async () => {
+    if (!requireAdminLogin("Rollback to Schema V2 Main")) return;
+    if (
+      schemaV3MigrationLockRef.current ||
+      cloudSchemaVersion !== SCHEMA_V3
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "กำลังคืน /bamLeague/main เป็น Schema V2 จาก Recovery Backup\n\n" +
+        "V3 Season, Replay และ Recovery documents จะยังถูกเก็บไว้\n\n" +
+        "ต้องการ Rollback หรือไม่?",
+    );
+    if (!confirmed) return;
+
+    schemaV3MigrationLockRef.current = true;
+    setSchemaV3MigrationOperation((previous) => ({
+      ...previous,
+      status: "Rolling Back",
+      error: "",
+    }));
+    try {
+      await rollbackToSchemaV2Main();
+      setCloudSchemaVersion(2);
+      setCloudStatus("Cloud Schema: V2");
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Rolled Back",
+        error: "",
+      }));
+    } catch (error) {
+      console.error("Schema V2 Rollback Error:", error);
+      setSchemaV3MigrationOperation((previous) => ({
+        ...previous,
+        status: "Failed",
+        error: error.message || "Schema V2 rollback failed.",
+      }));
+    } finally {
+      schemaV3MigrationLockRef.current = false;
+    }
+  };
+
   const renderSchemaV3MigrationPreviewCard = () => {
     const preview = schemaV3MigrationPreview;
     const validation = preview?.validation;
@@ -7439,6 +7549,8 @@ function Players() {
       "Backing up",
       "Staging",
       "Verifying",
+      "Promoting",
+      "Rolling Back",
     ].includes(operationStatus);
     const canStage =
       Boolean(adminUser) &&
@@ -7450,6 +7562,14 @@ function Players() {
       Boolean(schemaV3RecoveryArtifact) &&
       Boolean(schemaV3StagedPlan) &&
       !isOperationRunning;
+    const canPromote =
+      Boolean(adminUser) &&
+      operationStatus === "Verified" &&
+      !schemaV3MigrationLockRef.current;
+    const canRollback =
+      Boolean(adminUser) &&
+      cloudSchemaVersion === SCHEMA_V3 &&
+      !schemaV3MigrationLockRef.current;
 
     return (
       <div
@@ -7545,6 +7665,46 @@ function Players() {
         >
           Verify Staged Documents
         </button>
+
+        <button
+          type="button"
+          onClick={promoteVerifiedSchemaV3Main}
+          disabled={!canPromote}
+          style={{
+            width: "100%",
+            minHeight: "44px",
+            marginTop: "8px",
+            border: "none",
+            borderRadius: "8px",
+            background: canPromote ? "#b91c1c" : "#94a3b8",
+            color: "white",
+            fontWeight: "bold",
+            cursor: canPromote ? "pointer" : "not-allowed",
+          }}
+        >
+          Promote Schema V3 Main
+        </button>
+
+        {cloudSchemaVersion === SCHEMA_V3 ? (
+          <button
+            type="button"
+            onClick={rollbackSchemaV3Main}
+            disabled={!canRollback}
+            style={{
+              width: "100%",
+              minHeight: "44px",
+              marginTop: "8px",
+              border: "none",
+              borderRadius: "8px",
+              background: canRollback ? "#7f1d1d" : "#94a3b8",
+              color: "white",
+              fontWeight: "bold",
+              cursor: canRollback ? "pointer" : "not-allowed",
+            }}
+          >
+            Rollback to Schema V2 Main
+          </button>
+        ) : null}
 
         <div style={{ marginTop: "12px", fontSize: "13px" }}>
           Status: <strong>{operationStatus}</strong>
@@ -7658,6 +7818,7 @@ function Players() {
 
   const uploadToCloud = async () => {
     if (!requireAdminLogin("Upload To Cloud")) return;
+    if (cloudWriteOperationLockRef.current) return;
 
     const confirmUpload = window.confirm(
       "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ",
@@ -7665,15 +7826,29 @@ function Players() {
 
     if (!confirmUpload) return;
 
+    cloudWriteOperationLockRef.current = true;
     try {
       setCloudStatus("Uploading.");
-      await uploadLeagueBackup(getAllBackupData());
+      const freshCloudMain = await downloadSchemaV3Main();
+      const detectedSchema = freshCloudMain
+        ? detectCloudSchemaVersion(freshCloudMain)
+        : 2;
+
+      if (detectedSchema === SCHEMA_V3) {
+        await uploadSchemaV3Backup(getAllBackupData());
+      } else {
+        await uploadLeagueBackup(getAllBackupData());
+      }
+
+      setCloudSchemaVersion(detectedSchema);
       setCloudStatus("Cloud Uploaded");
       alert("Upload To Cloud สำเร็จ");
     } catch (error) {
       console.error("Upload To Cloud Error:", error);
       setCloudStatus("Cloud Error");
       alert("Upload To Cloud ไม่สำเร็จ");
+    } finally {
+      cloudWriteOperationLockRef.current = false;
     }
   };
 
@@ -7736,28 +7911,57 @@ function Players() {
 
   const clearCloudData = async () => {
     if (!requireAdminLogin("Clear Cloud Data")) return;
+    if (cloudWriteOperationLockRef.current) return;
+
+    cloudWriteOperationLockRef.current = true;
+    let detectedSchema = 2;
+    try {
+      const freshCloudMain = await downloadSchemaV3Main();
+      detectedSchema = freshCloudMain
+        ? detectCloudSchemaVersion(freshCloudMain)
+        : 2;
+    } catch (error) {
+      console.error("Clear Cloud schema detection error:", error);
+      setCloudStatus("Cloud Error");
+      cloudWriteOperationLockRef.current = false;
+      alert("Unable to verify the Cloud schema. Nothing was deleted.");
+      return;
+    }
 
     const firstConfirm = window.confirm(
       "ต้องการลบข้อมูล BAM League บน Cloud ใช่ไหม?\n\nข้อมูลในเครื่องจะไม่ถูกลบ",
     );
 
-    if (!firstConfirm) return;
+    if (!firstConfirm) {
+      cloudWriteOperationLockRef.current = false;
+      return;
+    }
 
     const secondConfirm = window.confirm(
       "ยืนยันอีกครั้ง: ข้อมูลบน Cloud จะถูกลบ และไม่สามารถกู้คืนจาก Cloud ได้ ต้องการดำเนินการต่อไหม?",
     );
 
-    if (!secondConfirm) return;
+    if (!secondConfirm) {
+      cloudWriteOperationLockRef.current = false;
+      return;
+    }
 
     try {
       setCloudStatus("Clearing.");
-      await clearLeagueBackup();
+      if (detectedSchema === SCHEMA_V3) {
+        await clearSchemaV3Backup();
+      } else {
+        await clearLeagueBackup();
+      }
+      setCloudSchemaVersion(null);
       setCloudStatus("Cloud Cleared");
       alert("ลบข้อมูลบน Cloud สำเร็จ");
     } catch (error) {
       console.error("Clear Cloud Error:", error);
       setCloudStatus("Cloud Error");
       alert("ลบข้อมูลบน Cloud ไม่สำเร็จ");
+    } finally {
+      cloudWriteOperationLockRef.current = false;
     }
   };
 

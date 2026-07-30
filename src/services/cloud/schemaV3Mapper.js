@@ -234,6 +234,33 @@ export const createSeasonIndexEntry = (seasonRecord = {}) => ({
   champion: String(seasonRecord.champion || "-"),
 });
 
+export const mergeSchemaV3SeasonIndexes = (
+  existingIndex = [],
+  localIndex = [],
+) => {
+  const mergedById = new Map();
+
+  [existingIndex, localIndex].forEach((indexEntries) => {
+    if (!Array.isArray(indexEntries)) {
+      throw new Error("Schema V3 season index must be an array.");
+    }
+    const seenInSource = new Set();
+    indexEntries.forEach((entry) => {
+      const documentId = String(entry?.documentId || "").trim();
+      if (!documentId || documentId.includes("/")) {
+        throw new Error("Schema V3 season index contains an invalid document ID.");
+      }
+      if (seenInSource.has(documentId)) {
+        throw new Error(`Duplicate season document ID: ${documentId}`);
+      }
+      seenInSource.add(documentId);
+      mergedById.set(documentId, deepSanitizeForFirestore(entry));
+    });
+  });
+
+  return [...mergedById.values()];
+};
+
 export const normalizeLegacyBackup = (payload) => {
   const data =
     payload?.data && typeof payload.data === "object" ? payload.data : payload;
