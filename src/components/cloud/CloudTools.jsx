@@ -4,78 +4,67 @@ function CloudTools({
   cloudStatus,
   uploadToCloud,
   downloadFromCloud,
-  clearCloudData,
   adminUser,
   authLoading,
 }) {
   const canWriteCloud = Boolean(adminUser) && !authLoading;
-  const writeDisabledStyle = {
-    opacity: canWriteCloud ? 1 : 0.55,
-    cursor: canWriteCloud ? "pointer" : "not-allowed",
-  };
 
   return (
     <div
       style={{
-        border: "1px solid #99f6e4",
+        border: "1px solid #bfdbfe",
         borderRadius: "12px",
         padding: "14px",
-        background: "#f0fdfa",
+        background: "#eff6ff",
       }}
     >
-      <h3 style={{ marginTop: 0, color: "#0f766e" }}>Cloud Storage</h3>
-
-      <p style={{ color: "#555", fontSize: "14px" }}>
-        Manual Cloud Mode: Download is public. Upload, Safe Publish, and Clear
-        Cloud require Google sign-in. Firestore Rules will enforce real security
-        in Phase 2.
-      </p>
-
+      <h3 style={{ marginTop: 0, color: "#1d4ed8" }}>Cloud สำหรับงานประจำ</h3>
       <div
         style={{
           display: "inline-block",
-          padding: "6px 10px",
+          padding: "4px 9px",
           marginBottom: "10px",
           borderRadius: "999px",
-          background: "#0f172a",
-          color: "white",
-          fontSize: "13px",
+          background: "#dcfce7",
+          color: "#166534",
+          fontSize: "12px",
           fontWeight: "bold",
         }}
       >
-        Status: {cloudStatus}
+        ใช้งานทั่วไป
       </div>
-
-      {!canWriteCloud ? (
-        <p style={{ color: "#7c2d12", fontSize: "13px", marginTop: 0 }}>
-          Sign in with Google to enable Upload To Cloud and Clear Cloud Data.
-        </p>
-      ) : null}
+      <p style={{ color: "#475569", fontSize: "13px" }}>
+        Status: <strong>{cloudStatus}</strong>
+      </p>
 
       <button
+        type="button"
         onClick={uploadToCloud}
         disabled={!canWriteCloud}
         style={{
           width: "100%",
-          padding: "10px",
-          marginBottom: "8px",
-          background: "#2563eb",
+          minHeight: "44px",
+          background: canWriteCloud ? "#2563eb" : "#94a3b8",
           color: "white",
           border: "none",
           borderRadius: "8px",
           fontWeight: "bold",
-          ...writeDisabledStyle,
+          cursor: canWriteCloud ? "pointer" : "not-allowed",
         }}
       >
         Upload To Cloud
       </button>
+      <p style={{ color: "#92400e", fontSize: "13px", marginTop: "6px" }}>
+        เขียนทับข้อมูล Cloud ด้วยข้อมูลเครื่องนี้ ระบบจะดาวน์โหลด recovery ของ Cloud เดิมก่อน
+        หลังใช้ให้ตรวจ Public Dashboard
+      </p>
 
       <button
+        type="button"
         onClick={downloadFromCloud}
         style={{
           width: "100%",
-          padding: "10px",
-          marginBottom: "8px",
+          minHeight: "44px",
           background: "#0f766e",
           color: "white",
           border: "none",
@@ -84,25 +73,12 @@ function CloudTools({
           cursor: "pointer",
         }}
       >
-        Download From Cloud
+        Download Cloud Data
       </button>
-
-      <button
-        onClick={clearCloudData}
-        disabled={!canWriteCloud}
-        style={{
-          width: "100%",
-          padding: "10px",
-          background: "#b91c1c",
-          color: "white",
-          border: "none",
-          borderRadius: "8px",
-          fontWeight: "bold",
-          ...writeDisabledStyle,
-        }}
-      >
-        Clear Cloud Data
-      </button>
+      <p style={{ color: "#92400e", fontSize: "13px", marginBottom: 0 }}>
+        นำข้อมูลล่าสุดจาก Cloud มาเขียนทับเครื่องนี้ ระบบจะดาวน์โหลด local recovery ก่อน
+        หลังใช้ให้ตรวจ Players, Schedule และ Replay
+      </p>
     </div>
   );
 }

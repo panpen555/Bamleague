@@ -3,6 +3,9 @@ import CloudTools from "../components/cloud/CloudTools";
 import BackupRestoreTools from "../components/cloud/BackupRestoreTools";
 import SeasonManagementTools from "../components/season/SeasonManagementTools";
 import DangerZoneTools from "../components/system/DangerZoneTools";
+import AdminGettingStarted from "../components/system/AdminGettingStarted";
+import AdvancedSystemToolsSection from "../components/system/AdvancedSystemToolsSection";
+import AdvancedCloudTools from "../components/cloud/AdvancedCloudTools";
 import PlayerImportExport from "../components/players/PlayerImportExport";
 import PlayerForm from "../components/players/PlayerForm";
 import PlayerList from "../components/players/PlayerList";
@@ -71,6 +74,10 @@ import {
   validateRecoverySource,
 } from "../services/cloud/schemaV3Mapper";
 import { SCHEMA_V3 } from "../config/firebase";
+import {
+  createRecoveryEnvelope,
+  runWithRequiredRecovery,
+} from "../services/cloud/cloudOperationSafety";
 import {
   buildScheduleResult,
   groupPublicScheduleInSavedOrder,
@@ -6820,11 +6827,13 @@ function Players() {
           Sign in with Google
         </button>
       )}
+      <p style={{ marginBottom: 0, color: "#475569", fontSize: "13px" }}>
+        ใช้ล็อกอินเพื่อเปิดสิทธิ์เขียน Cloud เท่านั้น หลังล็อกอินให้ตรวจชื่อบัญชีก่อน Publish
+      </p>
     </div>
   );
   const safePublishToCloud = async () => {
     if (!requireAdminLogin("Safe Publish To Cloud")) return;
-    if (!requireLocalBackupExport("Safe Publish To Cloud")) return;
     if (cloudWriteOperationLockRef.current) return;
 
     const report = getLocalDraftValidationReport();
@@ -6879,11 +6888,14 @@ function Players() {
         ? detectCloudSchemaVersion(freshCloudMain)
         : 2;
 
-      if (detectedSchema === SCHEMA_V3) {
-        await uploadSchemaV3Backup(backupPayload);
-      } else {
-        await uploadLeagueBackup(backupPayload);
-      }
+      await runWithRequiredRecovery({
+        createRecovery: () =>
+          downloadAutomaticCloudRecovery(freshCloudMain, detectedSchema),
+        operation: () =>
+          detectedSchema === SCHEMA_V3
+            ? uploadSchemaV3Backup(backupPayload)
+            : uploadLeagueBackup(backupPayload),
+      });
 
       setPublishMeta((prevMeta) => ({
         ...prevMeta,
@@ -6900,8 +6912,7 @@ function Players() {
 
       setCloudSchemaVersion(detectedSchema);
       setCloudStatus("Cloud Published");
-      localBackupExportReadyRef.current = false;
-      alert("Safe Publish to Cloud สำเร็จ");
+      alert("Safe Publish สำเร็จ และสำรอง Cloud เดิมอัตโนมัติแล้ว");
     } catch (error) {
       console.error("Safe Publish Error:", error);
       setCloudStatus("Publish Error");
@@ -6925,6 +6936,9 @@ function Players() {
         <h3 style={{ marginTop: 0, color: "#c2410c" }}>
           🛡️ Safe Cloud Publish
         </h3>
+        <div style={{ color: "#166534", fontSize: "12px", fontWeight: "bold" }}>
+          ใช้งานทั่วไป
+        </div>
         <p style={{ marginTop: 0, color: "#7c2d12", fontSize: "13px" }}>
           ใช้ระบบ Local Draft → Validate → Publish
           เพื่อป้องกันข้อมูลผิดซิงค์ขึ้น Cloud ทันที
@@ -6995,6 +7009,9 @@ function Players() {
         >
           ✅ Validate Local Draft
         </button>
+        <p style={{ color: "#475569", fontSize: "12px", marginTop: "4px" }}>
+          ตรวจความครบถ้วนของข้อมูลในเครื่อง ไม่อ่านหรือเขียน Cloud
+        </p>
 
         <button
           type="button"
@@ -7017,6 +7034,10 @@ function Players() {
         >
           🚀 Publish Validated Draft To Cloud
         </button>
+        <p style={{ color: "#166534", fontSize: "12px", marginBottom: 0 }}>
+          สำรอง Cloud เดิมอัตโนมัติแล้วจึงเผยแพร่ข้อมูลที่ผ่าน Validate
+          หลังใช้ให้ตรวจ Public Dashboard
+        </p>
       </div>
     );
   };
@@ -7110,6 +7131,44 @@ function Players() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const createRecoveryTimestamp = (date = new Date()) =>
+    date.toISOString().replace(/[:.]/g, "-");
+
+  const downloadAutomaticCloudRecovery = async (
+    freshCloudMain,
+    detectedSchema,
+  ) => {
+    const logicalCloudData =
+      freshCloudMain && detectedSchema === SCHEMA_V3
+        ? await assembleSchemaV3LogicalBackup(freshCloudMain, {
+            includeAdminReplay: true,
+          })
+        : freshCloudMain;
+    const recovery = createRecoveryEnvelope({
+      kind: "cloud-before-write",
+      sourceSchema: freshCloudMain ? detectedSchema : "empty",
+      data: logicalCloudData,
+    });
+    downloadJsonFile(
+      `bam-league-cloud-recovery-${createRecoveryTimestamp()}.json`,
+      recovery,
+    );
+    return recovery;
+  };
+
+  const downloadAutomaticLocalRecovery = () => {
+    const recovery = createRecoveryEnvelope({
+      kind: "local-before-cloud-download",
+      sourceSchema: "local",
+      data: getAllBackupData(),
+    });
+    downloadJsonFile(
+      `bam-league-local-recovery-${createRecoveryTimestamp()}.json`,
+      recovery,
+    );
+    return recovery;
   };
 
   const downloadLegacyCloudRecoveryBackup = async () => {
@@ -7505,6 +7564,9 @@ function Players() {
         <h3 style={{ marginTop: 0, color: "#1e3a8a" }}>
           Schema V3 Migration Preview
         </h3>
+        <div style={{ color: "#991b1b", fontSize: "12px", fontWeight: "bold" }}>
+          อันตราย / กู้คืนระบบ
+        </div>
         <p style={{ marginTop: 0, color: "#334155", fontSize: "13px" }}>
           Read-only analysis จาก logical backup ใน memory ไม่มี Firestore
           write, stage, promote หรือ cleanup
@@ -7528,6 +7590,9 @@ function Players() {
         >
           Analyze Schema V3 Migration
         </button>
+        <p style={{ color: "#475569", fontSize: "12px", margin: "4px 0" }}>
+          วิเคราะห์แผน Migration ใน memory ใช้เมื่อตรวจระบบโดยผู้พัฒนา ไม่เขียน Cloud
+        </p>
 
         <button
           type="button"
@@ -7549,6 +7614,9 @@ function Players() {
         >
           Download Legacy Cloud Recovery Backup
         </button>
+        <p style={{ color: "#475569", fontSize: "12px", margin: "4px 0" }}>
+          ดาวน์โหลด recovery ของ Main V2 ก่อน Stage และตรวจว่าไฟล์ถูกบันทึกแล้ว
+        </p>
 
         <button
           type="button"
@@ -7568,6 +7636,9 @@ function Players() {
         >
           Stage Schema V3 Documents
         </button>
+        <p style={{ color: "#92400e", fontSize: "12px", margin: "4px 0" }}>
+          เขียน Season/Replay staging บน Cloud ต้องมี Export Backup และตรวจสถานะ Verify
+        </p>
 
         <button
           type="button"
@@ -7587,6 +7658,9 @@ function Players() {
         >
           Verify Staged Documents
         </button>
+        <p style={{ color: "#475569", fontSize: "12px", margin: "4px 0" }}>
+          อ่าน staging กลับมาเทียบ checksum ก่อน Promote ไม่เปลี่ยน Main
+        </p>
 
         <button
           type="button"
@@ -7606,26 +7680,34 @@ function Players() {
         >
           Promote Schema V3 Main
         </button>
+        <p style={{ color: "#991b1b", fontSize: "12px", margin: "4px 0" }}>
+          เปลี่ยน Main เป็น Schema V3 ใช้ครั้งเดียวหลัง Verify ผ่านและตรวจ Public ทันที
+        </p>
 
         {cloudSchemaVersion === SCHEMA_V3 ? (
-          <button
-            type="button"
-            onClick={rollbackSchemaV3Main}
-            disabled={!canRollback}
-            style={{
-              width: "100%",
-              minHeight: "44px",
-              marginTop: "8px",
-              border: "none",
-              borderRadius: "8px",
-              background: canRollback ? "#7f1d1d" : "#94a3b8",
-              color: "white",
-              fontWeight: "bold",
-              cursor: canRollback ? "pointer" : "not-allowed",
-            }}
-          >
-            Rollback to Schema V2 Main
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={rollbackSchemaV3Main}
+              disabled={!canRollback}
+              style={{
+                width: "100%",
+                minHeight: "44px",
+                marginTop: "8px",
+                border: "none",
+                borderRadius: "8px",
+                background: canRollback ? "#7f1d1d" : "#94a3b8",
+                color: "white",
+                fontWeight: "bold",
+                cursor: canRollback ? "pointer" : "not-allowed",
+              }}
+            >
+              Rollback to Schema V2 Main
+            </button>
+            <p style={{ color: "#991b1b", fontSize: "12px", margin: "4px 0" }}>
+              กู้ Main จาก V2 recovery เฉพาะกรณีฉุกเฉิน และต้องตรวจข้อมูล Cloud/Public หลังใช้
+            </p>
+          </>
         ) : null}
 
         <div style={{ marginTop: "12px", fontSize: "13px" }}>
@@ -7740,7 +7822,6 @@ function Players() {
 
   const uploadToCloud = async () => {
     if (!requireAdminLogin("Upload To Cloud")) return;
-    if (!requireLocalBackupExport("Upload To Cloud")) return;
     if (cloudWriteOperationLockRef.current) return;
 
     const confirmUpload = window.confirm(
@@ -7757,16 +7838,18 @@ function Players() {
         ? detectCloudSchemaVersion(freshCloudMain)
         : 2;
 
-      if (detectedSchema === SCHEMA_V3) {
-        await uploadSchemaV3Backup(getAllBackupData());
-      } else {
-        await uploadLeagueBackup(getAllBackupData());
-      }
+      await runWithRequiredRecovery({
+        createRecovery: () =>
+          downloadAutomaticCloudRecovery(freshCloudMain, detectedSchema),
+        operation: () =>
+          detectedSchema === SCHEMA_V3
+            ? uploadSchemaV3Backup(getAllBackupData())
+            : uploadLeagueBackup(getAllBackupData()),
+      });
 
       setCloudSchemaVersion(detectedSchema);
       setCloudStatus("Cloud Uploaded");
-      localBackupExportReadyRef.current = false;
-      alert("Upload To Cloud สำเร็จ");
+      alert("Upload To Cloud สำเร็จ และสำรอง Cloud เดิมอัตโนมัติแล้ว");
     } catch (error) {
       console.error("Upload To Cloud Error:", error);
       setCloudStatus("Cloud Error");
@@ -7777,7 +7860,6 @@ function Players() {
   };
 
   const downloadFromCloud = async () => {
-    if (!requireLocalBackupExport("Download From Cloud")) return;
     const confirmDownload = window.confirm(
       "ต้องการ Download ข้อมูลจาก Cloud ใช่ไหม?\n\nข้อมูลในเครื่องปัจจุบันจะถูกเขียนทับ",
     );
@@ -7810,7 +7892,10 @@ function Players() {
             })
           : cloudData;
 
-      restoreLeagueData(logicalBackup);
+      await runWithRequiredRecovery({
+        createRecovery: downloadAutomaticLocalRecovery,
+        operation: async () => restoreLeagueData(logicalBackup),
+      });
       setCloudSchemaVersion(detectedSchema);
       if (detectedSchema === SCHEMA_V3) {
         const fullHistory = logicalBackup.data?.seasonHistory || [];
@@ -7826,8 +7911,7 @@ function Players() {
         setSchemaV3HistoryState("ready");
       }
       setCloudStatus("Cloud Downloaded");
-      localBackupExportReadyRef.current = false;
-      alert("Download From Cloud สำเร็จ");
+      alert("Download From Cloud สำเร็จ และสำรองข้อมูลเดิมในเครื่องแล้ว");
     } catch (error) {
       console.error("Download From Cloud Error:", error);
       setCloudStatus("Cloud Error");
@@ -10873,9 +10957,12 @@ function Players() {
         >
           <h2 style={{ marginTop: 0 }}>⚙️ System Tools</h2>
           <p style={{ marginTop: 0, color: "#555" }}>
-            จัดกลุ่มเครื่องมือเพื่อกันกดผิด: Backup, Cloud, Season และ Danger
-            Zone แยกกันชัดเจน
+            งานประจำอยู่ด้านบน ส่วน Migration, Recovery และการลบข้อมูลถูกซ่อนไว้ในเครื่องมือขั้นสูง
           </p>
+
+          <AdminGettingStarted />
+
+          <h3 style={{ color: "#166534" }}>งานประจำสำหรับ Admin</h3>
 
           <div
             style={{
@@ -10895,25 +10982,30 @@ function Players() {
             />
 
             {renderSafeCloudPublishCard()}
-            {renderSchemaV3MigrationPreviewCard()}
 
             <CloudTools
               cloudStatus={cloudStatus}
               uploadToCloud={uploadToCloud}
               downloadFromCloud={downloadFromCloud}
+              adminUser={adminUser}
+              authLoading={authLoading}
+            />
+          </div>
+
+          <AdvancedSystemToolsSection>
+            {renderSchemaV3MigrationPreviewCard()}
+            <AdvancedCloudTools
               clearCloudData={clearCloudData}
               adminUser={adminUser}
               authLoading={authLoading}
             />
-
             <SeasonManagementTools
               importSeasonHistory={importSeasonHistoryBackup}
               closeCurrentSeason={closeSeason}
               startNewSeason={clearCurrentProject}
             />
-
             <DangerZoneTools resetAllSystem={resetAllSystem} />
-          </div>
+          </AdvancedSystemToolsSection>
         </div>
       </details>
 

@@ -23,6 +23,10 @@ function BackupRestoreTools({ exportAllData, importLeagueBackup }) {
     >
       <h3 style={{ marginTop: 0, color: "#1d4ed8" }}>💾 Backup & Restore</h3>
 
+      <div style={{ color: "#166534", fontSize: "12px", fontWeight: "bold" }}>
+        ใช้งานทั่วไป
+      </div>
+
       <p style={{ color: "#555", fontSize: "14px" }}>
         สำรองข้อมูลเป็นไฟล์ลงเครื่อง ใช้ก่อนแก้โค้ดใหญ่ ก่อนย้ายข้อมูล
         หรือก่อนลบข้อมูล
@@ -46,6 +50,10 @@ function BackupRestoreTools({ exportAllData, importLeagueBackup }) {
         💾 Export All Data
       </button>
 
+      <p style={{ color: "#475569", fontSize: "13px", marginTop: 0 }}>
+        ดาวน์โหลดข้อมูลปัจจุบันเก็บไว้ในเครื่อง ไม่แก้ข้อมูล Cloud ใช้เมื่อต้องการสำรองเอง
+      </p>
+
       <label
         style={{
           display: "block",
@@ -64,6 +72,9 @@ function BackupRestoreTools({ exportAllData, importLeagueBackup }) {
           style={{ display: "block", marginTop: "8px", width: "100%" }}
         />
       </label>
+      <p style={{ color: "#92400e", fontSize: "13px", marginBottom: 0 }}>
+        เขียนทับข้อมูลในเครื่องจากไฟล์ Backup ควรตรวจ Preview และข้อมูลลีกหลังนำเข้า
+      </p>
     </div>
   );
 }
