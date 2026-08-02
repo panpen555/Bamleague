@@ -83,6 +83,10 @@ import {
   groupPublicScheduleInSavedOrder,
   validateManualScheduleChanges,
 } from "../services/schedule/scheduleService";
+import {
+  buildRegularSeasonStatRows,
+  sortMvpRanking,
+} from "../services/stats/regularSeasonMvpService";
 
 const DEFAULT_PUBLIC_BRANDING = {
   heroImageUrl: "",
@@ -3961,6 +3965,14 @@ function Players() {
       });
   };
 
+  const getRegularSeasonStatResult = (
+    statsObject = playerStats,
+    sourceSchedule = schedule,
+  ) => buildRegularSeasonStatRows(statsObject, sourceSchedule);
+
+  const getRegularSeasonStatRows = () =>
+    getRegularSeasonStatResult().rows;
+
   const getStatLeaders = (field) => {
     return getPlayerStatRows()
       .filter((stat) => Number(stat[field] || 0) > 0)
@@ -3974,19 +3986,7 @@ function Players() {
 
   const getTopScorers = () => getStatLeaders("pts");
 
-  const getMVPRanking = () => {
-    return getPlayerStatRows()
-      .filter((stat) => Number(stat.mvpScore || 0) > 0)
-      .sort((a, b) => {
-        if (Number(b.mvpScore || 0) !== Number(a.mvpScore || 0)) {
-          return Number(b.mvpScore || 0) - Number(a.mvpScore || 0);
-        }
-        if (Number(b.pts || 0) !== Number(a.pts || 0)) {
-          return Number(b.pts || 0) - Number(a.pts || 0);
-        }
-        return Number(b.appearances || 0) - Number(a.appearances || 0);
-      });
-  };
+  const getMVPRanking = () => sortMvpRanking(getRegularSeasonStatRows());
 
   const getRegularSeasonMvp = () => getMVPRanking()[0] || null;
 
@@ -4088,6 +4088,13 @@ function Players() {
 
     if (!archivedPlayer && !archivedStat.playerId) return null;
 
+    const regularSeasonResult = getRegularSeasonStatResult(
+      archivedPlayerStats,
+      archivedData.schedule || [],
+    );
+    const regularSeasonStat = regularSeasonResult.rows.find(
+      (stat) => String(stat.playerId) === archivedPlayerId,
+    );
     const appearances = Number(archivedStat.appearances || 0);
     const pts = Number(archivedStat.pts || 0);
     const reb = Number(archivedStat.reb || 0);
@@ -4095,8 +4102,9 @@ function Players() {
     const stl = Number(archivedStat.stl || 0);
     const blk = Number(archivedStat.blk || 0);
     const ppg = appearances > 0 ? (pts / appearances).toFixed(1) : "0.0";
-    const mvpScore =
-      pts + reb * 1.2 + ast * 1.5 + stl * 2 + blk * 2 + appearances * 0.75;
+    const mvpScore = regularSeasonResult.available
+      ? Number(regularSeasonStat?.mvpScore || 0)
+      : null;
 
     const currentPlayer = players.find(
       (player) =>
@@ -4148,6 +4156,7 @@ function Players() {
       blk,
       ppg,
       mvpScore,
+      regularSeasonMvpUnavailable: !regularSeasonResult.available,
       profileSeasonTitle: publicProfileSeasonContext.seasonTitle,
       isSelectedSeasonProfile: true,
     };
@@ -4168,6 +4177,10 @@ function Players() {
       getPlayerStatRows().find(
         (row) => String(row.playerId) === String(selectedProfilePlayerId),
       ) || {};
+    const regularSeasonResult = getRegularSeasonStatResult();
+    const regularSeasonStat = regularSeasonResult.rows.find(
+      (row) => String(row.playerId) === String(selectedProfilePlayerId),
+    );
 
     if (!player && !stat.playerId) return null;
 
@@ -4204,7 +4217,10 @@ function Players() {
       stl: stat.stl || 0,
       blk: stat.blk || 0,
       ppg: stat.ppg || "0.0",
-      mvpScore: stat.mvpScore || 0,
+      mvpScore: regularSeasonResult.available
+        ? Number(regularSeasonStat?.mvpScore || 0)
+        : null,
+      regularSeasonMvpUnavailable: !regularSeasonResult.available,
     };
   };
 
@@ -5015,7 +5031,12 @@ function Players() {
                         ["PPG", profile.ppg ?? "0.0"],
                         ["REB", profile.reb ?? 0],
                         ["AST", profile.ast ?? 0],
-                        ["MVP", Number(profile.mvpScore ?? 0).toFixed(1)],
+                        [
+                          "MVP",
+                          profile.regularSeasonMvpUnavailable
+                            ? "N/A"
+                            : Number(profile.mvpScore ?? 0).toFixed(1),
+                        ],
                       ].map(([label, value], index) => (
                         <div
                           key={`manga-current-stat-${label}`}
@@ -8154,6 +8175,7 @@ function Players() {
   ];
   const getTeamDashboardData = () => {
     const playerRows = getPlayerStatRows();
+    const regularSeasonRows = getRegularSeasonStatRows();
 
     return teams
       .map((team) => {
@@ -8186,16 +8208,22 @@ function Players() {
             teamPlayerIds.includes(statPlayerId) || stat.teamName === team.name
           );
         });
+        const regularSeasonTeamStats = regularSeasonRows.filter((stat) => {
+          const statPlayerId = String(stat.playerId);
+          return (
+            teamPlayerIds.includes(statPlayerId) || stat.teamName === team.name
+          );
+        });
 
         const topScorer = [...teamStats].sort(
           (a, b) => Number(b.pts || 0) - Number(a.pts || 0),
         )[0];
 
-        const teamMvp = [...teamStats].sort(
+        const teamMvp = [...regularSeasonTeamStats].sort(
           (a, b) => Number(b.mvpScore || 0) - Number(a.mvpScore || 0),
         )[0];
 
-        const totalMvpScore = teamStats.reduce(
+        const totalMvpScore = regularSeasonTeamStats.reduce(
           (sum, stat) => sum + Number(stat.mvpScore || 0),
           0,
         );
@@ -8818,6 +8846,14 @@ function Players() {
     };
 
     const archivedStatRows = getArchivedStatRows(archivedData.playerStats);
+    const dashboardRegularSeasonStatResult = isHistoryView
+      ? getRegularSeasonStatResult(
+          archivedData.playerStats || {},
+          dashboardSchedule,
+        )
+      : getRegularSeasonStatResult();
+    const dashboardRegularSeasonStatRows =
+      dashboardRegularSeasonStatResult.rows;
     const dashboardPlayerStatRows = isHistoryView
       ? archivedStatRows
       : getPlayerStatRows();
@@ -8972,6 +9008,9 @@ function Players() {
 
     const getDashboardPlayerStats = (playerId) => {
       const stat = getDashboardPlayerStatRow(playerId);
+      const regularSeasonStat = dashboardRegularSeasonStatRows.find(
+        (row) => String(row.playerId) === String(playerId),
+      );
 
       return {
         games: stat ? Number(stat.appearances || stat.games || 0) : 0,
@@ -8981,7 +9020,9 @@ function Players() {
         stl: stat ? Number(stat.stl || 0) : 0,
         blk: stat ? Number(stat.blk || 0) : 0,
         ppg: stat ? String(stat.ppg || "0.0") : "0.0",
-        mvpScore: stat ? Number(stat.mvpScore || 0).toFixed(1) : "-",
+        mvpScore: dashboardRegularSeasonStatResult.available
+          ? Number(regularSeasonStat?.mvpScore || 0).toFixed(1)
+          : "แยก Regular Season ไม่ได้",
         scoring: stat ? Number(stat.pts || 0) : "-",
         raw: stat || null,
       };
@@ -9117,12 +9158,9 @@ function Players() {
           .sort((a, b) => Number(b.pts || 0) - Number(a.pts || 0))
           .slice(0, 5)
       : getTopScorers().slice(0, 5);
-    const dashboardMvpRace = isHistoryView
-      ? archivedStatRows
-          .filter((stat) => Number(stat.mvpScore || 0) > 0)
-          .sort((a, b) => Number(b.mvpScore || 0) - Number(a.mvpScore || 0))
-          .slice(0, 5)
-      : getMVPRanking().slice(0, 5);
+    const dashboardMvpRace = sortMvpRanking(
+      dashboardRegularSeasonStatRows,
+    ).slice(0, 5);
 
     const currentAwards = getSeasonAwards();
     const getDashboardStatLeader = (field) => {
@@ -9153,6 +9191,9 @@ function Players() {
     const dashboardReboundLeader = getDashboardStatLeader("reb");
     const dashboardAssistLeader = getDashboardStatLeader("ast");
     const dashboardDefenseLeader = getDashboardDefenseLeader();
+    const historicalRegularSeasonMvp = isHistoryView
+      ? sortMvpRanking(dashboardRegularSeasonStatRows)[0] || null
+      : null;
 
     const getHistoricalAwardPlayerSource = (
       playerName,
@@ -9183,15 +9224,13 @@ function Players() {
           champion: selectedHistorySeason?.champion || "-",
           runnerUp: selectedHistorySeason?.runnerUp || "-",
           thirdPlace: selectedHistorySeason?.thirdPlace || "-",
-          regularSeasonMvp:
-            selectedHistorySeason?.regularSeasonMvp ||
-            selectedHistorySeason?.mvp ||
-            "-",
+          regularSeasonMvp: dashboardRegularSeasonStatResult.available
+            ? historicalRegularSeasonMvp?.playerName || "-"
+            : "ไม่สามารถแยกข้อมูล Regular Season ได้",
           finalsMvp: selectedHistorySeason?.finalsMvp || "-",
-          mvp:
-            selectedHistorySeason?.regularSeasonMvp ||
-            selectedHistorySeason?.mvp ||
-            "-",
+          mvp: dashboardRegularSeasonStatResult.available
+            ? historicalRegularSeasonMvp?.playerName || "-"
+            : "ไม่สามารถแยกข้อมูล Regular Season ได้",
           topScorer: selectedHistorySeason?.topScorer || "-",
           reboundLeader: dashboardReboundLeader?.playerName || "-",
           assistLeader: dashboardAssistLeader?.playerName || "-",
@@ -9199,12 +9238,13 @@ function Players() {
           reboundValue: dashboardReboundLeader?.reb || 0,
           assistValue: dashboardAssistLeader?.ast || 0,
           defenseValue: dashboardDefenseLeader?.defenseScore || 0,
-          regularSeasonMvpTarget: getHistoricalAwardPlayerSource(
-            selectedHistorySeason?.regularSeasonMvp ||
-              selectedHistorySeason?.mvp,
-            selectedHistorySeason?.regularSeasonMvpPlayerId ||
-              selectedHistorySeason?.mvpPlayerId,
-          ),
+          regularSeasonMvpTarget: dashboardRegularSeasonStatResult.available
+            ? getHistoricalAwardPlayerSource(
+                historicalRegularSeasonMvp?.playerName,
+                historicalRegularSeasonMvp?.bamPlayerId ||
+                  historicalRegularSeasonMvp?.playerId,
+              )
+            : null,
           finalsMvpTarget: getHistoricalAwardPlayerSource(
             selectedHistorySeason?.finalsMvp,
             selectedHistorySeason?.finalsMvpPlayerId ||
@@ -10191,7 +10231,9 @@ function Players() {
               <h2 className="bam-public-panel-title">👑 MVP Race</h2>
               {dashboardMvpRace.length === 0 ? (
                 <p className="bam-public-empty-state bam-public-leader-empty">
-                  ยังไม่มีข้อมูล MVP
+                  {dashboardRegularSeasonStatResult.available
+                    ? "ยังไม่มีข้อมูล MVP Regular Season"
+                    : "ข้อมูลฤดูกาลนี้ไม่สามารถแยก Regular Season ออกจาก Postseason ได้"}
                 </p>
               ) : (
                 dashboardMvpRace.map((player, index) =>
@@ -12256,6 +12298,7 @@ function Players() {
         adminAccordionSummaryStyle={adminAccordionSummaryStyle}
         adminAccordionHintStyle={adminAccordionHintStyle}
         hasPlayerStats={getPlayerStatRows().length > 0}
+        regularSeasonMvpAvailable={getRegularSeasonStatResult().available}
         mvpRanking={getMVPRanking().slice(0, 10)}
         renderPlayerAvatar={renderPlayerAvatar}
         getPlayerPhotoUrl={getPlayerPhotoUrl}
@@ -13383,7 +13426,9 @@ function Players() {
                     <p>
                       <strong>Team:</strong> {profile.teamName || "-"} |{" "}
                       <strong>MVP Score:</strong>{" "}
-                      {Number(profile.mvpScore || 0).toFixed(1)}
+                      {profile.regularSeasonMvpUnavailable
+                        ? "N/A (ไม่สามารถแยก Regular Season ได้)"
+                        : Number(profile.mvpScore || 0).toFixed(1)}
                     </p>
 
                     <div

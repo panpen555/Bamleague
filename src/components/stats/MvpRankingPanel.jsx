@@ -4,6 +4,7 @@ const MvpRankingPanel = ({
   adminAccordionSummaryStyle,
   adminAccordionHintStyle,
   hasPlayerStats,
+  regularSeasonMvpAvailable,
   mvpRanking,
   renderPlayerAvatar,
   getPlayerPhotoUrl,
@@ -30,7 +31,15 @@ const MvpRankingPanel = ({
           Formula: PTS + REB×1.2 + AST×1.5 + STL×2 + BLK×2 + Appearance Bonus
         </p>
 
-        <table border="1" cellPadding="8" cellSpacing="0">
+        {!regularSeasonMvpAvailable && (
+          <p role="status">
+            ไม่สามารถคำนวณ Regular Season MVP ได้ เพราะข้อมูลตารางหรือสถิติเดิม
+            ไม่สามารถแยก Regular Season ออกจาก Postseason ได้
+          </p>
+        )}
+
+        {regularSeasonMvpAvailable && (
+          <table border="1" cellPadding="8" cellSpacing="0">
           <thead>
             <tr>
               <th>Rank</th>
@@ -78,7 +87,8 @@ const MvpRankingPanel = ({
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        )}
       </div>
     </details>
   );
