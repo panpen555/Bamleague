@@ -84,6 +84,10 @@ import {
   validateManualScheduleChanges,
 } from "../services/schedule/scheduleService";
 import {
+  getSeasonRosterPlayerCount,
+  getSeasonRosterPlayerCountState,
+} from "../services/season/seasonRosterService";
+import {
   buildRegularSeasonStatRows,
   sortMvpRanking,
 } from "../services/stats/regularSeasonMvpService";
@@ -8849,9 +8853,20 @@ function Players() {
     const dashboardFinishedMatches = dashboardSchedule.filter(
       (match) => match.status === "Finished",
     ).length;
-    const dashboardAvailablePlayers = dashboardPlayers.filter(
-      (player) => player.available !== false,
-    ).length;
+    const dashboardRosterPlayerCountState = isHistoryView
+      ? getSeasonRosterPlayerCountState(
+          Array.isArray(archivedData.teams) ? archivedData.teams : null,
+        )
+      : {
+          available: true,
+          count: getSeasonRosterPlayerCount(dashboardTeams),
+        };
+    const dashboardRosterPlayerCount = dashboardRosterPlayerCountState.available
+      ? dashboardRosterPlayerCountState.count
+      : "N/A";
+    const dashboardRosterPlayerSubText = dashboardRosterPlayerCountState.available
+      ? "Players assigned to teams"
+      : "No team roster data";
 
     const getArchivedStatRows = (statsObject = {}) => {
       return Object.values(statsObject || {})
@@ -9852,7 +9867,7 @@ function Players() {
                 <strong>{dashboardTeams.length}</strong> Teams
               </span>
               <span>
-                <strong>{dashboardPlayers.length}</strong> Players
+                <strong>{dashboardRosterPlayerCount}</strong> Players
               </span>
               <span>
                 <strong>{dashboardFinishedMatches}</strong> Finished
@@ -9871,8 +9886,8 @@ function Players() {
             )}
             {renderDashboardStatCard(
               "Players",
-              dashboardAvailablePlayers,
-              "Available players",
+              dashboardRosterPlayerCount,
+              dashboardRosterPlayerSubText,
             )}
             {renderDashboardStatCard(
               "Matches",
