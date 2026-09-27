@@ -11340,7 +11340,9 @@ function Players() {
                               style={{
                                 width: "100%",
                                 height: "105px",
-                                objectFit: "cover",
+                                objectFit: "contain",
+                                objectPosition: "center",
+                                background: "#07152f",
                               }}
                             />
                           ) : (

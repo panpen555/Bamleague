@@ -2634,8 +2634,9 @@
   display: block;
   width: 100%;
   height: clamp(320px, 42vw, 520px);
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
+  background: #07152f;
 }
 
 .bam-public-highlight-overlay {
