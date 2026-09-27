@@ -149,6 +149,18 @@ describe("Schema V3 mapper", () => {
     expect(assembled.data.seasonHistory[0].payloadChecksum).toBeUndefined();
   });
 
+  test("preserves current Finals MVP selection through V3 main and logical backup assembly", () => {
+    const logicalBackup = {
+      players: [{ id: "p1" }],
+      selectedFinalsMvpId: "p1",
+      seasonHistory: [],
+    };
+    const mainPayload = createSchemaV3MainPayload(logicalBackup);
+    const assembled = normalizeSchemaV3Backup(mainPayload, [], null);
+
+    expect(mainPayload.data.selectedFinalsMvpId).toBe("p1");
+    expect(assembled.data.selectedFinalsMvpId).toBe("p1");
+  });
   test("verifies season checksum and removes storage metadata from logical data", () => {
     const [entry] = createSchemaV3SeasonDocuments([createSeason()]);
     const normalized = normalizeSchemaV3SeasonDocument(

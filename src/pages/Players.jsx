@@ -87,6 +87,11 @@ import {
   buildRegularSeasonStatRows,
   sortMvpRanking,
 } from "../services/stats/regularSeasonMvpService";
+import {
+  getSelectedFinalsMvpIdFromBackup,
+  normalizeSelectedFinalsMvpId,
+  SELECTED_FINALS_MVP_STORAGE_KEY,
+} from "../services/awards/finalsMvpPersistence";
 
 const DEFAULT_PUBLIC_BRANDING = {
   heroImageUrl: "",
@@ -667,7 +672,13 @@ function Players() {
   const [authError, setAuthError] = useState("");
   const [activeAdminMenu, setActiveAdminMenu] = useState("players");
   const [expandedTeamDashboard, setExpandedTeamDashboard] = useState("");
-  const [selectedFinalsMvpId, setSelectedFinalsMvpId] = useState("");
+  const [selectedFinalsMvpId, setSelectedFinalsMvpId] = useState(() =>
+    isPublicOnlyRoute
+      ? ""
+      : normalizeSelectedFinalsMvpId(
+          localStorage.getItem(SELECTED_FINALS_MVP_STORAGE_KEY),
+        ),
+  );
   const [editingSeasonHistoryId, setEditingSeasonHistoryId] = useState(null);
   const [seasonHistoryEditForm, setSeasonHistoryEditForm] = useState({
     projectName: "",
@@ -805,6 +816,25 @@ function Players() {
   useEffect(() => {
     localStorage.setItem("bamPublishMeta", JSON.stringify(publishMeta));
   }, [publishMeta]);
+
+  useEffect(() => {
+    if (isPublicOnlyRoute) return;
+    const normalizedFinalsMvpId =
+      normalizeSelectedFinalsMvpId(selectedFinalsMvpId);
+    if (normalizedFinalsMvpId) {
+      localStorage.setItem(
+        SELECTED_FINALS_MVP_STORAGE_KEY,
+        normalizedFinalsMvpId,
+      );
+    } else {
+      localStorage.removeItem(SELECTED_FINALS_MVP_STORAGE_KEY);
+    }
+  }, [isPublicOnlyRoute, selectedFinalsMvpId]);
+
+  const clearSelectedFinalsMvpSelection = () => {
+    setSelectedFinalsMvpId("");
+    localStorage.removeItem(SELECTED_FINALS_MVP_STORAGE_KEY);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
@@ -1157,7 +1187,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
-    setSelectedFinalsMvpId("");
+    clearSelectedFinalsMvpSelection();
     setPlayers((prevPlayers) =>
       prevPlayers.map((player) => ({ ...player, teamName: "" })),
     );
@@ -1197,7 +1227,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
-    setSelectedFinalsMvpId("");
+    clearSelectedFinalsMvpSelection();
     setPlayers((prevPlayers) =>
       prevPlayers.map((player) => ({ ...player, teamName: "" })),
     );
@@ -1822,6 +1852,7 @@ function Players() {
     setSelectedLockPlayerIds([]);
     setLockGroupName("");
     setSelectedProfilePlayerId("");
+    clearSelectedFinalsMvpSelection();
     resetForm();
     localStorage.removeItem("teamCount");
     localStorage.removeItem("teamCount");
@@ -3013,7 +3044,7 @@ function Players() {
     setMatchStatInputs({});
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
-    setSelectedFinalsMvpId("");
+    clearSelectedFinalsMvpSelection();
     localStorage.removeItem("schedule");
     localStorage.removeItem("matchRosters");
     localStorage.removeItem("playerStats");
@@ -3045,11 +3076,11 @@ function Players() {
   };
 
   const saveManualSchedule = (manualSchedule) => {
-    const validation = validateManualScheduleChanges(
-      schedule,
-      manualSchedule,
-      { matchRosters, playerStats, matchStatInputs },
-    );
+    const validation = validateManualScheduleChanges(schedule, manualSchedule, {
+      matchRosters,
+      playerStats,
+      matchStatInputs,
+    });
     if (!validation.valid) {
       return {
         saved: false,
@@ -3970,8 +4001,7 @@ function Players() {
     sourceSchedule = schedule,
   ) => buildRegularSeasonStatRows(statsObject, sourceSchedule);
 
-  const getRegularSeasonStatRows = () =>
-    getRegularSeasonStatResult().rows;
+  const getRegularSeasonStatRows = () => getRegularSeasonStatResult().rows;
 
   const getStatLeaders = (field) => {
     return getPlayerStatRows()
@@ -4536,9 +4566,7 @@ function Players() {
             const gradeRadius = 110;
             const labelX = center + Math.cos(angle) * labelRadius;
             const labelY =
-              index === 0
-                ? 2
-                : center + Math.sin(angle) * labelRadius;
+              index === 0 ? 2 : center + Math.sin(angle) * labelRadius;
             const labelTextAnchor =
               skill.key === "passing"
                 ? "start"
@@ -5311,8 +5339,7 @@ function Players() {
   const renderPlayerProfileModal = () => {
     if (!selectedProfilePlayerId) return null;
     const isSchemaV3HistoryPending =
-      cloudSchemaVersion === SCHEMA_V3 &&
-      schemaV3HistoryState !== "ready";
+      cloudSchemaVersion === SCHEMA_V3 && schemaV3HistoryState !== "ready";
     const profile = getSelectedPlayerProfile();
     if (!profile && !isSchemaV3HistoryPending) return null;
     const selectedSeasonForProfile = publicProfileSeasonContext
@@ -5417,6 +5444,7 @@ function Players() {
     if (!window.confirm("ต้องการลบ Player Stats ทั้งหมดใช่ไหม?")) return;
     setPlayerStats({});
     setMatchStatInputs({});
+    clearSelectedFinalsMvpSelection();
     localStorage.removeItem("playerStats");
     localStorage.removeItem("matchStatInputs");
   };
@@ -5640,7 +5668,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
-    setSelectedFinalsMvpId("");
+    clearSelectedFinalsMvpSelection();
     setPlayers((prevPlayers) =>
       prevPlayers.map((player) => ({ ...player, teamName: "" })),
     );
@@ -6284,6 +6312,19 @@ function Players() {
     );
     setLockGroups(Array.isArray(data.lockGroups) ? data.lockGroups : []);
 
+    const restoredSelectedFinalsMvpId = getSelectedFinalsMvpIdFromBackup(data);
+    setSelectedFinalsMvpId(restoredSelectedFinalsMvpId);
+    if (!isPublicOnlyRoute) {
+      if (restoredSelectedFinalsMvpId) {
+        localStorage.setItem(
+          SELECTED_FINALS_MVP_STORAGE_KEY,
+          restoredSelectedFinalsMvpId,
+        );
+      } else {
+        localStorage.removeItem(SELECTED_FINALS_MVP_STORAGE_KEY);
+      }
+    }
+
     if (data.seasonByType && typeof data.seasonByType === "object") {
       setSeasonByType({
         "3X3": Number(data.seasonByType["3X3"] || 1),
@@ -6481,9 +6522,7 @@ function Players() {
           setCloudSchemaVersion(SCHEMA_V3);
           setSchemaV3SeasonIndex(seasonIndex);
           setSchemaV3SeasonCache({});
-          setSchemaV3HistoryState(
-            seasonIndex.length === 0 ? "ready" : "idle",
-          );
+          setSchemaV3HistoryState(seasonIndex.length === 0 ? "ready" : "idle");
           setSchemaV3HistoryError("");
         } else {
           setCloudSchemaVersion(detectedSchema);
@@ -6557,11 +6596,7 @@ function Players() {
     }
 
     ensureAllSeasonsLoaded().catch(() => {});
-  }, [
-    cloudSchemaVersion,
-    schemaV3HistoryState,
-    selectedProfilePlayerId,
-  ]);
+  }, [cloudSchemaVersion, schemaV3HistoryState, selectedProfilePlayerId]);
 
   const importLeagueBackup = async (event) => {
     const file = event.target.files[0];
@@ -6849,7 +6884,8 @@ function Players() {
         </button>
       )}
       <p style={{ marginBottom: 0, color: "#475569", fontSize: "13px" }}>
-        ใช้ล็อกอินเพื่อเปิดสิทธิ์เขียน Cloud เท่านั้น หลังล็อกอินให้ตรวจชื่อบัญชีก่อน Publish
+        ใช้ล็อกอินเพื่อเปิดสิทธิ์เขียน Cloud เท่านั้น
+        หลังล็อกอินให้ตรวจชื่อบัญชีก่อน Publish
       </p>
     </div>
   );
@@ -7080,6 +7116,7 @@ function Players() {
     matchStatInputs,
     teamLogos,
     lockGroups,
+    selectedFinalsMvpId: normalizeSelectedFinalsMvpId(selectedFinalsMvpId),
     seasonByType,
     currentSeason,
     seasonProjectName,
@@ -7209,7 +7246,9 @@ function Players() {
         throw new Error("ไม่พบ /bamLeague/main บน Cloud");
       }
       if (detectCloudSchemaVersion(cloudMain) === SCHEMA_V3) {
-        throw new Error("Cloud main เป็น Schema V3 แล้ว จึงไม่สร้าง V2 recovery");
+        throw new Error(
+          "Cloud main เป็น Schema V3 แล้ว จึงไม่สร้าง V2 recovery",
+        );
       }
       setCloudSchemaVersion(2);
       setCloudStatus("Cloud Schema: V2");
@@ -7495,10 +7534,7 @@ function Players() {
   const rollbackSchemaV3Main = async () => {
     if (!requireAdminLogin("Rollback to Schema V2 Main")) return;
     if (!requireLocalBackupExport("Rollback to Schema V2 Main")) return;
-    if (
-      schemaV3MigrationLockRef.current ||
-      cloudSchemaVersion !== SCHEMA_V3
-    ) {
+    if (schemaV3MigrationLockRef.current || cloudSchemaVersion !== SCHEMA_V3) {
       return;
     }
 
@@ -7589,8 +7625,8 @@ function Players() {
           อันตราย / กู้คืนระบบ
         </div>
         <p style={{ marginTop: 0, color: "#334155", fontSize: "13px" }}>
-          Read-only analysis จาก logical backup ใน memory ไม่มี Firestore
-          write, stage, promote หรือ cleanup
+          Read-only analysis จาก logical backup ใน memory ไม่มี Firestore write,
+          stage, promote หรือ cleanup
         </p>
         <button
           type="button"
@@ -7612,7 +7648,8 @@ function Players() {
           Analyze Schema V3 Migration
         </button>
         <p style={{ color: "#475569", fontSize: "12px", margin: "4px 0" }}>
-          วิเคราะห์แผน Migration ใน memory ใช้เมื่อตรวจระบบโดยผู้พัฒนา ไม่เขียน Cloud
+          วิเคราะห์แผน Migration ใน memory ใช้เมื่อตรวจระบบโดยผู้พัฒนา ไม่เขียน
+          Cloud
         </p>
 
         <button
@@ -7658,7 +7695,8 @@ function Players() {
           Stage Schema V3 Documents
         </button>
         <p style={{ color: "#92400e", fontSize: "12px", margin: "4px 0" }}>
-          เขียน Season/Replay staging บน Cloud ต้องมี Export Backup และตรวจสถานะ Verify
+          เขียน Season/Replay staging บน Cloud ต้องมี Export Backup และตรวจสถานะ
+          Verify
         </p>
 
         <button
@@ -7702,7 +7740,8 @@ function Players() {
           Promote Schema V3 Main
         </button>
         <p style={{ color: "#991b1b", fontSize: "12px", margin: "4px 0" }}>
-          เปลี่ยน Main เป็น Schema V3 ใช้ครั้งเดียวหลัง Verify ผ่านและตรวจ Public ทันที
+          เปลี่ยน Main เป็น Schema V3 ใช้ครั้งเดียวหลัง Verify ผ่านและตรวจ
+          Public ทันที
         </p>
 
         {cloudSchemaVersion === SCHEMA_V3 ? (
@@ -7726,7 +7765,8 @@ function Players() {
               Rollback to Schema V2 Main
             </button>
             <p style={{ color: "#991b1b", fontSize: "12px", margin: "4px 0" }}>
-              กู้ Main จาก V2 recovery เฉพาะกรณีฉุกเฉิน และต้องตรวจข้อมูล Cloud/Public หลังใช้
+              กู้ Main จาก V2 recovery เฉพาะกรณีฉุกเฉิน และต้องตรวจข้อมูล
+              Cloud/Public หลังใช้
             </p>
           </>
         ) : null}
@@ -7795,8 +7835,7 @@ function Players() {
               <div style={{ maxHeight: "220px", overflowY: "auto" }}>
                 {preview.seasonDocuments.map((seasonDocument) => {
                   const size = validation.documents.find(
-                    (document) =>
-                      document.label === seasonDocument.documentId,
+                    (document) => document.label === seasonDocument.documentId,
                   );
                   return (
                     <div
@@ -8014,6 +8053,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
+    clearSelectedFinalsMvpSelection();
     setSelectedPublicTeam("");
     setSelectedPublicPlayer(null);
     setSelectedPublicMatch(null);
@@ -8064,6 +8104,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
+    clearSelectedFinalsMvpSelection();
     resetForm();
 
     localStorage.removeItem("teamCount");
@@ -8108,6 +8149,7 @@ function Players() {
     setSelectedRosterMatchId("");
     setSelectedStatsMatchId("");
     setSelectedProfilePlayerId("");
+    clearSelectedFinalsMvpSelection();
     resetForm();
 
     [
@@ -9348,14 +9390,10 @@ function Players() {
             id: String(season.documentId),
             label:
               season.projectName ||
-              `${season.competitionType || "5X5"} Season ${
-                season.season || 1
-              }`,
+              `${season.competitionType || "5X5"} Season ${season.season || 1}`,
             projectName:
               season.projectName ||
-              `${season.competitionType || "5X5"} Season ${
-                season.season || 1
-              }`,
+              `${season.competitionType || "5X5"} Season ${season.season || 1}`,
             competitionType: season.competitionType || "5X5",
             season: season.season || 1,
             champion: season.champion || "-",
@@ -10999,7 +11037,8 @@ function Players() {
         >
           <h2 style={{ marginTop: 0 }}>⚙️ System Tools</h2>
           <p style={{ marginTop: 0, color: "#555" }}>
-            งานประจำอยู่ด้านบน ส่วน Migration, Recovery และการลบข้อมูลถูกซ่อนไว้ในเครื่องมือขั้นสูง
+            งานประจำอยู่ด้านบน ส่วน Migration, Recovery
+            และการลบข้อมูลถูกซ่อนไว้ในเครื่องมือขั้นสูง
           </p>
 
           <AdminGettingStarted />
@@ -12379,6 +12418,10 @@ function Players() {
                   </option>
                 ))}
               </select>
+              <p style={{ marginBottom: 0, color: "#92400e", fontSize: "12px" }}>
+                บันทึกในเครื่องอัตโนมัติ ไม่ต้องปิด Season
+                หากต้องการให้ Public เห็น ให้ใช้ Safe Publish หลังเลือก
+              </p>
             </div>
 
             {(() => {

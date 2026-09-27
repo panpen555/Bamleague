@@ -96,6 +96,7 @@ const createLogicalBackup = (seasonHistory = []) => ({
   players: [{ id: "p1", name: "Player One" }],
   teams: [],
   schedule: [],
+  selectedFinalsMvpId: "p1",
   seasonHistory,
   liveDraftConfirmedReplay: { sessionId: "draft-1" },
   liveScheduleConfirmedReplay: {
@@ -216,6 +217,7 @@ describe("Schema V3 write service safety", () => {
     expect(
       mockOperationLog.indexOf("set:bamLeagueAdmin/liveReplays"),
     ).toBeLessThan(mockOperationLog.indexOf("set:bamLeague/main"));
+    expect(main.data.selectedFinalsMvpId).toBe("p1");
     expect(main.data.seasonHistory).toBeUndefined();
     expect(main.data.liveDraftConfirmedReplay).toBeUndefined();
   });
