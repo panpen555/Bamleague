@@ -51,7 +51,7 @@ function BackupRestoreTools({ exportAllData, importLeagueBackup }) {
       </button>
 
       <p style={{ color: "#475569", fontSize: "13px", marginTop: 0 }}>
-        ดาวน์โหลดข้อมูลปัจจุบันเก็บไว้ในเครื่อง ไม่แก้ข้อมูล Cloud ใช้เมื่อต้องการสำรองเอง
+        ดาวน์โหลดข้อมูล Season ที่กำลังจัดการเก็บไว้ในเครื่อง ไม่แก้ข้อมูล Cloud ใช้เมื่อต้องการสำรองเอง
       </p>
 
       <label

@@ -84,7 +84,7 @@ const LeagueSetupCards = ({
           }}
         >
           ⚠️ การเปลี่ยนประเภทหรือจำนวนทีม อาจล้าง Teams, Schedule, Draft และ
-          Stats ปัจจุบัน แต่ไม่ลบรายชื่อ Players
+          Stats ของ Season ที่กำลังจัดการ แต่ไม่ลบรายชื่อ Players
         </div>
       </div>
 
@@ -148,7 +148,7 @@ const LeagueSetupCards = ({
             fontSize: "13px",
           }}
         >
-          Current: {currentSeasonTitle} | Season {currentSeason}
+          Season ที่กำลังจัดการ: {currentSeasonTitle} | Season {currentSeason}
         </div>
       </div>
     </>

@@ -4732,7 +4732,7 @@ function Players() {
     const isSelectedSeasonView = profileCardView === "selectedSeason";
     const seasonViewLabel = profile.isSelectedSeasonProfile
       ? profile.profileSeasonTitle || "Selected Season"
-      : "Current Season";
+      : getCurrentSeasonTitle();
     const seasonViewTitle = seasonViewLabel;
 
     const timelineItems = (career?.seasons || [])
@@ -5059,9 +5059,7 @@ function Players() {
                     profile.isSelectedSeasonProfile
                       ? "selectedSeason"
                       : "current",
-                    profile.isSelectedSeasonProfile
-                      ? "Selected Season"
-                      : "Current Season",
+                    seasonViewLabel,
                   ],
                   ["career", "Career"],
                 ].map(([viewKey, label]) => {
@@ -6203,7 +6201,7 @@ function Players() {
 
       if (Array.isArray(data.seasonHistory) && data.seasonHistory.length > 0) {
         const importAll = window.confirm(
-          `พบ Season History ในไฟล์ ${data.seasonHistory.length} รายการ\nต้องการ Import ทั้งหมดหรือไม่?\n\nกด Cancel หากต้องการ Import เฉพาะข้อมูลลีกปัจจุบันเป็น 1 Season`,
+          `พบ Season History ในไฟล์ ${data.seasonHistory.length} รายการ\nต้องการ Import ทั้งหมดหรือไม่?\n\nกด Cancel หากต้องการ Import เฉพาะข้อมูล Season ในไฟล์เป็น 1 Season`,
         );
 
         if (importAll) {
@@ -6694,7 +6692,7 @@ function Players() {
 
       const backupVersion = parsed.version || parsed.data?.version || "legacy";
       const confirmImport = window.confirm(
-        `การ Import Backup จะเขียนทับข้อมูลลีกปัจจุบันทั้งหมด\n\nไฟล์ Version: ${backupVersion}\n\nต้องการดำเนินการต่อไหม?`,
+        `การ Import Backup จะเขียนทับข้อมูล Season ที่กำลังจัดการทั้งหมด\n\nไฟล์ Version: ${backupVersion}\n\nต้องการดำเนินการต่อไหม?`,
       );
 
       if (!confirmImport) {
@@ -7966,7 +7964,7 @@ function Players() {
     if (cloudWriteOperationLockRef.current) return;
 
     const confirmUpload = window.confirm(
-      "ต้องการ Upload ข้อมูล BAM League ปัจจุบันขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ",
+      "ต้องการ Upload ข้อมูล Season ที่กำลังจัดการขึ้น Cloud ใช่ไหม?\n\nข้อมูลบน Cloud เดิมจะถูกเขียนทับ",
     );
 
     if (!confirmUpload) return;
@@ -8002,7 +8000,7 @@ function Players() {
 
   const downloadFromCloud = async () => {
     const confirmDownload = window.confirm(
-      "ต้องการ Download ข้อมูลจาก Cloud ใช่ไหม?\n\nข้อมูลในเครื่องปัจจุบันจะถูกเขียนทับ",
+      "ต้องการ Download ข้อมูลจาก Cloud ใช่ไหม?\n\nข้อมูล Season ที่กำลังจัดการในเครื่องจะถูกเขียนทับ",
     );
 
     if (!confirmDownload) return;
@@ -8120,7 +8118,7 @@ function Players() {
 
   const clearCurrentProject = () => {
     const confirmClear = window.confirm(
-      "ต้องการล้างโปรเจค/ซีซั่นปัจจุบันใช่ไหม?\n\nระบบจะล้าง Teams, Schedule, Drafts, Match Roster และ Stats\nแต่จะเก็บ Players, รูปผู้เล่น, โลโก้ทีม, Season History และการตั้งค่า Season ไว้",
+      "ต้องการล้างข้อมูล Season ที่กำลังจัดการใช่ไหม?\n\nระบบจะล้าง Teams, Schedule, Drafts, Match Roster และ Stats\nแต่จะเก็บ Players, รูปผู้เล่น, โลโก้ทีม, Season History และการตั้งค่า Season ไว้",
     );
 
     if (!confirmClear) return;
@@ -8157,7 +8155,7 @@ function Players() {
     ].forEach((key) => localStorage.removeItem(key));
 
     alert(
-      "ล้างโปรเจคปัจจุบันเรียบร้อย โดยยังเก็บรายชื่อผู้เล่นและประวัติ Season ไว้",
+      "ล้างข้อมูล Season ที่กำลังจัดการเรียบร้อย โดยยังเก็บรายชื่อผู้เล่นและประวัติ Season ไว้",
     );
   };
 
@@ -9511,7 +9509,7 @@ function Players() {
     const publicSeasonOptions = [
       {
         id: "CURRENT",
-        label: `${getCurrentSeasonTitle()} (ปัจจุบัน)`,
+        label: getCurrentSeasonTitle(),
         projectName: getCurrentSeasonTitle(),
         competitionType,
         season: currentSeason,
@@ -10248,7 +10246,7 @@ function Players() {
         publicDashboardTab === "awards" ? (
           <div className="bam-public-overview-grid">
             <div className="bam-public-panel bam-public-awards-panel">
-              <h2 className="bam-public-panel-title">🏆 Current Awards</h2>
+              <h2 className="bam-public-panel-title">🏆 Season Awards</h2>
               <div className="bam-public-awards-grid">
                 {dashboardAwardRows.map(
                   ([icon, label, value, detail, playerSource]) => {
@@ -11052,7 +11050,7 @@ function Players() {
                 type="button"
                 onClick={() => setPublicSeasonId("CURRENT")}
               >
-                Back to Current Season
+                Back to {getCurrentSeasonTitle()}
               </button>
             </div>
           )}
@@ -12457,7 +12455,7 @@ function Players() {
         >
           <h2 style={{ marginTop: 0 }}>🏆 Awards Center</h2>
           <p style={{ marginBottom: 0 }}>
-            Current Awards คือรางวัลของ Season ปัจจุบัน ส่วน Hall Of Fame
+            Season Awards คือรางวัลของ Season ที่กำลังจัดการ ส่วน Hall Of Fame
             คือประวัติรางวัลจาก Season ที่ปิดแล้ว
           </p>
         </div>
@@ -12472,7 +12470,7 @@ function Players() {
           }}
         >
           <summary style={adminAccordionSummaryStyle}>
-            <span>🏆 Current Season Awards</span>
+            <span>🏆 Season Awards</span>
             <span style={adminAccordionHintStyle}>กดเพื่อเปิด / ปิด</span>
           </summary>
           <div
@@ -12484,9 +12482,9 @@ function Players() {
               background: "#fffdf5",
             }}
           >
-            <h2>🏆 Current Season Awards</h2>
+            <h2>🏆 Season Awards</h2>
             <p>
-              รางวัลของ Season ปัจจุบัน คำนวณจากผลการแข่งขัน Playoff
+              รางวัลของ Season ที่กำลังจัดการ คำนวณจากผลการแข่งขัน Playoff
               และสถิติผู้เล่น
             </p>
 

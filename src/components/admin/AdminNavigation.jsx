@@ -58,7 +58,7 @@ function AdminNavigation({ tabs, activeKey, activeTab, onChange }) {
 
       <div style={sectionIntroStyle}>
         <div style={{ fontSize: "13px", color: "#64748b", fontWeight: "bold" }}>
-          Current Module
+          เมนูที่กำลังใช้งาน
         </div>
         <h2 style={{ margin: "4px 0" }}>{activeTab.label}</h2>
         <p style={{ margin: 0, color: "#475569" }}>{activeTab.description}</p>
