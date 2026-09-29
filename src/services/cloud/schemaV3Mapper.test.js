@@ -161,6 +161,34 @@ describe("Schema V3 mapper", () => {
     expect(mainPayload.data.selectedFinalsMvpId).toBe("p1");
     expect(assembled.data.selectedFinalsMvpId).toBe("p1");
   });
+  test("preserves manual playoff mode and source references through V3 assembly", () => {
+    const logicalBackup = {
+      playoffMode: "manual",
+      schedule: [
+        {
+          id: "SF1",
+          week: 6,
+          phase: "postseason",
+          label: "Semi Final",
+          manualPlayoff: true,
+          teamASource: { type: "winner", matchId: "P1" },
+          teamBSource: {
+            type: "bestLoser",
+            matchIds: ["P1", "P2", "P3"],
+            selectedTeam: "Team E",
+          },
+          teamA: "Team A",
+          teamB: "Team E",
+        },
+      ],
+      seasonHistory: [],
+    };
+    const mainPayload = createSchemaV3MainPayload(logicalBackup);
+    const assembled = normalizeSchemaV3Backup(mainPayload, [], null);
+
+    expect(assembled.data.playoffMode).toBe("manual");
+    expect(assembled.data.schedule).toEqual(logicalBackup.schedule);
+  });
   test("verifies season checksum and removes storage metadata from logical data", () => {
     const [entry] = createSchemaV3SeasonDocuments([createSeason()]);
     const normalized = normalizeSchemaV3SeasonDocument(

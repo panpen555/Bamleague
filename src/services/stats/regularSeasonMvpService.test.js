@@ -35,6 +35,16 @@ describe("regular season MVP selectors", () => {
       "postseason",
     );
     expect(classifyScheduleMatchPhase({ label: "Final" })).toBe("postseason");
+    expect(
+      classifyScheduleMatchPhase({
+        label: "Custom Round",
+        phase: "postseason",
+      }),
+    ).toBe("postseason");
+    expect(classifyScheduleMatchPhase({ label: "Play-in" })).toBe("postseason");
+    expect(classifyScheduleMatchPhase({ label: "Quarterfinal" })).toBe(
+      "postseason",
+    );
     expect(classifyScheduleMatchPhase({ label: "Custom" })).toBe("unknown");
     expect([...getRegularSeasonMatchIds(schedule)]).toEqual(["1", "2"]);
   });

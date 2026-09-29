@@ -125,6 +125,28 @@ export const buildScheduleResult = ({
 export const createManualScheduleDraft = (schedule = []) =>
   (Array.isArray(schedule) ? schedule : []).map((match) => ({ ...match }));
 
+export const normalizeManualWeek = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  const week = Number(value);
+  return Number.isSafeInteger(week) && week >= 1 ? week : null;
+};
+
+export const updateManualScheduleWeek = (schedule, matchId, weekValue) => {
+  const week = normalizeManualWeek(weekValue);
+  if (week === null) {
+    return {
+      schedule: createManualScheduleDraft(schedule),
+      error: "Week must be a whole number of 1 or greater",
+    };
+  }
+  return {
+    schedule: (schedule || []).map((match) =>
+      String(match.id) === String(matchId) ? { ...match, week } : { ...match },
+    ),
+    error: "",
+  };
+};
+
 export const projectPublicSchedule = (schedule = []) =>
   (Array.isArray(schedule) ? schedule : []).map((match, index) => ({
     ...match,
@@ -179,6 +201,58 @@ export const matchHasCompetitionData = (
   return hasScore || hasOtherScore || hasResult || hasRoster || hasInputs || hasStats;
 };
 
+export const removeMatchDependentData = (
+  { matchRosters = {}, playerStats = {}, matchStatInputs = {} } = {},
+  matchIds = [],
+) => {
+  const targetIds = new Set(matchIds.map((id) => String(id)));
+  const nextMatchRosters = Object.fromEntries(
+    Object.entries(matchRosters || {}).filter(
+      ([matchId]) => !targetIds.has(String(matchId)),
+    ),
+  );
+  const nextMatchStatInputs = Object.fromEntries(
+    Object.entries(matchStatInputs || {}).filter(([key, input]) => {
+      if (targetIds.has(String(input?.matchId ?? ""))) return false;
+      return ![...targetIds].some((matchId) =>
+        String(key).startsWith(`${matchId}_`),
+      );
+    }),
+  );
+  const nextPlayerStats = Object.fromEntries(
+    Object.entries(playerStats || {}).map(([playerId, stat]) => {
+      const originalGames = Object.entries(stat?.gamesByMatch || {});
+      const remainingGames = originalGames.filter(
+        ([matchId, game]) =>
+          !targetIds.has(String(matchId)) &&
+          !targetIds.has(String(game?.matchId ?? "")),
+      );
+      if (remainingGames.length === originalGames.length) return [playerId, stat];
+      const gamesByMatch = Object.fromEntries(remainingGames);
+      const games = Object.values(gamesByMatch);
+      return [
+        playerId,
+        {
+          ...stat,
+          gamesByMatch,
+          games: games.filter((game) => game?.gameCounted).length,
+          appearances: games.filter((game) => game?.appearanceCounted).length,
+          pts: games.reduce((sum, game) => sum + Number(game?.pts || 0), 0),
+          reb: games.reduce((sum, game) => sum + Number(game?.reb || 0), 0),
+          ast: games.reduce((sum, game) => sum + Number(game?.ast || 0), 0),
+          stl: games.reduce((sum, game) => sum + Number(game?.stl || 0), 0),
+          blk: games.reduce((sum, game) => sum + Number(game?.blk || 0), 0),
+        },
+      ];
+    }),
+  );
+
+  return {
+    matchRosters: nextMatchRosters,
+    playerStats: nextPlayerStats,
+    matchStatInputs: nextMatchStatInputs,
+  };
+};
 export const moveManualScheduleMatch = (
   schedule,
   matchId,
@@ -209,7 +283,7 @@ export const createNextManualMatchId = (schedule = []) => {
   return candidate;
 };
 
-export const addManualScheduleMatch = (schedule, teamNames = []) => {
+export const addManualScheduleMatch = (schedule, teamNames = [], requestedWeek) => {
   const names = teamNames.filter(Boolean);
   const teamA = names[0] || "";
   const teamB = names.find((name) => name !== teamA) || "";
@@ -217,12 +291,14 @@ export const addManualScheduleMatch = (schedule, teamNames = []) => {
     0,
     ...(schedule || []).map((match) => Number(match.week) || 0),
   );
+  const suggestedWeek = maxWeek || 1;
+  const requestedWeekNumber = normalizeManualWeek(requestedWeek);
 
   return [
     ...createManualScheduleDraft(schedule),
     {
       id: createNextManualMatchId(schedule),
-      week: maxWeek + 1 || 1,
+      week: requestedWeekNumber ?? suggestedWeek,
       label: "League",
       teamA,
       teamB,
@@ -244,7 +320,10 @@ export const updateManualScheduleTeams = (
     (item) => String(item.id) === String(matchId),
   );
   if (!match) return { schedule: createManualScheduleDraft(schedule), error: "ไม่พบเกมที่ต้องการแก้ไข" };
-  if (matchHasCompetitionData(match, dependentData)) {
+  if (
+    matchHasCompetitionData(match, dependentData) &&
+    !dependentData?.allowProtectedChange
+  ) {
     return {
       schedule: createManualScheduleDraft(schedule),
       error: "เกมนี้มี roster, score, stats หรือผลการแข่งขันแล้ว จึงเปลี่ยนทีมไม่ได้",
@@ -277,7 +356,10 @@ export const removeManualScheduleMatch = (
     (item) => String(item.id) === String(matchId),
   );
   if (!match) return { schedule: createManualScheduleDraft(schedule), error: "ไม่พบเกมที่ต้องการลบ" };
-  if (matchHasCompetitionData(match, dependentData)) {
+  if (
+    matchHasCompetitionData(match, dependentData) &&
+    !dependentData?.allowProtectedChange
+  ) {
     return {
       schedule: createManualScheduleDraft(schedule),
       error: "เกมนี้มี roster, score, stats หรือผลการแข่งขันแล้ว จึงลบไม่ได้",
@@ -301,9 +383,15 @@ export const validateManualSchedule = (schedule = []) => {
       errors.push(`คู่ที่ ${index + 1} มี matchId ไม่ถูกต้องหรือซ้ำ`);
     }
     seenIds.add(matchId);
+    if (normalizeManualWeek(match?.week) === null) {
+      errors.push(`Match ${index + 1} must have a whole-number Week of 1 or greater`);
+    }
     if (!match?.teamA || !match?.teamB) {
       errors.push(`คู่ที่ ${index + 1} ต้องเลือกทีมให้ครบ`);
-    } else if (String(match.teamA) === String(match.teamB)) {
+    } else if (
+      String(match.teamA) === String(match.teamB) &&
+      !(match.manualPlayoff === true && match.teamA === "TBD")
+    ) {
       errors.push(`คู่ที่ ${index + 1} เป็นทีมเดียวกัน`);
     }
   });
@@ -318,6 +406,7 @@ export const validateManualScheduleChanges = (
 ) => {
   const baseValidation = validateManualSchedule(draftSchedule);
   const errors = [...baseValidation.errors];
+  const destructiveMatchIds = [];
   const draftById = new Map(
     draftSchedule.map((match) => [String(match.id), match]),
   );
@@ -326,20 +415,28 @@ export const validateManualScheduleChanges = (
     if (!matchHasCompetitionData(originalMatch, dependentData)) return;
     const draftMatch = draftById.get(String(originalMatch.id));
     if (!draftMatch) {
-      errors.push(
-        `เกม ${originalMatch.id} มีข้อมูลการแข่งขันแล้ว จึงลบไม่ได้`,
-      );
+      if (dependentData?.allowDestructiveChanges) {
+        destructiveMatchIds.push(String(originalMatch.id));
+      } else {
+        errors.push(`Protected match ${originalMatch.id} cannot be deleted`);
+      }
       return;
     }
     if (
       String(draftMatch.teamA) !== String(originalMatch.teamA) ||
       String(draftMatch.teamB) !== String(originalMatch.teamB)
     ) {
-      errors.push(
-        `เกม ${originalMatch.id} มีข้อมูลการแข่งขันแล้ว จึงเปลี่ยนทีมไม่ได้`,
-      );
+      if (dependentData?.allowDestructiveChanges) {
+        destructiveMatchIds.push(String(originalMatch.id));
+      } else {
+        errors.push(`Protected match ${originalMatch.id} cannot change teams`);
+      }
     }
   });
 
-  return { valid: errors.length === 0, errors };
+  return {
+    valid: errors.length === 0,
+    errors,
+    destructiveMatchIds: [...new Set(destructiveMatchIds)],
+  };
 };

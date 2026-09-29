@@ -81,8 +81,15 @@ import {
 import {
   buildScheduleResult,
   groupPublicScheduleInSavedOrder,
+  removeMatchDependentData,
   validateManualScheduleChanges,
 } from "../services/schedule/scheduleService";
+import {
+  PLAYOFF_MODE_MANUAL,
+  PLAYOFF_MODE_STANDARD,
+  resolveManualPlayoffSchedule,
+  validateManualPlayoffSchedule,
+} from "../services/schedule/manualPlayoffService";
 import {
   getSeasonRosterPlayerCount,
   getSeasonRosterPlayerCountState,
@@ -458,6 +465,11 @@ function Players() {
     const saved = localStorage.getItem("schedule");
     return saved ? JSON.parse(saved) : [];
   });
+  const [playoffMode, setPlayoffMode] = useState(() =>
+    localStorage.getItem("playoffMode") === PLAYOFF_MODE_MANUAL
+      ? PLAYOFF_MODE_MANUAL
+      : PLAYOFF_MODE_STANDARD,
+  );
 
   const [drafts, setDrafts] = useState(() => {
     const saved = localStorage.getItem("drafts");
@@ -756,6 +768,9 @@ function Players() {
   useEffect(() => {
     localStorage.setItem("schedule", JSON.stringify(schedule));
   }, [schedule]);
+  useEffect(() => {
+    localStorage.setItem("playoffMode", playoffMode);
+  }, [playoffMode]);
 
   useEffect(() => {
     localStorage.setItem("teamNames", JSON.stringify(teamNames));
@@ -1181,6 +1196,7 @@ function Players() {
     setTeamNames(nextTeamNames);
     setTeams([]);
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setDrafts([]);
     setLockGroups([]);
     setSelectedLockPlayerIds([]);
@@ -1221,6 +1237,7 @@ function Players() {
     setCompetitionType(nextType);
     setTeams([]);
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setDrafts([]);
     setLockGroups([]);
     setSelectedLockPlayerIds([]);
@@ -1850,6 +1867,7 @@ function Players() {
     setPlayers([]);
     setTeams([]);
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setTeamLogos({});
     setLockGroups([]);
     setSeasonProjectName("");
@@ -1864,6 +1882,7 @@ function Players() {
     localStorage.removeItem("players");
     localStorage.removeItem("teams");
     localStorage.removeItem("schedule");
+    localStorage.removeItem("playoffMode");
     localStorage.removeItem("drafts");
     localStorage.removeItem("teamNames");
     localStorage.removeItem("matchRosters");
@@ -3043,6 +3062,7 @@ function Players() {
 
   const resetScheduleDependentData = () => {
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setMatchRosters({});
     setPlayerStats({});
     setMatchStatInputs({});
@@ -3050,9 +3070,28 @@ function Players() {
     setSelectedStatsMatchId("");
     clearSelectedFinalsMvpSelection();
     localStorage.removeItem("schedule");
+    localStorage.removeItem("playoffMode");
     localStorage.removeItem("matchRosters");
     localStorage.removeItem("playerStats");
     localStorage.removeItem("matchStatInputs");
+  };
+
+  const cleanupMatchDependentData = (matchIds = []) => {
+    const targetIds = new Set(matchIds.map((id) => String(id)));
+    if (targetIds.size === 0) return;
+    const cleaned = removeMatchDependentData(
+      { matchRosters, playerStats, matchStatInputs },
+      [...targetIds],
+    );
+
+    setMatchRosters(cleaned.matchRosters);
+    setPlayerStats(cleaned.playerStats);
+    setMatchStatInputs(cleaned.matchStatInputs);
+    localStorage.setItem("matchRosters", JSON.stringify(cleaned.matchRosters));
+    localStorage.setItem("playerStats", JSON.stringify(cleaned.playerStats));
+    localStorage.setItem("matchStatInputs", JSON.stringify(cleaned.matchStatInputs));
+    if (targetIds.has(String(selectedRosterMatchId))) setSelectedRosterMatchId("");
+    if (targetIds.has(String(selectedStatsMatchId))) setSelectedStatsMatchId("");
   };
 
   const prepareScheduleResult = () => {
@@ -3080,19 +3119,36 @@ function Players() {
   };
 
   const saveManualSchedule = (manualSchedule) => {
+    if (playoffMode === PLAYOFF_MODE_MANUAL) {
+      const playoffValidation = validateManualPlayoffSchedule(manualSchedule);
+      if (!playoffValidation.valid) {
+        return { saved: false, error: playoffValidation.errors.join("\n") };
+      }
+    }
+
     const validation = validateManualScheduleChanges(schedule, manualSchedule, {
       matchRosters,
       playerStats,
       matchStatInputs,
+      allowDestructiveChanges: true,
     });
     if (!validation.valid) {
-      return {
-        saved: false,
-        error: validation.errors.join("\n"),
-      };
+      return { saved: false, error: validation.errors.join("\n") };
     }
 
-    setSchedule(manualSchedule.map((match) => ({ ...match })));
+    if (validation.destructiveMatchIds.length > 0) {
+      const confirmed = window.confirm(
+        `Match ${validation.destructiveMatchIds.join(", ")} has roster, score, or stats data. Changing its teams or deleting it will clear only data linked to those Match IDs. Continue?`,
+      );
+      if (!confirmed) {
+        return { saved: false, error: "Save cancelled; no match data was cleared." };
+      }
+      cleanupMatchDependentData(validation.destructiveMatchIds);
+    }
+
+    const savedSchedule = manualSchedule.map((match) => ({ ...match }));
+    localStorage.setItem("schedule", JSON.stringify(savedSchedule));
+    setSchedule(savedSchedule);
     return { saved: true, error: "" };
   };
 
@@ -5456,6 +5512,17 @@ function Players() {
   const updatePlayoffTeams = () => {
     const playoffStandings = calculateStandings();
 
+    if (playoffMode === PLAYOFF_MODE_MANUAL) {
+      const result = resolveManualPlayoffSchedule(schedule, playoffStandings, {
+        matchRosters,
+        playerStats,
+        matchStatInputs,
+      });
+      setSchedule(result.schedule);
+      if (result.errors.length > 0) alert(result.errors.join("\n"));
+      return;
+    }
+
     if (playoffStandings.length < 2) {
       alert("ยังไม่มีอันดับเพียงพอสำหรับ Playoff");
       return;
@@ -5661,6 +5728,7 @@ function Players() {
 
     setTeams([]);
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setDrafts([]);
     setMatchRosters({});
     setPlayerStats({});
@@ -6292,7 +6360,15 @@ function Players() {
     );
     setPlayers(Array.isArray(data.players) ? data.players : []);
     setTeams(Array.isArray(data.teams) ? data.teams : []);
-    setSchedule(Array.isArray(data.schedule) ? data.schedule : []);
+    const restoredSchedule = Array.isArray(data.schedule) ? data.schedule : [];
+    const restoredPlayoffMode =
+      data.playoffMode === PLAYOFF_MODE_MANUAL
+        ? PLAYOFF_MODE_MANUAL
+        : PLAYOFF_MODE_STANDARD;
+    setSchedule(restoredSchedule);
+    setPlayoffMode(restoredPlayoffMode);
+    localStorage.setItem("schedule", JSON.stringify(restoredSchedule));
+    localStorage.setItem("playoffMode", restoredPlayoffMode);
     setDrafts(Array.isArray(data.drafts) ? data.drafts : []);
     setMatchRosters(
       data.matchRosters && typeof data.matchRosters === "object"
@@ -7114,6 +7190,7 @@ function Players() {
     players,
     teams,
     schedule,
+    playoffMode,
     drafts,
     matchRosters,
     playerStats,
@@ -8050,6 +8127,7 @@ function Players() {
 
     setTeams([]);
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setDrafts([]);
     setMatchRosters({});
     setPlayerStats({});
@@ -8071,6 +8149,7 @@ function Players() {
     [
       "teams",
       "schedule",
+      "playoffMode",
       "drafts",
       "matchRosters",
       "playerStats",
@@ -8095,6 +8174,7 @@ function Players() {
     setPlayers([]);
     setTeams([]);
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setDrafts([]);
     setMatchRosters({});
     setPlayerStats({});
@@ -8116,6 +8196,7 @@ function Players() {
     localStorage.removeItem("players");
     localStorage.removeItem("teams");
     localStorage.removeItem("schedule");
+    localStorage.removeItem("playoffMode");
     localStorage.removeItem("drafts");
     localStorage.removeItem("teamNames");
     localStorage.removeItem("matchRosters");
@@ -8146,6 +8227,7 @@ function Players() {
     setPlayers([]);
     setTeams([]);
     setSchedule([]);
+    setPlayoffMode(PLAYOFF_MODE_STANDARD);
     setDrafts([]);
     setMatchRosters({});
     setPlayerStats({});
@@ -8162,6 +8244,7 @@ function Players() {
       "players",
       "teams",
       "schedule",
+      "playoffMode",
       "drafts",
       "teamNames",
       "matchRosters",
@@ -12289,6 +12372,8 @@ function Players() {
         adminAccordionHintStyle={adminAccordionHintStyle}
         teams={teams}
         schedule={schedule}
+        playoffMode={playoffMode}
+        setPlayoffMode={setPlayoffMode}
         createSchedule={createSchedule}
         saveManualSchedule={saveManualSchedule}
         matchRosters={matchRosters}

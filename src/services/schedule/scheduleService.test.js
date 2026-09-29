@@ -4,17 +4,20 @@ import {
   createManualScheduleDraft,
   groupPublicScheduleInSavedOrder,
   moveManualScheduleMatch,
+  normalizeManualWeek,
   projectPublicSchedule,
+  removeMatchDependentData,
   removeManualScheduleMatch,
   updateManualScheduleTeams,
+  updateManualScheduleWeek,
   validateManualSchedule,
   validateManualScheduleChanges,
 } from "./scheduleService";
 
 const createSchedule = () => [
-  { id: 1, teamA: "A", teamB: "B", scoreA: "10", scoreB: "8", status: "Finished" },
-  { id: 2, teamA: "C", teamB: "D", scoreA: "", scoreB: "", status: "Pending" },
-  { id: 3, teamA: "A", teamB: "C", scoreA: "", scoreB: "", status: "Pending" },
+  { id: 1, week: 1, teamA: "A", teamB: "B", scoreA: "10", scoreB: "8", status: "Finished" },
+  { id: 2, week: 1, teamA: "C", teamB: "D", scoreA: "", scoreB: "", status: "Pending" },
+  { id: 3, week: 2, teamA: "A", teamB: "C", scoreA: "", scoreB: "", status: "Pending" },
 ];
 
 describe("manual schedule utilities", () => {
@@ -186,4 +189,86 @@ describe("manual schedule utilities", () => {
     );
     expect(groups.map((group) => group.week)).toEqual([2, 1]);
   });
-});
+
+  test("accepts multiple matches in the same positive whole-number Week", () => {
+    let schedule = createSchedule();
+    schedule = addManualScheduleMatch(schedule, ["A", "B", "C", "D"], 3);
+    schedule = addManualScheduleMatch(schedule, ["A", "B", "C", "D"], 3);
+    schedule = addManualScheduleMatch(schedule, ["A", "B", "C", "D"], 3);
+
+    expect(schedule.slice(-3).map((match) => match.week)).toEqual([3, 3, 3]);
+    expect(validateManualSchedule(schedule).valid).toBe(true);
+  });
+
+  test.each(["", 0, -1, 1.5, "week three", null, undefined])(
+    "rejects invalid Week %p",
+    (week) => {
+      expect(normalizeManualWeek(week)).toBeNull();
+    },
+  );
+
+  test("changes Week without changing Match ID, score, or dependent data", () => {
+    const original = createSchedule();
+    const dependentData = {
+      matchRosters: { 1: { teamA: {}, teamB: {} } },
+      playerStats: { p1: { gamesByMatch: { 1: { matchId: 1, pts: 10 } } } },
+      matchStatInputs: { input: { matchId: 1, pts: "10" } },
+    };
+    const result = updateManualScheduleWeek(original, 1, 3);
+
+    expect(result.error).toBe("");
+    expect(result.schedule[0]).toMatchObject({ id: 1, week: 3, scoreA: "10" });
+    expect(dependentData.matchRosters[1]).toBeDefined();
+    expect(dependentData.playerStats.p1.gamesByMatch[1].pts).toBe(10);
+    expect(dependentData.matchStatInputs.input.matchId).toBe(1);
+  });
+
+  test("reports protected team/deletion edits for confirmed targeted cleanup", () => {
+    const original = createSchedule();
+    const dependentData = {
+      matchRosters: { 1: { teamA: {}, teamB: {} } },
+      allowDestructiveChanges: true,
+    };
+    const changed = original
+      .filter((match) => match.id !== 2)
+      .map((match) => (match.id === 1 ? { ...match, teamB: "C" } : match));
+    const result = validateManualScheduleChanges(original, changed, dependentData);
+
+    expect(result.valid).toBe(true);
+    expect(result.destructiveMatchIds).toEqual(["1"]);
+  });
+  test("targeted cleanup removes only the confirmed Match ID and rebuilds totals", () => {
+    const data = {
+      matchRosters: { 1: { teamA: {} }, 2: { teamA: {} } },
+      matchStatInputs: {
+        "1_p1_regular_A": { matchId: 1, pts: "10" },
+        "2_p1_regular_A": { matchId: 2, pts: "5" },
+      },
+      playerStats: {
+        p1: {
+          playerId: "p1",
+          games: 2,
+          appearances: 2,
+          pts: 15,
+          reb: 3,
+          ast: 2,
+          stl: 1,
+          blk: 0,
+          gamesByMatch: {
+            1: { matchId: 1, gameCounted: true, appearanceCounted: true, pts: 10, reb: 2, ast: 1, stl: 1 },
+            2: { matchId: 2, gameCounted: true, appearanceCounted: true, pts: 5, reb: 1, ast: 1 },
+          },
+        },
+        legacy: { playerId: "legacy", games: 9, pts: 99 },
+      },
+    };
+    const cleaned = removeMatchDependentData(data, [1]);
+
+    expect(cleaned.matchRosters).toEqual({ 2: { teamA: {} } });
+    expect(cleaned.matchStatInputs).toEqual({
+      "2_p1_regular_A": { matchId: 2, pts: "5" },
+    });
+    expect(cleaned.playerStats.p1).toMatchObject({ games: 1, appearances: 1, pts: 5, reb: 1, ast: 1, stl: 0, blk: 0 });
+    expect(cleaned.playerStats.p1.gamesByMatch[2]).toBeDefined();
+    expect(cleaned.playerStats.legacy).toEqual(data.playerStats.legacy);
+  });});

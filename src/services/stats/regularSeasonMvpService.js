@@ -6,6 +6,10 @@ const normalizeMatchLabel = (value) =>
 
 const POSTSEASON_LABELS = new Set([
   "playoff",
+  "play in",
+  "playin",
+  "quarterfinal",
+  "quarter final",
   "semi final",
   "semifinal",
   "final",
@@ -17,7 +21,14 @@ const POSTSEASON_LABELS = new Set([
 export const classifyScheduleMatchPhase = (match) => {
   const label = normalizeMatchLabel(match?.label);
   const playoffType = normalizeMatchLabel(match?.playoffType);
+  const explicitPhase = normalizeMatchLabel(match?.phase);
 
+  if (explicitPhase === "regular" || explicitPhase === "regular season") {
+    return "regular";
+  }
+  if (explicitPhase === "postseason" || explicitPhase === "playoff") {
+    return "postseason";
+  }
   if (label === "league" || label === "regular season") return "regular";
   if (playoffType || POSTSEASON_LABELS.has(label)) return "postseason";
   return "unknown";

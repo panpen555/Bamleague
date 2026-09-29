@@ -3,9 +3,17 @@ import {
   addManualScheduleMatch,
   createManualScheduleDraft,
   moveManualScheduleMatch,
+  normalizeManualWeek,
   removeManualScheduleMatch,
   updateManualScheduleTeams,
+  updateManualScheduleWeek,
 } from "../../services/schedule/scheduleService";
+import {
+  createManualPlayoffMatch,
+  PLAYOFF_MODE_MANUAL,
+  PLAYOFF_MODE_STANDARD,
+} from "../../services/schedule/manualPlayoffService";
+import ManualPlayoffMatchEditor from "./ManualPlayoffMatchEditor";
 
 const SchedulePanel = ({
   activeAdminMenu,
@@ -14,6 +22,8 @@ const SchedulePanel = ({
   adminAccordionHintStyle,
   teams,
   schedule,
+  playoffMode,
+  setPlayoffMode,
   createSchedule,
   saveManualSchedule,
   matchRosters,
@@ -31,11 +41,16 @@ const SchedulePanel = ({
   const [isManualEditing, setIsManualEditing] = useState(false);
   const [manualDraft, setManualDraft] = useState([]);
   const [manualError, setManualError] = useState("");
+  const [newManualWeek, setNewManualWeek] = useState(1);
   const teamNames = teams.map((team) => team.name).filter(Boolean);
   const dependentData = { matchRosters, playerStats, matchStatInputs };
+  const editableDependentData = { ...dependentData, allowProtectedChange: true };
 
   const startManualEditing = () => {
     setManualDraft(createManualScheduleDraft(schedule));
+    setNewManualWeek(
+      Math.max(1, ...schedule.map((match) => Number(match.week) || 0)),
+    );
     setManualError("");
     setIsManualEditing(true);
   };
@@ -52,17 +67,32 @@ const SchedulePanel = ({
       matchId,
       field,
       teamName,
-      dependentData,
+      editableDependentData,
     );
     setManualDraft(result.schedule);
     setManualError(result.error);
+  };
+
+  const updateManualWeek = (matchId, week) => {
+    const result = updateManualScheduleWeek(manualDraft, matchId, week);
+    setManualDraft(result.schedule);
+    setManualError(result.error);
+  };
+
+  const updateManualPlayoffMatch = (nextMatch) => {
+    setManualDraft((previous) =>
+      previous.map((match) =>
+        String(match.id) === String(nextMatch.id) ? { ...nextMatch } : match,
+      ),
+    );
+    setManualError("");
   };
 
   const removeManualMatch = (matchId) => {
     const result = removeManualScheduleMatch(
       manualDraft,
       matchId,
-      dependentData,
+      editableDependentData,
     );
     setManualDraft(result.schedule);
     setManualError(result.error);
@@ -101,6 +131,36 @@ const SchedulePanel = ({
               จัดการตารางแข่ง กรอกคะแนน Manage Roster และ Enter Stats
               ของแต่ละแมตช์ในแท็บนี้
             </p>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+                marginBottom: "12px",
+                padding: "10px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "8px",
+              }}
+            >
+              <strong>Playoff mode</strong>
+              <select
+                value={playoffMode}
+                disabled={isManualEditing}
+                onChange={(event) => {
+                  const nextMode = event.target.value;
+                  localStorage.setItem("playoffMode", nextMode);
+                  setPlayoffMode(nextMode);
+                }}
+              >
+                <option value={PLAYOFF_MODE_STANDARD}>Standard Playoff</option>
+                <option value={PLAYOFF_MODE_MANUAL}>Manual Playoff</option>
+              </select>
+              <span style={{ color: "#475569", fontSize: "13px" }}>
+                Manual mode keeps the Regular Season schedule and uses stable Match ID sources.
+              </span>
+            </div>
 
             {teams.length === 0 ? (
               <p>กรุณา Generate Teams ก่อนสร้างตารางแข่งขัน</p>
@@ -142,6 +202,9 @@ const SchedulePanel = ({
                   การแก้ไขยังไม่กระทบตารางจริงจนกว่าจะกดบันทึก
                   เกมที่มี roster, score, stats หรือผลการแข่งขันแล้วจะเปลี่ยนทีมและลบไม่ได้
                 </p>
+                <p style={{ color: "#0f766e", fontWeight: "bold" }}>
+                  Multiple matches may use the same Week. Week is only a label/group and never changes Match ID.
+                </p>
 
                 {manualError ? (
                   <div
@@ -165,7 +228,7 @@ const SchedulePanel = ({
                     style={{
                       display: "grid",
                       gridTemplateColumns:
-                        "52px minmax(150px, 1fr) 36px minmax(150px, 1fr) auto",
+                        "52px 92px minmax(150px, 1fr) 36px minmax(150px, 1fr) auto",
                       gap: "8px",
                       alignItems: "center",
                       background: "white",
@@ -176,9 +239,23 @@ const SchedulePanel = ({
                     }}
                   >
                     <strong>#{index + 1}</strong>
+                    <label style={{ display: "grid", gap: "3px", fontSize: "12px" }}>
+                      Week
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={match.week}
+                        aria-label={`Match ${match.id} Week`}
+                        onChange={(event) =>
+                          updateManualWeek(match.id, event.target.value)
+                        }
+                      />
+                    </label>
                     <select
                       aria-label={`คู่ที่ ${index + 1} ทีมที่ 1`}
                       value={match.teamA}
+                      disabled={match.manualPlayoff === true}
                       onChange={(event) =>
                         updateManualTeam(
                           match.id,
@@ -200,6 +277,7 @@ const SchedulePanel = ({
                     <select
                       aria-label={`คู่ที่ ${index + 1} ทีมที่ 2`}
                       value={match.teamB}
+                      disabled={match.manualPlayoff === true}
                       onChange={(event) =>
                         updateManualTeam(
                           match.id,
@@ -256,21 +334,63 @@ const SchedulePanel = ({
                         ลบ
                       </button>
                     </div>
+                    {match.manualPlayoff === true ? (
+                      <ManualPlayoffMatchEditor
+                        match={match}
+                        schedule={manualDraft}
+                        teams={teams}
+                        dependentData={dependentData}
+                        onChange={updateManualPlayoffMatch}
+                      />
+                    ) : null}
                   </div>
                 ))}
 
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    New match Week
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={newManualWeek}
+                      onChange={(event) => setNewManualWeek(event.target.value)}
+                      style={{ width: "80px" }}
+                    />
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
+                      if (normalizeManualWeek(newManualWeek) === null) {
+                        setManualError("Week must be a whole number of 1 or greater");
+                        return;
+                      }
                       setManualDraft(
-                        addManualScheduleMatch(manualDraft, teamNames),
+                        addManualScheduleMatch(manualDraft, teamNames, newManualWeek),
                       );
                       setManualError("");
                     }}
                   >
                     เพิ่มคู่แข่งขัน
                   </button>
+                  {playoffMode === PLAYOFF_MODE_MANUAL ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (normalizeManualWeek(newManualWeek) === null) {
+                          setManualError("Week must be a whole number of 1 or greater");
+                          return;
+                        }
+                        setManualDraft((previous) => [
+                          ...previous,
+                          createManualPlayoffMatch(previous, { week: newManualWeek }),
+                        ]);
+                        setManualError("");
+                      }}
+                    >
+                      Add Playoff Match
+                    </button>
+                  ) : null}
                   <button type="button" onClick={saveManualDraft}>
                     บันทึกตาราง
                   </button>
@@ -288,7 +408,9 @@ const SchedulePanel = ({
                   onClick={updatePlayoffTeams}
                   style={{ marginRight: "8px", marginBottom: "12px" }}
                 >
-                  Update Playoff Teams
+                  {playoffMode === PLAYOFF_MODE_MANUAL
+                    ? "Resolve Manual Playoff Teams"
+                    : "Update Playoff Teams"}
                 </button>
 
                 <button
