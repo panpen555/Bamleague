@@ -54,7 +54,7 @@ function PublicDashboardFooter({
         </div>
         <nav className="bam-public-footer-nav" aria-label="Footer navigation">
           <h3>Explore</h3>
-          {["overview", "teams", "schedule", "awards"].map((tab) => (
+          {["overview", "teams", "players", "schedule"].map((tab) => (
             <button key={tab} type="button" onClick={() => onNavigate(tab)}>
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>

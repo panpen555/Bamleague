@@ -1,4 +1,4 @@
-const getRosterIdentity = (player = {}) => {
+export const getSeasonRosterPlayerIdentity = (player = {}) => {
   const id = String(player.id || "").trim();
   const bamPlayerId = String(player.bamPlayerId || "").trim();
 
@@ -18,19 +18,19 @@ export const hasReliableSeasonTeamRosters = (teams) =>
   teams.length > 0 &&
   teams.every((team) => Array.isArray(team?.players));
 
-export const getSeasonRosterPlayerIds = (teams = []) => {
+export const getSeasonRosterPlayers = (teams = []) => {
   if (!Array.isArray(teams)) return [];
 
   const seenKeys = new Set();
   const seenIds = new Set();
   const seenBamPlayerIds = new Set();
-  const rosterPlayerIds = [];
+  const rosterPlayers = [];
 
   teams.forEach((team) => {
     if (!Array.isArray(team?.players)) return;
 
     team.players.forEach((player) => {
-      const identity = getRosterIdentity(player);
+      const identity = getSeasonRosterPlayerIdentity(player);
       if (!identity.key) return;
 
       const alreadySeenById = identity.id && seenIds.has(identity.id);
@@ -48,17 +48,33 @@ export const getSeasonRosterPlayerIds = (teams = []) => {
       seenKeys.add(identity.key);
       if (identity.id) seenIds.add(identity.id);
       if (identity.bamPlayerId) seenBamPlayerIds.add(identity.bamPlayerId);
-      rosterPlayerIds.push(identity.key);
+      rosterPlayers.push({
+        ...player,
+        teamName: team?.name || player.teamName || "",
+        seasonRosterKey: identity.key,
+      });
     });
   });
 
-  return rosterPlayerIds;
+  return rosterPlayers;
 };
 
+export const getSeasonRosterPlayerIds = (teams = []) =>
+  getSeasonRosterPlayers(teams).map(
+    (player) => getSeasonRosterPlayerIdentity(player).key,
+  );
+
 export const getSeasonRosterPlayerCount = (teams = []) =>
-  getSeasonRosterPlayerIds(teams).length;
+  getSeasonRosterPlayers(teams).length;
 
 export const getSeasonRosterPlayerCountState = (teams) => {
+  if (Array.isArray(teams) && teams.length === 0) {
+    return {
+      available: true,
+      count: 0,
+      playerIds: [],
+    };
+  }
   if (!hasReliableSeasonTeamRosters(teams)) {
     return {
       available: false,

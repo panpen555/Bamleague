@@ -26,6 +26,7 @@ import StatsCenterIntro from "../components/stats/StatsCenterIntro";
 import LeagueSetupCards from "../components/settings/LeagueSetupCards";
 import PublicHighlightCarousel from "../components/public/PublicHighlightCarousel";
 import PublicDashboardFooter from "../components/public/PublicDashboardFooter";
+import PublicPlayersDirectory from "../components/public/PublicPlayersDirectory";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -91,9 +92,9 @@ import {
   validateManualPlayoffSchedule,
 } from "../services/schedule/manualPlayoffService";
 import {
-  getSeasonRosterPlayerCount,
   getSeasonRosterPlayerCountState,
 } from "../services/season/seasonRosterService";
+import { buildPublicPlayerDirectory } from "../services/season/publicPlayerDirectoryService";
 import {
   buildRegularSeasonStatRows,
   sortMvpRanking,
@@ -646,6 +647,11 @@ function Players() {
   );
   const [selectedPublicTeam, setSelectedPublicTeam] = useState("");
   const [publicDashboardTab, setPublicDashboardTab] = useState("overview");
+  useEffect(() => {
+    if (publicDashboardTab === "awards") {
+      setPublicDashboardTab("overview");
+    }
+  }, [publicDashboardTab]);
   const [isPublicTeamsDirectoryOpen, setIsPublicTeamsDirectoryOpen] =
     useState(false);
   const [selectedPublicPlayer, setSelectedPublicPlayer] = useState(null);
@@ -8818,7 +8824,13 @@ function Players() {
     };
   };
 
-  const renderDashboardStatCard = (label, value, subText = "", onClick) => {
+  const renderDashboardStatCard = (
+    label,
+    value,
+    subText = "",
+    onClick,
+    ariaLabel = "",
+  ) => {
     const cardClassName = `bam-public-summary-card ${
       onClick
         ? "bam-public-stat-card-button bam-public-summary-card-button"
@@ -8839,7 +8851,12 @@ function Players() {
     }
 
     return (
-      <button type="button" onClick={onClick} className={cardClassName}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cardClassName}
+        aria-label={ariaLabel || `View ${label}`}
+      >
         {content}
       </button>
     );
@@ -8934,14 +8951,13 @@ function Players() {
     const dashboardFinishedMatches = dashboardSchedule.filter(
       (match) => match.status === "Finished",
     ).length;
-    const dashboardRosterPlayerCountState = isHistoryView
-      ? getSeasonRosterPlayerCountState(
-          Array.isArray(archivedData.teams) ? archivedData.teams : null,
-        )
-      : {
-          available: true,
-          count: getSeasonRosterPlayerCount(dashboardTeams),
-        };
+    const dashboardRosterPlayerCountState = getSeasonRosterPlayerCountState(
+      isHistoryView
+        ? Array.isArray(archivedData.teams)
+          ? archivedData.teams
+          : null
+        : dashboardTeams,
+    );
     const dashboardRosterPlayerCount = dashboardRosterPlayerCountState.available
       ? dashboardRosterPlayerCountState.count
       : "N/A";
@@ -9480,6 +9496,24 @@ function Players() {
       ],
     ];
 
+    const publicPlayerDirectoryState = buildPublicPlayerDirectory({
+      teams: isHistoryView
+        ? Array.isArray(archivedData.teams)
+          ? archivedData.teams
+          : null
+        : dashboardTeams,
+      playerSnapshots: dashboardPlayers,
+      seasonStatRows: dashboardPlayerStatRows,
+      regularSeasonRows: dashboardRegularSeasonStatRows,
+      regularSeasonAvailable: dashboardRegularSeasonStatResult.available,
+      awardTargets: dashboardAwardRows
+        .filter(([, , , , playerSource]) => Boolean(playerSource))
+        .map(([, label, , , playerSource]) => ({
+          label,
+          player: playerSource,
+        })),
+    });
+
     const publicHistorySeasonOptions =
       isPublicOnlyRoute && cloudSchemaVersion === SCHEMA_V3
         ? schemaV3SeasonIndex.map((season) => ({
@@ -9789,7 +9823,7 @@ function Players() {
     };
 
     const openPublicDashboardTab = (tabKey) => {
-      setPublicDashboardTab(tabKey);
+      setPublicDashboardTab(tabKey === "awards" ? "overview" : tabKey);
       setSelectedPublicTeam("");
       setSelectedPublicMatch(null);
       setSelectedPublicPlayer(null);
@@ -9799,8 +9833,8 @@ function Players() {
     const publicDashboardTabs = [
       { key: "overview", label: "Overview", icon: "🏠" },
       { key: "teams", label: "Teams", icon: "🏀" },
+      { key: "players", label: "Players", icon: "👥" },
       { key: "schedule", label: "Schedule", icon: "🗓️" },
-      { key: "awards", label: "Awards", icon: "🏆" },
     ];
 
     const renderPublicDashboardNav = () => (
@@ -9969,6 +10003,8 @@ function Players() {
               "Players",
               dashboardRosterPlayerCount,
               dashboardRosterPlayerSubText,
+              () => openPublicDashboardTab("players"),
+              `View players in ${selectedDashboardSeasonTitle}`,
             )}
             {renderDashboardStatCard(
               "Matches",
@@ -10123,6 +10159,17 @@ function Players() {
           />
         ) : null}
 
+        {publicDashboardTab === "players" ? (
+          <PublicPlayersDirectory
+            seasonKey={String(publicSeasonId)}
+            seasonTitle={selectedDashboardSeasonTitle}
+            directoryState={publicPlayerDirectoryState}
+            teamNames={dashboardTeams.map((team) => team.name).filter(Boolean)}
+            renderPlayerAvatar={renderPlayerAvatar}
+            onOpenProfile={openPublicPlayerProfile}
+          />
+        ) : null}
+
         {publicDashboardTab === "schedule" ? (
           <div className="bam-public-panel bam-public-schedule-panel">
             <h2 className="bam-public-panel-title">🗓️ Schedule View</h2>
@@ -10242,8 +10289,7 @@ function Players() {
           </div>
         ) : null}
 
-        {publicDashboardTab === "overview" ||
-        publicDashboardTab === "awards" ? (
+        {publicDashboardTab === "overview" ? (
           <div className="bam-public-overview-grid">
             <div className="bam-public-panel bam-public-awards-panel">
               <h2 className="bam-public-panel-title">🏆 Season Awards</h2>
@@ -10358,8 +10404,7 @@ function Players() {
           </div>
         ) : null}
 
-        {publicDashboardTab === "overview" ||
-        publicDashboardTab === "awards" ? (
+        {publicDashboardTab === "overview" ? (
           <div className="bam-public-leaders-grid">
             <div className="bam-public-panel bam-public-leader-card">
               <h2 className="bam-public-panel-title">👑 MVP Race</h2>

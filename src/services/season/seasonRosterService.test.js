@@ -2,6 +2,7 @@ import {
   getSeasonRosterPlayerCount,
   getSeasonRosterPlayerCountState,
   getSeasonRosterPlayerIds,
+  getSeasonRosterPlayers,
   hasReliableSeasonTeamRosters,
 } from "./seasonRosterService";
 
@@ -62,6 +63,18 @@ describe("season roster player selectors", () => {
     ];
 
     expect(getSeasonRosterPlayerCount(teams)).toBe(1);
+    expect(getSeasonRosterPlayers(teams)).toEqual([
+      expect.objectContaining({ id: "p1", teamName: "Team A" }),
+    ]);
+  });
+
+  test("keeps the first saved roster assignment when a duplicate spans teams", () => {
+    const teams = [
+      { name: "First Team", players: [{ id: "p1", name: "Player" }] },
+      { name: "Second Team", players: [{ id: "p1", name: "Player" }] },
+    ];
+
+    expect(getSeasonRosterPlayers(teams)[0].teamName).toBe("First Team");
   });
 
   test("uses player.id as the primary roster identity", () => {
@@ -116,6 +129,14 @@ describe("season roster player selectors", () => {
     expect(getSeasonRosterPlayerCountState(undefined)).toEqual({
       available: false,
       count: null,
+      playerIds: [],
+    });
+  });
+
+  test("returns a reliable zero count when a season has no teams yet", () => {
+    expect(getSeasonRosterPlayerCountState([])).toEqual({
+      available: true,
+      count: 0,
       playerIds: [],
     });
   });
