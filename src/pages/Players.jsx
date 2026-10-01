@@ -27,6 +27,7 @@ import LeagueSetupCards from "../components/settings/LeagueSetupCards";
 import PublicHighlightCarousel from "../components/public/PublicHighlightCarousel";
 import PublicDashboardFooter from "../components/public/PublicDashboardFooter";
 import PublicPlayersDirectory from "../components/public/PublicPlayersDirectory";
+import PublicScheduleBoard from "../components/public/PublicScheduleBoard";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -81,10 +82,10 @@ import {
 } from "../services/cloud/cloudOperationSafety";
 import {
   buildScheduleResult,
-  groupPublicScheduleInSavedOrder,
   removeMatchDependentData,
   validateManualScheduleChanges,
 } from "../services/schedule/scheduleService";
+import { calculateStandingsFromMatches } from "../services/standings/standingsService";
 import {
   PLAYOFF_MODE_MANUAL,
   PLAYOFF_MODE_STANDARD,
@@ -3409,59 +3410,10 @@ function Players() {
   };
 
   const calculateStandings = () => {
-    if (teams.length === 0) return [];
-
-    const table = {};
-
-    teams.forEach((team) => {
-      table[team.name] = {
-        team: team.name,
-        played: 0,
-        win: 0,
-        loss: 0,
-        pf: 0,
-        pa: 0,
-        diff: 0,
-      };
-    });
-
-    schedule
-      .filter((m) => m.label === "League" && m.status === "Finished")
-      .forEach((match) => {
-        const scoreA = Number(match.scoreA);
-        const scoreB = Number(match.scoreB);
-
-        if (!table[match.teamA] || !table[match.teamB]) return;
-
-        table[match.teamA].played += 1;
-        table[match.teamB].played += 1;
-
-        table[match.teamA].pf += scoreA;
-        table[match.teamA].pa += scoreB;
-
-        table[match.teamB].pf += scoreB;
-        table[match.teamB].pa += scoreA;
-
-        if (scoreA > scoreB) {
-          table[match.teamA].win += 1;
-          table[match.teamB].loss += 1;
-        } else if (scoreB > scoreA) {
-          table[match.teamB].win += 1;
-
-          table[match.teamA].loss += 1;
-        }
-      });
-
-    return Object.values(table)
-      .map((row) => ({
-        ...row,
-        diff: row.pf - row.pa,
-      }))
-      .sort((a, b) => {
-        if (b.win !== a.win) return b.win - a.win;
-        if (b.diff !== a.diff) return b.diff - a.diff;
-        return b.pf - a.pf;
-      });
+    const finishedLeagueMatches = schedule.filter(
+      (match) => match.label === "League" && match.status === "Finished",
+    );
+    return calculateStandingsFromMatches(teams, finishedLeagueMatches);
   };
 
   // ======================================================
@@ -9744,23 +9696,6 @@ function Players() {
       );
     };
 
-    const getPublicMatchWinner = (match) => {
-      if (
-        match.status !== "Finished" ||
-        match.scoreA === "" ||
-        match.scoreB === ""
-      )
-        return "";
-      const scoreA = Number(match.scoreA);
-      const scoreB = Number(match.scoreB);
-      if (scoreA > scoreB) return match.teamA;
-      if (scoreB > scoreA) return match.teamB;
-      return "DRAW";
-    };
-
-    const publicScheduleGroups =
-      groupPublicScheduleInSavedOrder(dashboardSchedule);
-
     const getDashboardMatchStatRows = (match) => {
       if (!match) return [];
 
@@ -10171,9 +10106,9 @@ function Players() {
         ) : null}
 
         {publicDashboardTab === "schedule" ? (
-          <div className="bam-public-panel bam-public-schedule-panel">
-            <h2 className="bam-public-panel-title">🗓️ Schedule View</h2>
-            {dashboardSchedule.length === 0 ? (
+          dashboardSchedule.length === 0 ? (
+            <div className="bam-public-panel bam-public-schedule-panel">
+              <h2 className="bam-public-panel-title">🗓️ Schedule View</h2>
               <div className="bam-public-empty-state bam-public-schedule-empty">
                 <div className="bam-public-empty-icon">📅</div>
                 <p>ยังไม่มีตารางแข่งขัน</p>
@@ -10181,112 +10116,16 @@ function Players() {
                   เมื่อสร้าง Schedule แล้ว ตารางจะแสดงที่นี่
                 </p>
               </div>
-            ) : (
-              <div className="bam-public-week-list">
-                {publicScheduleGroups.map((group) => (
-                  <div
-                    key={`public-schedule-week-${group.key}`}
-                    className="bam-public-week-card"
-                  >
-                    <div className="bam-public-week-header">
-                      <span className="bam-public-week-title">
-                        Week {group.week}
-                      </span>
-                      <span className="bam-public-week-count">
-                        {group.matches.length} Match
-                        {group.matches.length > 1 ? "es" : ""}
-                      </span>
-                    </div>
-
-                    <div className="bam-public-match-list">
-                      {group.matches.map((match) => {
-                        const winner = getPublicMatchWinner(match);
-                        const isFinished = match.status === "Finished";
-                        const isTeamAWinner = winner === match.teamA;
-                        const isTeamBWinner = winner === match.teamB;
-                        const stageClassName =
-                          match.label === "Final"
-                            ? " bam-public-match-stage-final"
-                            : match.label === "Semi Final"
-                              ? " bam-public-match-stage-semi-final"
-                              : match.label === "3rd Place"
-                                ? " bam-public-match-stage-third-place"
-                                : "";
-
-                        return (
-                          <div
-                            key={`public-schedule-match-${match.id}`}
-                            className={`bam-public-match-card ${
-                              isFinished
-                                ? "bam-public-match-card-finished"
-                                : "bam-public-match-card-pending"
-                            }`}
-                          >
-                            <div
-                              className={`bam-public-match-team bam-public-match-team-left${
-                                isTeamAWinner
-                                  ? " bam-public-match-team-winner"
-                                  : isFinished && winner && winner !== "DRAW"
-                                    ? " bam-public-match-team-muted"
-                                    : ""
-                              }`}
-                            >
-                              {renderPublicTeamWithLogo(match.teamA, 32)}
-                            </div>
-
-                            <div className="bam-public-match-center">
-                              <div
-                                className={`bam-public-match-stage${stageClassName}`}
-                              >
-                                #{match.displayOrder} ·{" "}
-                                {match.label || "League"}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedPublicMatch(match)}
-                                aria-label={`View match details: ${match.teamA} vs ${match.teamB}, Week ${match.week}`}
-                                title="กดเพื่อดูสถิติผู้เล่นในแมตช์นี้"
-                                className={`bam-public-score-button ${
-                                  isFinished
-                                    ? "bam-public-score-button-finished"
-                                    : "bam-public-score-button-pending"
-                                }`}
-                              >
-                                {match.scoreA !== "" && match.scoreB !== ""
-                                  ? `${match.scoreA} - ${match.scoreB}`
-                                  : "VS"}
-                              </button>
-                              <div
-                                className={`bam-public-match-status ${
-                                  isFinished
-                                    ? "bam-public-match-status-finished"
-                                    : "bam-public-match-status-pending"
-                                }`}
-                              >
-                                {isFinished ? "Finished" : "Pending"}
-                              </div>
-                            </div>
-
-                            <div
-                              className={`bam-public-match-team bam-public-match-team-right${
-                                isTeamBWinner
-                                  ? " bam-public-match-team-winner"
-                                  : isFinished && winner && winner !== "DRAW"
-                                    ? " bam-public-match-team-muted"
-                                    : ""
-                              }`}
-                            >
-                              {renderPublicTeamWithLogo(match.teamB, 32)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <PublicScheduleBoard
+              schedule={dashboardSchedule}
+              teams={dashboardTeams}
+              seasonTitle={selectedDashboardSeasonTitle}
+              renderTeam={renderPublicTeamWithLogo}
+              onOpenMatch={setSelectedPublicMatch}
+            />
+          )
         ) : null}
 
         {publicDashboardTab === "overview" ? (
